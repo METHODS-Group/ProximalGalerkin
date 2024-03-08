@@ -30,6 +30,36 @@ v, tau = ufl.TestFunctions(V_test)
 dx = ufl.Measure("dx",  domain=mesh)
 ds = ufl.Measure("ds",  domain=mesh)
 dS = ufl.Measure("dS",  domain=mesh)
+
+uD = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
+U, U_to_W = V_trial.sub(0).collapse()
+Q, Q_to_W = V_trial.sub(1).collapse()
+f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
+
+
+# FIXME: Add better initial condition
+# Create initial condition
+# beta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100))
+# h = 2 * ufl.Circumradius(mesh)
+# h_avg = ufl.avg(h)
+# n = ufl.FacetNormal(mesh)
+# p = ufl.TrialFunction(U)
+# q = ufl.TestFunction(U)
+# a = ufl.inner(ufl.grad(p), ufl.grad(q))*dx
+# a -= (ufl.inner(n, ufl.grad(q)) * p + beta / h * ufl.inner(p, q)) * ds
+# a += beta/h_avg*ufl.inner(ufl.jump(q, n), ufl.jump(p, n))*dS
+
+# L = ufl.inner(f, q) * dx 
+# L += (-ufl.inner(n, ufl.grad(q)) * uD + beta / h * ufl.inner(uD, q)) * ds
+
+# lin_prob = LinearProblem(a, L, bcs=[])
+# u_init_out = lin_prob.solve()
+# u_init_out.name = "InitialU"
+# u init is equal to the solution of the linear problem
+# w.x.array[U_to_W] = u_init_out.x.array
+# w.x.array[Q_to_W] = 0.
+
+
 alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
 x = ufl.SpatialCoordinate(mesh)
 phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
@@ -37,62 +67,13 @@ w0 = dolfinx.fem.Function(V_trial)
 u0, psi0 = ufl.split(w0)
 
 amp = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-beta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100))
+F = ufl.inner(ufl.div(psi), v)*dx
+F -= ufl.inner(ufl.div(psi0), v)*dx
+F -= alpha * ufl.inner(f, v) * dx 
 
-uD = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
-U, U_to_W = V_trial.sub(0).collapse()
-Q, Q_to_W = V_trial.sub(1).collapse()
-
-h = 2 * ufl.Circumradius(mesh)
-h_avg = ufl.avg(h)
-n = ufl.FacetNormal(mesh)
-
-
-
-# Create initial condition
-# p = ufl.TrialFunction(U)
-# q = ufl.TestFunction(U)
-# a = ufl.inner(ufl.grad(p), ufl.grad(q))*dx
-# a -= (ufl.inner(n, ufl.grad(q)) * p + beta / h * ufl.inner(p, q)) * ds
-# a += alpha * beta/h_avg*ufl.inner(ufl.jump(q, n), ufl.jump(p, n))*dS
-
-# L = ufl.inner(f, q) * dx 
-# L += alpha * (-ufl.inner(n, ufl.grad(q)) * uD + alpha / h * ufl.inner(uD, q)) * ds
-
-# lin_prob = LinearProblem(a, L, bcs=[])
-# u_init_out = lin_prob.solve()
-# u_init_out.name = "InitialU"
-# # u init is equal to the solution of the linear problem
-# w.x.array[U_to_W] = u_init_out.x.array
-# w.x.array[Q_to_W] = 0.
-
-nu = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
-# F = nu * ufl.inner(ufl.grad(u), ufl.grad(v)) * dx
-# # Add DG/IP terms
-# F -= nu * (ufl.inner(ufl.avg(ufl.grad(v)), ufl.jump(u, n)) - ufl.inner(ufl.jump(v, n), ufl.avg(ufl.grad(u))))*dS
-# F += nu * beta/h_avg*ufl.inner(ufl.jump(v, n), ufl.jump(u, n))*dS
-# # Add Nitsche terms
-# F -= nu * ufl.inner(n, ufl.grad(u)) * v * ds
-# beta_2 = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(10))
-# F -=  nu * (ufl.inner(n, ufl.grad(v)) * u + beta_2 / h * ufl.inner(u, v)) * ds
-# F -= nu * (-ufl.inner(n, ufl.grad(v)) * uD + beta_2 / h * ufl.inner(uD, v)) * ds
-# zeta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100))
-# F += zeta * ufl.inner(u, v) * ds
-F =- alpha * ufl.inner(f, v) * dx 
-
-F -= ufl.inner(ufl.div(psi), v)*dx
-F += ufl.inner(ufl.div(psi0), v)*dx
-F += ufl.inner(ufl.grad(u), tau) * dx
-# F -= ufl.inner(u, ufl.div(tau))*dx
-# F += 0.5 * ufl.dot((u("+")+u("-"))*(tau("+") - tau("-")) , n("+")) * dS
-# F += 0.5 * ufl.dot((tau("+")+tau("-"))*(u("+") - u("-")) , n("+")) * dS
-#F += beta/h_avg* ufl.dot(tau("+") -tau("-"), n("+")) * (u("+")-u("-"))*dS
-# Might need extra term here to enforce continuity of u
-
-#ufl.jump(tau, n) * ufl.avg(u) * dS  + ufl.inner(ufl.avg(tau), ufl.jump(u, n)) * dS
 non_lin_term = 1/(ufl.sqrt(1 + ufl.dot(psi, psi)))
-F -= phi * non_lin_term * ufl.dot(psi, tau)*dx
+F += ufl.inner(u, ufl.div(tau)) * dx
+F+= phi * non_lin_term * ufl.dot(psi, tau)*dx
 
 problem = NonlinearProblem(F, w, bcs=[])
 solver = NewtonSolver(mesh.comm, problem)
@@ -149,6 +130,7 @@ compiled_diff = dolfinx.fem.form(L2_squared)
 
 for i in range(40):
     #alpha.value = 2**i
+    alpha.value += 1
     num_newton_iterations, converged = solver.solve(w)
     # ksp.view()
     print(
@@ -162,7 +144,7 @@ for i in range(40):
 
     u_out.x.array[:] = w.sub(0).x.array[U_to_W]
     bp_u.write(i)
-    q_out.interpolate(grad_u)
+    #q_out.interpolate(grad_u)
 
     
    # bp_grad_u.write(i)
@@ -175,4 +157,5 @@ for i in range(40):
     # xdmf.write_function(t, i)
 # xdmf.close()
 bp_u.close()
-bp_grad_u.close()
+
+#bp_grad_u.close()
