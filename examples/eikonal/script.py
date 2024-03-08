@@ -7,8 +7,8 @@ import ufl
 from dolfinx.nls.petsc import NewtonSolver
 from dolfinx.fem.petsc import NonlinearProblem, LinearProblem
 
-N = 80
-M = 77
+N = 40
+M = 40
 mesh = dolfinx.mesh.create_unit_square(
     MPI.COMM_WORLD, N, M, diagonal=dolfinx.mesh.DiagonalType.crossed)
 # , dolfinx.mesh.CellType.quadrilateral)
@@ -38,7 +38,7 @@ u0, psi0 = ufl.split(w0)
 
 amp = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
 f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-beta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(10))
+beta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100))
 
 uD = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
 U, U_to_W = V_trial.sub(0).collapse()
@@ -67,21 +67,30 @@ n = ufl.FacetNormal(mesh)
 # w.x.array[U_to_W] = u_init_out.x.array
 # w.x.array[Q_to_W] = 0.
 
-nu = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e-8))
+nu = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e-9))
 F = nu * ufl.inner(ufl.grad(u), ufl.grad(v)) * dx
 # Add DG/IP terms
 F -= nu * (ufl.inner(ufl.avg(ufl.grad(v)), ufl.jump(u, n)) - ufl.inner(ufl.jump(v, n), ufl.avg(ufl.grad(u))))*dS
 F += nu * beta/h_avg*ufl.inner(ufl.jump(v, n), ufl.jump(u, n))*dS
 # Add Nitsche terms
 F -= nu * ufl.inner(n, ufl.grad(u)) * v * ds
-F -=  nu * (ufl.inner(n, ufl.grad(v)) * u + beta / h * ufl.inner(u, v)) * ds
+beta_2 = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(10))
+F -=  nu * (ufl.inner(n, ufl.grad(v)) * u + beta_2 / h * ufl.inner(u, v)) * ds
+F -= nu * (-ufl.inner(n, ufl.grad(v)) * uD + beta_2 / h * ufl.inner(uD, v)) * ds
+# zeta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100))
+# F += zeta * ufl.inner(u, v) * ds
 F -= alpha * ufl.inner(f, v) * dx 
-F -= nu * (-ufl.inner(n, ufl.grad(v)) * uD + beta / h * ufl.inner(uD, v)) * ds
 
-# Add re
 F -= ufl.inner(ufl.div(psi), v)*dx
 F += ufl.inner(ufl.div(psi0), v)*dx
-F += ufl.inner(ufl.grad(u), tau)*dx
+F += ufl.inner(ufl.grad(u), tau) * dx
+# F -= ufl.inner(u, ufl.div(tau))*dx
+# F += 0.5 * ufl.dot((u("+")+u("-"))*(tau("+") - tau("-")) , n("+")) * dS
+# F += 0.5 * ufl.dot((tau("+")+tau("-"))*(u("+") - u("-")) , n("+")) * dS
+#F += beta/h_avg* ufl.dot(tau("+") -tau("-"), n("+")) * (u("+")-u("-"))*dS
+# Might need extra term here to enforce continuity of u
+
+#ufl.jump(tau, n) * ufl.avg(u) * dS  + ufl.inner(ufl.avg(tau), ufl.jump(u, n)) * dS
 non_lin_term = 1/(ufl.sqrt(1 + ufl.dot(psi, psi)))
 F -= phi * non_lin_term * ufl.dot(psi, tau)*dx
 
@@ -138,8 +147,8 @@ diff = w.sub(0)-w0.sub(0)
 L2_squared = ufl.dot(diff, diff)*dx
 compiled_diff = dolfinx.fem.form(L2_squared)
 
-for i in range(5):
-    alpha.value = 2**i
+for i in range(40):
+    #alpha.value = 2**i
     num_newton_iterations, converged = solver.solve(w)
     # ksp.view()
     print(
