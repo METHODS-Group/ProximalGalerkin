@@ -15,7 +15,7 @@ mesh = dolfinx.mesh.create_unit_square(
 
 el_0 = basix.ufl.element("DG", mesh.topology.cell_name(), 1)
 el_1 = basix.ufl.element(
-    "RT", mesh.topology.cell_name(), 1)
+    "RT", mesh.topology.cell_name(), 2)
 trial_el = basix.ufl.mixed_element([el_0, el_1])
 V_trial = dolfinx.fem.functionspace(mesh, trial_el)
 # test_el = basix.ufl.mixed_element([el_0, el_1])
@@ -67,19 +67,19 @@ n = ufl.FacetNormal(mesh)
 # w.x.array[U_to_W] = u_init_out.x.array
 # w.x.array[Q_to_W] = 0.
 
-nu = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e-9))
-F = nu * ufl.inner(ufl.grad(u), ufl.grad(v)) * dx
-# Add DG/IP terms
-F -= nu * (ufl.inner(ufl.avg(ufl.grad(v)), ufl.jump(u, n)) - ufl.inner(ufl.jump(v, n), ufl.avg(ufl.grad(u))))*dS
-F += nu * beta/h_avg*ufl.inner(ufl.jump(v, n), ufl.jump(u, n))*dS
-# Add Nitsche terms
-F -= nu * ufl.inner(n, ufl.grad(u)) * v * ds
-beta_2 = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(10))
-F -=  nu * (ufl.inner(n, ufl.grad(v)) * u + beta_2 / h * ufl.inner(u, v)) * ds
-F -= nu * (-ufl.inner(n, ufl.grad(v)) * uD + beta_2 / h * ufl.inner(uD, v)) * ds
+nu = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
+# F = nu * ufl.inner(ufl.grad(u), ufl.grad(v)) * dx
+# # Add DG/IP terms
+# F -= nu * (ufl.inner(ufl.avg(ufl.grad(v)), ufl.jump(u, n)) - ufl.inner(ufl.jump(v, n), ufl.avg(ufl.grad(u))))*dS
+# F += nu * beta/h_avg*ufl.inner(ufl.jump(v, n), ufl.jump(u, n))*dS
+# # Add Nitsche terms
+# F -= nu * ufl.inner(n, ufl.grad(u)) * v * ds
+# beta_2 = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(10))
+# F -=  nu * (ufl.inner(n, ufl.grad(v)) * u + beta_2 / h * ufl.inner(u, v)) * ds
+# F -= nu * (-ufl.inner(n, ufl.grad(v)) * uD + beta_2 / h * ufl.inner(uD, v)) * ds
 # zeta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100))
 # F += zeta * ufl.inner(u, v) * ds
-F -= alpha * ufl.inner(f, v) * dx 
+F =- alpha * ufl.inner(f, v) * dx 
 
 F -= ufl.inner(ufl.div(psi), v)*dx
 F += ufl.inner(ufl.div(psi0), v)*dx
@@ -126,11 +126,11 @@ ksp.setFromOptions()
 # t = dolfinx.fem.Function(T)
 # t.name = "grad_psi"
 
-Q = dolfinx.fem.functionspace(mesh, ("DG", 1, (mesh.geometry.dim, )))
-grad_u = dolfinx.fem.Expression(
-    ufl.grad(w.sub(0)), Q.element.interpolation_points())
-q_out = dolfinx.fem.Function(Q)
-q_out.name = "gradu"
+# Q = dolfinx.fem.functionspace(mesh, ("DG", 1, (mesh.geometry.dim, )))
+# grad_u = dolfinx.fem.Expression(
+#     ufl.grad(w.sub(0)), Q.element.interpolation_points())
+# q_out = dolfinx.fem.Function(Q)
+# q_out.name = "gradu"
 
 
 dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
@@ -140,7 +140,7 @@ u_out = w.sub(0).collapse()
 u_out.name = "u"
 bp_u = dolfinx.io.VTXWriter(mesh.comm, "u.bp", [u_out], engine="BP4")
 
-bp_grad_u = dolfinx.io.VTXWriter(mesh.comm, "grad_u.bp", [q_out], engine="bp4")
+#bp_grad_u = dolfinx.io.XDMFFile(mesh.comm, "grad_u.bp", [q_out], engine="bp4")
 
 
 diff = w.sub(0)-w0.sub(0)
@@ -164,7 +164,8 @@ for i in range(40):
     bp_u.write(i)
     q_out.interpolate(grad_u)
 
-    bp_grad_u.write(i)
+    
+   # bp_grad_u.write(i)
 
     # t.interpolate(grad_psi)
 
