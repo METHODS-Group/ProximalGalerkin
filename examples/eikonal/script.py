@@ -7,15 +7,19 @@ import ufl
 from dolfinx.nls.petsc import NewtonSolver
 from dolfinx.fem.petsc import NonlinearProblem, LinearProblem
 
-N = 40
-M = 40
-mesh = dolfinx.mesh.create_unit_square(
-    MPI.COMM_WORLD, N, M, diagonal=dolfinx.mesh.DiagonalType.crossed)
-# , dolfinx.mesh.CellType.quadrilateral)
+# N = 50
+# M = 50
+# mesh = dolfinx.mesh.create_rectangle(
+#     MPI.COMM_WORLD,[[1, 2], [3,4]], [N, M], diagonal=dolfinx.mesh.DiagonalType.crossed)
+# # , dolfinx.mesh.CellType.quadrilateral)
+with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", "r") as xdmf:
+    mesh = xdmf.read_mesh()
+    mesh.topology.create_connectivity(mesh.topology.dim-1, mesh.topology.dim)
+    #ft = xdmf.read_meshtags(mesh, name="Facet tags")
 
-el_0 = basix.ufl.element("DG", mesh.topology.cell_name(), 1)
+el_0 = basix.ufl.element("DG", mesh.topology.cell_name(), 2)
 el_1 = basix.ufl.element(
-    "RT", mesh.topology.cell_name(), 2)
+    "RT", mesh.topology.cell_name(), 3)
 trial_el = basix.ufl.mixed_element([el_0, el_1])
 V_trial = dolfinx.fem.functionspace(mesh, trial_el)
 # test_el = basix.ufl.mixed_element([el_0, el_1])
@@ -61,7 +65,6 @@ f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
 
 
 alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-x = ufl.SpatialCoordinate(mesh)
 phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
 w0 = dolfinx.fem.Function(V_trial)
 u0, psi0 = ufl.split(w0)
@@ -78,8 +81,8 @@ F+= phi * non_lin_term * ufl.dot(psi, tau)*dx
 problem = NonlinearProblem(F, w, bcs=[])
 solver = NewtonSolver(mesh.comm, problem)
 solver.convergence_criterion = "residual"
-solver.rtol = 1e-9
-solver.atol = 1e-9
+solver.rtol = 1e-5
+solver.atol = 1e-6
 solver.max_it = 20
 # solver.relaxation_factor = 0.7
 solver.error_on_nonconvergence = False
@@ -88,9 +91,11 @@ solver.error_on_nonconvergence = False
 ksp = solver.krylov_solver
 opts = PETSc.Options()  # type: ignore
 option_prefix = ksp.getOptionsPrefix()
+# opts[f"{option_prefix}ksp_type"] = "gmres"
+# opts[f"{option_prefix}pc_type"] = "cholesky"
 opts[f"{option_prefix}ksp_type"] = "preonly"
 opts[f"{option_prefix}pc_type"] = "lu"
-opts[f"{option_prefix}pc_factor_mat_solver_type"] = "superlu"
+opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
 
 # For factorisation prefer MUMPS, then superlu_dist, then default.
 # sys = PETSc.Sys()  # type: ignore
@@ -128,9 +133,10 @@ diff = w.sub(0)-w0.sub(0)
 L2_squared = ufl.dot(diff, diff)*dx
 compiled_diff = dolfinx.fem.form(L2_squared)
 
-for i in range(40):
-    #alpha.value = 2**i
-    alpha.value += 1
+for i in range(20):
+    if i < 5:
+        alpha.value += 2**i
+    #alpha.value += 1
     num_newton_iterations, converged = solver.solve(w)
     # ksp.view()
     print(
@@ -144,6 +150,8 @@ for i in range(40):
 
     u_out.x.array[:] = w.sub(0).x.array[U_to_W]
     bp_u.write(i)
+    if global_diff < 5e-5:
+        break
     #q_out.interpolate(grad_u)
 
     

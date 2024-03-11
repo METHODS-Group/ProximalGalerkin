@@ -14,10 +14,10 @@ mesh = dolfinx.mesh.create_unit_square(
 # , dolfinx.mesh.CellType.quadrilateral)
 
 el_0 = basix.ufl.element("Lagrange", mesh.topology.cell_name(), 2)
-# el_1 = basix.ufl.element(
-#     "DG", mesh.topology.cell_name(), 1, shape=(mesh.geometry.dim,))
 el_1 = basix.ufl.element(
-    "RT", mesh.topology.cell_name(), 1)
+    "DG", mesh.topology.cell_name(), 1, shape=(mesh.geometry.dim,))
+# el_1 = basix.ufl.element(
+#     "RT", mesh.topology.cell_name(), 1)
 trial_el = basix.ufl.mixed_element([el_0, el_1])
 V_trial = dolfinx.fem.functionspace(mesh, trial_el)
 # test_el = basix.ufl.mixed_element([el_0, el_1])
