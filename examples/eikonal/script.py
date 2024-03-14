@@ -22,7 +22,7 @@ from dolfinx.fem.petsc import NonlinearProblem, LinearProblem
 #     mesh.topology.create_connectivity(mesh.topology.dim-1, mesh.topology.dim)
 #     #ft = xdmf.read_meshtags(mesh, name="Facet tags")
 mesh = dolfinx.mesh.create_unit_cube(
-    MPI.COMM_WORLD, 20, 20, 20)
+    MPI.COMM_WORLD, 20, 20, 20, cell_type=dolfinx.mesh.CellType.hexahedron)
 
 el_0 = basix.ufl.element("DG", mesh.topology.cell_name(), 1)
 el_1 = basix.ufl.element(
@@ -38,7 +38,7 @@ u, psi = ufl.split(w)
 
 v, tau = ufl.TestFunctions(V_test)
 
-metadata = {"quadrature_degree": 15}
+metadata = {"quadrature_degree": 5}
 dx = ufl.Measure("dx",  domain=mesh, metadata=metadata)
 ds = ufl.Measure("ds",  domain=mesh, metadata=metadata)
 dS = ufl.Measure("dS",  domain=mesh, metadata=metadata)
@@ -106,9 +106,11 @@ solver.error_on_nonconvergence = False
 ksp = solver.krylov_solver
 opts = PETSc.Options()  # type: ignore
 option_prefix = ksp.getOptionsPrefix()
+# opts[f"{option_prefix}ksp_type"] = "gmres"
+# opts[f"{option_prefix}pc_type"] = "cholesky"
 opts[f"{option_prefix}ksp_type"] = "preonly"
 opts[f"{option_prefix}pc_type"] = "lu"
-opts[f"{option_prefix}pc_factor_mat_solver_type"] = "superlu"
+opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
 
 # For factorisation prefer MUMPS, then superlu_dist, then default.
 # sys = PETSc.Sys()  # type: ignore

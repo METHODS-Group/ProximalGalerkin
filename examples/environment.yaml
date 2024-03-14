@@ -1,0 +1,7 @@
+name: proximal_gradient_galerkin
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - fenics-dolfinx
+  - metis
