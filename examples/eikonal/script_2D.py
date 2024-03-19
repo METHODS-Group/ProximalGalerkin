@@ -18,7 +18,7 @@ opts["pc_factor_mat_solver_type"] = "mumps"
 
 def solve_problem(N:int, M:int, L:int, H:int, degree: int,
                   cell_type:dolfinx.mesh.CellType=dolfinx.mesh.CellType.triangle,
-                  quadrature_degree:int=10,
+                  quadrature_degree:int=15,
                   tol:float=1e-6, max_iter:int=20) -> tuple[float, float, int]:
     """
     Solve 2D eikonal equation on a [0, 0]x[L, H] domain with N x M elements
@@ -93,8 +93,8 @@ def solve_problem(N:int, M:int, L:int, H:int, degree: int,
     compiled_diff = dolfinx.fem.form(L2_squared)
     num_total_iterations = 0
     for i in range(max_iter):
-        if i < 5:
-            alpha.value += 2**i
+
+        alpha.value += 2**i
 
         dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
         num_newton_iterations, converged = solver.solve(w)
@@ -146,13 +146,13 @@ def solve_problem(N:int, M:int, L:int, H:int, degree: int,
 
 
 if __name__ == "__main__":
-    Ns = [10, 20, 40]
-    degrees = [1,2,3]
+    Ns = [2,4,8, 16, 32, 64]
+    degrees = [1,3]
     L = 1
     H = 1
-    errors = np.zeros((len(Ns), len(degrees)))
-    hs = np.zeros((len(Ns), len(degrees)))
-    total_iterations = np.zeros((len(Ns), len(degrees)), dtype=np.int32)
+    errors = np.zeros((len(degrees),len(Ns), ))
+    hs = np.zeros((len(degrees), len(Ns)))
+    total_iterations = np.zeros((len(degrees), len(Ns)), dtype=np.int32)
     for j, degree in enumerate(degrees):
         for i, N in enumerate(Ns):
             hs[j, i], errors[j, i], total_iterations[j, i]  = solve_problem(N, N, L=L, H=H, degree=degree)
