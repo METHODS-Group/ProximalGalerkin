@@ -24,7 +24,6 @@ def solve_problem(N:int, M:int, L:int, H:int, degree: int,
     Solve 2D eikonal equation on a [0, 0]x[L, H] domain with N x M elements
     using a broken Lagrange space of degree `degree` for the primal variable
     """
-
     mesh = dolfinx.mesh.create_rectangle(
         MPI.COMM_WORLD, [[0, 0], [L, H]], [N, M], cell_type=cell_type)
 
@@ -158,13 +157,13 @@ if __name__ == "__main__":
         for i, N in enumerate(Ns):
             hs[j, i], L2_errors[j, i],H10_errors[j, i], total_iterations[j, i]  = solve_problem(N, N, L=L, H=H, degree=degree)
 
-    print(hs)
-    print(L2_errors)
-    print(H10_errors)
-    print(total_iterations)
+    print(f"{hs=}")
+    print(f"{L2_errors=}")
+    print(f"{H10_errors=}")
+    print(f"{total_iterations=}")
 
     L2_rates = np.log(L2_errors[:, 1:]/L2_errors[:, :-1])/np.log(hs[:, 1:]/hs[:, :-1])
     H10_rates = np.log(H10_errors[:, 1:]/H10_errors[:, :-1])/np.log(hs[:, 1:]/hs[:, :-1])
 
-    print(L2_rates)
-    print(H10_rates)
+    print(f"{L2_rates=}")
+    print(f"{H10_rates=}")
