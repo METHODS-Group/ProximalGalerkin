@@ -146,8 +146,8 @@ def solve_problem(N:int, M:int, L:int, H:int, degree: int,
 
 
 if __name__ == "__main__":
-    Ns = [2, 4, 8, 16]#, 32, 64]
-    degrees = [1, 2, 3]
+    Ns = [2, 4, 8, 16, 32, 64]
+    degrees = [1, 2, 3, 4]
     L = 2
     H = 3
     L2_errors = np.zeros((len(degrees),len(Ns), ))
@@ -166,4 +166,5 @@ if __name__ == "__main__":
     L2_rates = np.log(L2_errors[:, 1:]/L2_errors[:, :-1])/np.log(hs[:, 1:]/hs[:, :-1])
     H10_rates = np.log(H10_errors[:, 1:]/H10_errors[:, :-1])/np.log(hs[:, 1:]/hs[:, :-1])
 
-    breakpoint()
+    print(L2_rates)
+    print(H10_rates)
