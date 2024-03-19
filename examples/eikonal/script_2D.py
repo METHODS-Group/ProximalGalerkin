@@ -8,10 +8,10 @@ import basix.ufl
 import ufl
 from dolfinx.nls.petsc import NewtonSolver
 from dolfinx.fem.petsc import NonlinearProblem
-
+from pathlib import Path
 opts = PETSc.Options()  # type: ignore
 opts["ksp_type"] = "preonly"
-opts["pc_type"] = "cholesky"
+opts["pc_type"] = "lu"
 opts["pc_factor_mat_solver_type"] = "mumps"
 # opts[f"{option_prefix}pc_factor_reuse_ordering"] = True
 
@@ -19,7 +19,7 @@ opts["pc_factor_mat_solver_type"] = "mumps"
 def solve_problem(N:int, M:int, L:int, H:int, degree: int,
                   cell_type:dolfinx.mesh.CellType=dolfinx.mesh.CellType.triangle,
                   quadrature_degree:int=10,
-                  tol:float=1e-5, max_iter:int=20) -> tuple[float, float, int]:
+                  tol:float=1e-6, max_iter:int=20) -> tuple[float, float, int]:
     """
     Solve 2D eikonal equation on a [0, 0]x[L, H] domain with N x M elements
     using a broken Lagrange space of degree `degree` for the primal variable
@@ -68,8 +68,8 @@ def solve_problem(N:int, M:int, L:int, H:int, degree: int,
     problem = NonlinearProblem(F, w, bcs=[], J=J)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
-    solver.rtol = 1e-5
-    solver.atol = 1e-5
+    solver.rtol = 1e-6
+    solver.atol = 1e-6
     solver.max_it = 10
     solver.relaxation_parameter = 1
     solver.error_on_nonconvergence = True
@@ -82,7 +82,10 @@ def solve_problem(N:int, M:int, L:int, H:int, degree: int,
 
     u_out = w.sub(0).collapse()
     u_out.name = "u"
-    bp_u = dolfinx.io.VTXWriter(mesh.comm, f"u_{N}_{M}_{L}_{H}_{degree}_{quadrature_degree}_{mesh.basix_cell()}.bp", [u_out], engine="BP4")
+
+    dir = Path("output")
+    dir.mkdir(exist_ok=True)
+    bp_u = dolfinx.io.VTXWriter(mesh.comm, dir/f"u_{N}_{M}_{L}_{H}_{degree}_{quadrature_degree}_{mesh.basix_cell()}.bp", [u_out], engine="BP4")
 
 
     diff = w.sub(0)-w0.sub(0)
@@ -130,8 +133,9 @@ def solve_problem(N:int, M:int, L:int, H:int, degree: int,
     global_h =  mesh.comm.allreduce(local_max, op=MPI.MAX)
 
     expr = dolfinx.fem.Expression(dist, u_out.function_space.element.interpolation_points())
-    # u_exact = dolfinx.fem.Function(u_out.function_space)
-    # u_exact.interpolate(expr)
+    u_exact = dolfinx.fem.Function(u_out.function_space)
+    u_exact.interpolate(expr)
+    print(max(u_exact.x.array-abs(u_out.x.array)))
     # with dolfinx.io.VTXWriter(mesh.comm, "exact.bp", [u_exact], engine="BP4") as writer:
     #     writer.write(0)
 
@@ -149,9 +153,9 @@ if __name__ == "__main__":
     errors = np.zeros((len(Ns), len(degrees)))
     hs = np.zeros((len(Ns), len(degrees)))
     total_iterations = np.zeros((len(Ns), len(degrees)), dtype=np.int32)
-    for i, N in enumerate(Ns):
-        for j, degree in enumerate(degrees):
-            hs[i,j], errors[i,j], total_iterations[i, j]  = solve_problem(N, N, L=L, H=H, degree=degree)
+    for j, degree in enumerate(degrees):
+        for i, N in enumerate(Ns):
+            hs[j, i], errors[j, i], total_iterations[j, i]  = solve_problem(N, N, L=L, H=H, degree=degree)
 
     print(hs)
     print(errors)
