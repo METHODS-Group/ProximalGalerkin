@@ -146,7 +146,7 @@ def solve_problem(N:int, M:int, L:int, H:int, degree: int,
 
 if __name__ == "__main__":
     Ns = [2, 4, 8, 16, 32, 64]
-    degrees = [1, 2, 3, 4]
+    degrees = [1,2, 3, 4, 5]
     L = 2
     H = 3
     L2_errors = np.zeros((len(degrees),len(Ns), ))
@@ -167,3 +167,36 @@ if __name__ == "__main__":
 
     print(f"{L2_rates=}")
     print(f"{H10_rates=}")
+    print(f"{L2_rates=}")
+
+
+
+
+    def format_tex(float_number):
+        """
+        https://stackoverflow.com/questions/41157879/python-pandas-how-to-format-big-numbers-in-powers-of-ten-in-latex
+        """
+        exponent = np.floor(np.log10(float_number))
+        mantissa = float_number/10**exponent
+        mantissa_format = str(mantissa)[0:3]
+        return r"${0}\cdot 10^{{{1}}}$"\
+                .format(mantissa_format, str(int(exponent)))
+
+
+    import pandas
+    columns = [r"$h$", r"$L^2$ Error", r"$L^2$ rates", r"$H^1$ Error", r"$H^1$ rates", "Iterations"]
+    for i, degree in enumerate(degrees):
+        df = pandas.DataFrame(columns=columns, index=range(len(Ns)))
+        df[columns[0]][:] = hs[i]
+        df[columns[1]][:] = L2_errors[i]
+        df[columns[2]][1:] = L2_rates[i]
+        df[columns[3]][:] = H10_errors[i]
+        df[columns[4]][1:] = H10_rates[i]
+        df[columns[5]][:] = total_iterations[i]
+
+        print(df.to_latex(column_format="|c|c|c|c|c|c|", na_rep="-",
+                        formatters=[format_tex, format_tex, "{0:.2f}".format, format_tex, "{0:.2f}".format, "{0:d}".format],
+                        caption=f"Convergence rates for the eikonal equation with DG-{degree} elements", label=f"tab:eikonal_{degree}",
+                        index=False))
+
+    
