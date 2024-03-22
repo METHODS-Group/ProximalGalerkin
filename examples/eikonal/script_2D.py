@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
 
     import pandas
-    columns = [r"$h$", r"$L^2$ Error", r"$L^2$ rates", r"$H^1$ Error", r"$H^1$ rates", "Iterations"]
+    columns = [r"$h$", r"$L^2$ Error", r"$L^2$ rates", r"$H_0^1$ Error", r"$H_0^1$ rates", "Iterations"]
     for i, degree in enumerate(degrees):
         df = pandas.DataFrame(columns=columns, index=range(len(Ns)))
         df[columns[0]][:] = hs[i]
@@ -194,7 +194,7 @@ if __name__ == "__main__":
         df[columns[4]][1:] = H10_rates[i]
         df[columns[5]][:] = total_iterations[i]
 
-        print(df.to_latex(column_format="|c|c|c|c|c|c|", na_rep="-",
+        print(df.to_latex(column_format="|r|c|c|c|c|c|", na_rep="-",
                         formatters=[format_tex, format_tex, "{0:.2f}".format, format_tex, "{0:.2f}".format, "{0:d}".format],
                         caption=f"Convergence rates for the eikonal equation with DG-{degree} elements", label=f"tab:eikonal_{degree}",
                         index=False))
