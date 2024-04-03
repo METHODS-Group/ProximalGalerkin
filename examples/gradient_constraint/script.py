@@ -37,6 +37,7 @@ def solve_problem(N:int, M:int,
                   alpha_0: float,
                   alpha_c: float,
                   max_iterations: int,
+                  stopping_tol: float,
                   result_dir: Path,
                   phi_func: Callable[[np.ndarray], np.ndarray],
                   f_func: Callable[[np.ndarray], np.ndarray],
@@ -131,33 +132,22 @@ def solve_problem(N:int, M:int,
     opts[f"{option_prefix}pc_factor_mat_solver_type"] = "superlu"
     ksp.setFromOptions()
 
-
-    # T = dolfinx.fem.functionspace(mesh, ("DG", 0, (mesh.geometry.dim,)))
-    # grad_psi = dolfinx.fem.Expression(
-    #     ufl.grad(sol.sub(1)), T.element.interpolation_points())
-    # t = dolfinx.fem.Function(T)
-    # t.name = "grad_psi"
-
-    # Q = dolfinx.fem.functionspace(mesh, ("DG", 1, (mesh.geometry.dim, )))
-    # grad_u = dolfinx.fem.Expression(
-    #     ufl.grad(sol.sub(0)), Q.element.interpolation_points())
-    # q_out = dolfinx.fem.Function(Q)
-    # q_out.name = "gradu"
-
-
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
     u_out = sol.sub(0).collapse()
     u_out.name = "u"
     bp_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
 
-    # bp_grad_u = dolfinx.io.VTXWriter(mesh.comm, "grad_u.bp", [q_out], engine="bp4")
-
-
+    W = dolfinx.fem.functionspace(mesh, ("DG", 2*(primal_degree-1)))
+    grad_u = dolfinx.fem.Function(W)
+    grad_u.name = "|grad(u)|"
+    grad_u_expr = dolfinx.fem.Expression(ufl.sqrt(ufl.dot(ufl.grad(u), ufl.grad(u))), W.element.interpolation_points())
+    bp_grad_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "grad_u.bp", [grad_u], engine="BP4")
     diff = sol.sub(0)-w0.sub(0)
     L2_squared = ufl.dot(diff, diff)*dx
     compiled_diff = dolfinx.fem.form(L2_squared)
-
+    newton_iterations = np.zeros(max_iterations, dtype=np.int32)
+    L2_diff = np.zeros(max_iterations, dtype=np.float64)
     for i in range(max_iterations):
         if alpha_scheme == AlphaScheme.constant:
             pass
@@ -167,41 +157,38 @@ def solve_problem(N:int, M:int,
             alpha.value = alpha_0 * 2**i
 
         num_newton_iterations, converged = solver.solve(sol)
-
-        print(
-            f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}")
+        newton_iterations[i] = num_newton_iterations
         local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
         global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
-        print(f"|delta u |= {global_diff}")
-        w0.x.array[:] = sol.x.array
-
-        dolfinx.log.set_log_level(dolfinx.log.LogLevel.ERROR)
+        L2_diff[i] = global_diff
+        if mesh.comm.rank == 0:
+            print(
+                f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}", 
+                f"|delta u |= {global_diff}")
 
         u_out.x.array[:] = sol.sub(0).x.array[U_to_W]
+        grad_u.interpolate(grad_u_expr)
         bp_u.write(i)
-        # q_out.interpolate(grad_u)
+        bp_grad_u.write(i)
 
-        # bp_grad_u.write(i)
+        if global_diff < stopping_tol:
+            break
 
-        # t.interpolate(grad_psi)
-
-        # xdmf.write_function(u_out, i)
-        # xdmf.write_function(psi_out, i)
-        # xdmf.write_function(q_out, i)
-        # xdmf.write_function(t, i)
-    # xdmf.close()
+        w0.x.array[:] = sol.x.array
     bp_u.close()
-    # bp_grad_u.close()
+    bp_grad_u.close()
+    return newton_iterations, L2_diff
+
 
 
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
     pass
 
-def main(argv: Optional[list[str]]=None):
+def main(argv: Optional[list[str]]=None, phi_func: Callable[[np.ndarray], np.ndarray]=None, f_func: Callable[[np.ndarray], np.ndarray]=None):
     parser = argparse.ArgumentParser(formatter_class=CustomFormatter)
     mesh_options = parser.add_argument_group("Mesh options")
-    mesh_options.add_argument("-N", type=int, default=10, help="Number of elements in x-direction")
-    mesh_options.add_argument("-M", type=int, default=10, help="Number of elements in y-direction")
+    mesh_options.add_argument("-N", type=int, default=40, help="Number of elements in x-direction")
+    mesh_options.add_argument("-M", type=int, default=40, help="Number of elements in y-direction")
     mesh_options.add_argument("--cell_type", "-c", type=str, default="triangle", choices=["triangle", "quadrilateral"], help="Cell type")
     element_options = parser.add_argument_group("Finite element discretization options")
     element_options.add_argument("--primal_space", type=str, default="Lagrange", choices=["Lagrange", "P", "CG"], help="Finite Element family for primal variable")
@@ -212,18 +199,21 @@ def main(argv: Optional[list[str]]=None):
     alpha_options.add_argument("--alpha_0", type=float, default=1.0, help="Initial value of alpha")
     alpha_options.add_argument("--alpha_c", type=float, default=1.0, help="Increment of alpha in linear scheme")
     pg_options = parser.add_argument_group("Proximal Galerkin options")
-    pg_options.add_argument("--max_iterations", type=int, default=10, help="Maximum number of iterations")
+    pg_options.add_argument("--max_iterations", type=int, default=20, help="Maximum number of iterations")
+    pg_options.add_argument("-s", "--stopping_tol", type=float, default=1e-9, help="Stopping tolerance between two successive PG iterations (L2-difference)")
     pg_options.add_argument("--warm_start", action="store_true", help="Use warm start (solve Poisson problem to get initial guess)")
     result_options = parser.add_argument_group("Output options")
     result_options.add_argument("--result_dir", type=Path, default=Path("results"), help="Directory to store results")
     parsed_args = parser.parse_args(argv)
 
-    def phi_func(x):
-        return np.ones(x.shape[1])
-    def f_func(x):
-        return np.ones(x.shape[1])
+    if phi_func is None:
+        def phi_func(x):
+            return np.full(x.shape[1], 1)
+    if f_func is None:
+        def f_func(x):
+            return np.full(x.shape[1], 10)
 
-    solve_problem(N=parsed_args.N, M=parsed_args.M,
+    iteration_counts, L2_diffs = solve_problem(N=parsed_args.N, M=parsed_args.M,
                   primal_space=parsed_args.primal_space,
                     dual_space=parsed_args.dual_space,
                     primal_degree=parsed_args.primal_degree,
@@ -235,7 +225,10 @@ def main(argv: Optional[list[str]]=None):
                     result_dir=parsed_args.result_dir,
                     phi_func=phi_func,
                     f_func=f_func,
-                    warm_start=parsed_args.warm_start)
+                    warm_start=parsed_args.warm_start,
+                    stopping_tol=parsed_args.stopping_tol)
+    print(iteration_counts)
+    print(L2_diffs)
 if __name__ == "__main__":
     main()
 
