@@ -137,11 +137,10 @@ def solve_problem(N:int, M:int,
     u_out = sol.sub(0).collapse()
     u_out.name = "u"
     bp_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
-
-    W = dolfinx.fem.functionspace(mesh, ("DG", 2*(primal_degree-1)))
+    W = dolfinx.fem.functionspace(mesh, ("DG", (primal_degree-1), (mesh.geometry.dim, )))
     grad_u = dolfinx.fem.Function(W)
-    grad_u.name = "|grad(u)|"
-    grad_u_expr = dolfinx.fem.Expression(ufl.sqrt(ufl.dot(ufl.grad(u), ufl.grad(u))), W.element.interpolation_points())
+    grad_u.name = "grad(u)"
+    grad_u_expr = dolfinx.fem.Expression(ufl.grad(u), W.element.interpolation_points())
     bp_grad_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "grad_u.bp", [grad_u], engine="BP4")
     diff = sol.sub(0)-w0.sub(0)
     L2_squared = ufl.dot(diff, diff)*dx
