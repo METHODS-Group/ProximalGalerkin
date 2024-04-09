@@ -72,9 +72,10 @@ def solve_problem(N: int, M: int,
     phi = dolfinx.fem.Function(U)  # Previous iterate
 
     tol = 1e-14
-    # for i in range(num_species):
-    #     sol.sub(0).sub(i).interpolate(lambda x: np.full(
-    #         x.shape[1], 1/num_species, dtype=dolfinx.default_scalar_type))
+    for i in range(num_species):
+        sol.sub(0).sub(i).interpolate(lambda x: np.full(
+            x.shape[1], 1/num_species, dtype=dolfinx.default_scalar_type))
+
     h = ufl.Circumradius(mesh)
     epsilon = ufl.sqrt(h)
     ones = dolfinx.fem.Constant(
@@ -101,7 +102,7 @@ def solve_problem(N: int, M: int,
     ksp = solver.krylov_solver
     opts = PETSc.Options()  # type: ignore
     option_prefix = ksp.getOptionsPrefix()
-    opts[f"{option_prefix}ksp_type"] = "preonly"
+    opts[f"{option_prefix}ksp_type"] = "cg"
     opts[f"{option_prefix}pc_type"] = "lu"
     opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
     ksp.setFromOptions()
@@ -141,12 +142,11 @@ def solve_problem(N: int, M: int,
         newton_iterations[i] = num_newton_iterations
         local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
         global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
-        L2_diff[i] = global_diff
+        L2_diff[i-1] = global_diff
         if mesh.comm.rank == 0:
             print(
                 f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}",
                 f"|delta u |= {global_diff}")
-        breakpoint()
         # Update solution
         phi.x.array[:] = sol.x.array[U_to_W]
         # bp_u.write(i)
