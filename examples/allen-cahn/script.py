@@ -46,8 +46,14 @@ def solve_problem(N: int, M: int,
     mesh = dolfinx.mesh.create_unit_square(
         MPI.COMM_WORLD, N, M, cell_type=_cell_type)
 
-    el_0 = basix.ufl.element(
-        "P", mesh.topology.cell_name(), primal_degree+1, shape=(num_species,))
+    # el_0 = basix.ufl.element(
+    #    "P", mesh.topology.cell_name(), primal_degree+1, shape=(num_species,))
+    el_s = basix.ufl.element(
+        "P", mesh.topology.cell_name(), primal_degree)
+    el_b = basix.ufl.element(
+        "Bubble", mesh.topology.cell_name(), primal_degree+2)
+    el_0 = basix.ufl.blocked_element(
+        basix.ufl.enriched_element([el_s, el_b]), shape=(num_species,))
     el_1 = basix.ufl.element(
         "DG", mesh.topology.cell_name(), primal_degree-1, shape=(num_species,))
 
@@ -66,23 +72,21 @@ def solve_problem(N: int, M: int,
     phi = dolfinx.fem.Function(U)  # Previous iterate
 
     tol = 1e-14
-    for i in range(num_species):
-        sol.sub(0).sub(i).interpolate(lambda x: np.full(
-            x.shape[1], 1/num_species, dtype=dolfinx.default_scalar_type))
+    # for i in range(num_species):
+    #     sol.sub(0).sub(i).interpolate(lambda x: np.full(
+    #         x.shape[1], 1/num_species, dtype=dolfinx.default_scalar_type))
     h = ufl.Circumradius(mesh)
-    epsilon = 1  # ufl.sqrt(h)
+    epsilon = ufl.sqrt(h)
     ones = dolfinx.fem.Constant(
         mesh, dolfinx.default_scalar_type([1,]*num_species))
-    F = epsilon**2 * ufl.inner(ufl.grad(u), ufl.grad(v))*dx
+    F = ufl.inner(ufl.grad(u), ufl.grad(v))*dx
     i = ufl.indices(1)
-    F += ((ones[i]-u[i]) + 1/alpha * psi[i]) * v[i]*dx
+    F += 1/(epsilon**2)*((ones[i]-u[i]) + 1/alpha * psi[i]) * v[i]*dx
 
     F -= 1/alpha * phi[i] * v[i] * dx
     sum_psi = sum(ufl.exp(psi[j]) for j in range(num_species))
     F += sum((u[i] - ufl.exp(psi[i]) / sum_psi) * w[i]
              for i in range(num_species))*dx
-    # F += sum((u[i] - ufl.exp(psi[i])) * w[i]
-    #         for i in range(num_species))*dx
 
     bcs = []
 
@@ -110,9 +114,9 @@ def solve_problem(N: int, M: int,
     # pg_grad = dolfinx.fem.Function(W)
     # pg_grad.name = "Global feasible gradient"
 
-    bp_u = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "u.bp", [phi], engine="BP4")
-    bp_u.write(0)
+    # bp_u = dolfinx.io.VTXWriter(
+    #     mesh.comm, result_dir / "u.bp", [phi], engine="BP4")
+    # bp_u.write(0)
     # grad_u = dolfinx.fem.Function(W)
     # grad_u.name = "grad(u)"
     # grad_u_expr = dolfinx.fem.Expression(ufl.grad(u), W.element.interpolation_points())
@@ -145,12 +149,12 @@ def solve_problem(N: int, M: int,
         breakpoint()
         # Update solution
         phi.x.array[:] = sol.x.array[U_to_W]
-        bp_u.write(i)
+        # bp_u.write(i)
         # bp_grad_u.write(i)
         if global_diff < stopping_tol:
             break
 
-    bp_u.close()
+    # bp_u.close()
     # bp_grad_u.close()
     return newton_iterations, L2_diff
 
