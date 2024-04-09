@@ -114,10 +114,14 @@ def solve_problem(N: int, M: int,
     # feas_grad = dolfinx.fem.Expression(global_feasible_gradient, W.element.interpolation_points())
     # pg_grad = dolfinx.fem.Function(W)
     # pg_grad.name = "Global feasible gradient"
+    V_out = dolfinx.fem.functionspace(
+        mesh, ("Lagrange", primal_degree+3, (num_species, )))
+    u_out = dolfinx.fem.Function(V_out)
+    bp_u = dolfinx.io.VTXWriter(
+        mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
 
-    # bp_u = dolfinx.io.VTXWriter(
-    #     mesh.comm, result_dir / "u.bp", [phi], engine="BP4")
-    # bp_u.write(0)
+    u_out.interpolate(sol.sub(0).collapse())
+    bp_u.write(0)
     # grad_u = dolfinx.fem.Function(W)
     # grad_u.name = "grad(u)"
     # grad_u_expr = dolfinx.fem.Expression(ufl.grad(u), W.element.interpolation_points())
@@ -149,12 +153,14 @@ def solve_problem(N: int, M: int,
                 f"|delta u |= {global_diff}")
         # Update solution
         phi.x.array[:] = sol.x.array[U_to_W]
-        # bp_u.write(i)
+
+        u_out.interpolate(sol.sub(0).collapse())
+        bp_u.write(i)
         # bp_grad_u.write(i)
         if global_diff < stopping_tol:
             break
 
-    # bp_u.close()
+    bp_u.close()
     # bp_grad_u.close()
     return newton_iterations, L2_diff
 
