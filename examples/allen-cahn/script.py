@@ -72,18 +72,38 @@ def solve_problem(N: int, M: int,
     phi = dolfinx.fem.Function(U)  # Previous iterate
 
     tol = 1e-14
-    for i in range(num_species):
-        sol.sub(0).sub(i).interpolate(lambda x: np.full(
-            x.shape[1], 1/num_species, dtype=dolfinx.default_scalar_type))
-
     h = ufl.Circumradius(mesh)
     epsilon = ufl.sqrt(h)
     ones = dolfinx.fem.Constant(
         mesh, dolfinx.default_scalar_type([1,]*num_species))
-    F = ufl.inner(ufl.grad(u), ufl.grad(v))*dx
-    i = ufl.indices(1)
-    F += 1/(epsilon**2)*((ones[i]-u[i]) + 1/alpha * psi[i]) * v[i]*dx
 
+    Q = dolfinx.fem.functionspace(mesh, ("DG", 0, (num_species,)))
+    u_image = dolfinx.fem.Function(Q)
+    dL = 1./num_species
+    for i in range(num_species):
+        cell_tol = 1e-2
+        locate_cells = dolfinx.mesh.locate_entities(
+            mesh, mesh.topology.dim, lambda x: np.logical_and(x[0] >= i*dL-cell_tol, x[0] <= (i+1)*dL+cell_tol))
+        u_image.sub(i).interpolate(lambda x: np.full(
+            x.shape[1], 1) + 0.1 * np.random.rand(x.shape[1]), cells=locate_cells)
+    u_image.x.scatter_forward()
+    # with dolfinx.io.XDMFFile(mesh.comm, "image.xdmf", "w") as xdmf:
+    #     xdmf.write_mesh(mesh)
+    #     xdmf.write_function(u_image)
+    # exit()
+    # u_prev = dolfinx.fem.Function(U)
+    # for i in range(num_species):
+    #     u_prev.sub(i).interpolate(lambda x: np.random.rand(
+    #         x.shape[1]).astype(dolfinx.default_scalar_type))
+
+    # dt = dolfinx.fem.Constant(mesh, 0.001)
+    # F += (u[i]-u_prev[i])/dt * v[i] * dx
+    i = ufl.indices(1)
+    F = ufl.inner(ufl.grad(u), ufl.grad(v))*dx
+
+    F += 1/(epsilon**2)*((ones[i]-u[i]) + 1/alpha * psi[i]) * v[i]*dx
+    beta = dolfinx.fem.Constant(mesh, 1000.)
+    F += beta*(u[i] - u_image[i])*v[i]*ufl.dx
     F -= 1/alpha * phi[i] * v[i] * dx
     sum_psi = sum(ufl.exp(psi[j]) for j in range(num_species))
     F += sum((u[i] - ufl.exp(psi[i]) / sum_psi) * w[i]
@@ -102,25 +122,24 @@ def solve_problem(N: int, M: int,
     ksp = solver.krylov_solver
     opts = PETSc.Options()  # type: ignore
     option_prefix = ksp.getOptionsPrefix()
-    opts[f"{option_prefix}ksp_type"] = "cg"
+    opts[f"{option_prefix}ksp_type"] = "preonly"
     opts[f"{option_prefix}pc_type"] = "lu"
     opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
     ksp.setFromOptions()
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
-    # W = dolfinx.fem.functionspace(mesh, ("DG", (primal_degree-1), (mesh.geometry.dim, )))
-    # global_feasible_gradient = phi * psi / ufl.sqrt(1+ ufl.dot(psi, psi))
-    # feas_grad = dolfinx.fem.Expression(global_feasible_gradient, W.element.interpolation_points())
-    # pg_grad = dolfinx.fem.Function(W)
-    # pg_grad.name = "Global feasible gradient"
     V_out = dolfinx.fem.functionspace(
         mesh, ("Lagrange", primal_degree+3, (num_species, )))
     u_out = dolfinx.fem.Function(V_out)
     bp_u = dolfinx.io.VTXWriter(
         mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
-
-    u_out.interpolate(sol.sub(0).collapse())
+    psi_Q, psi_to_W = V_trial.sub(1).collapse()
+    psi_out = dolfinx.fem.Function(psi_Q)
+    bp_psi = dolfinx.io.VTXWriter(
+        mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP4")
+    # u_out.interpolate(u_prev)
+    bp_psi.write(0)
     bp_u.write(0)
     # grad_u = dolfinx.fem.Function(W)
     # grad_u.name = "grad(u)"
@@ -132,6 +151,11 @@ def solve_problem(N: int, M: int,
     compiled_diff = dolfinx.fem.form(L2_squared)
     newton_iterations = np.zeros(max_iterations, dtype=np.int32)
     L2_diff = np.zeros(max_iterations, dtype=np.float64)
+
+    # T_end = 1
+    # t = 0
+    # num_steps = int((T_end-t)/dt.value)
+    # for k in range(1, num_steps):
     for i in range(1, max_iterations+1):
         if alpha_scheme == AlphaScheme.constant:
             pass
@@ -139,11 +163,9 @@ def solve_problem(N: int, M: int,
             alpha.value = alpha_0 + alpha_c * i
         elif alpha_scheme == AlphaScheme.doubling:
             alpha.value = alpha_0 * 2**i
-        solver.rtol *= 0.5
-        solver.atol *= 0.5
-
+        print(alpha.value)
         num_newton_iterations, converged = solver.solve(sol)
-        newton_iterations[i] = num_newton_iterations
+        newton_iterations[i-1] = num_newton_iterations
         local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
         global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
         L2_diff[i-1] = global_diff
@@ -154,11 +176,17 @@ def solve_problem(N: int, M: int,
         # Update solution
         phi.x.array[:] = sol.x.array[U_to_W]
 
+        psi_out.x.array[:] = sol.x.array[psi_to_W]
         u_out.interpolate(sol.sub(0).collapse())
         bp_u.write(i)
-        # bp_grad_u.write(i)
+        bp_psi.write(i)
         if global_diff < stopping_tol:
             break
+
+        # bp_grad_u.write(i)
+
+        # u_prev.x.array[:] = sol.x.array[U_to_W]
+        # bp_u.write(k)
 
     bp_u.close()
     # bp_grad_u.close()
