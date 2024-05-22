@@ -19,17 +19,15 @@ submesh = MeshView.create(ff, 2)
 with XDMFFile("output/ff.xdmf") as xdmf:
     xdmf.write(ff)
 
-E, nu = 2.0e2, 0.3
-mu = E / (2.0 * (1.0 + nu))
-lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
+E, nu = 2.0e3, 0.3
+mu = Constant(E / (2.0 * (1.0 + nu)))
+lmbda = Constant(E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu)))
 
 def epsilon(w):
     return sym(grad(w))
 
 def sigma(w, gdim):
     return 2.0 * mu * epsilon(w) + lmbda * tr(grad(w)) * Identity(gdim)
-
-degree = 1
 
 
 def approximate_facet_normal(V):
@@ -51,8 +49,8 @@ def approximate_facet_normal(V):
     solve(A, nh.vector(), L)
     return nh
 
-A = VectorFunctionSpace(mesh, "Lagrange", degree)
-B = FunctionSpace(submesh, "Lagrange", degree)
+A = VectorFunctionSpace(mesh, "Lagrange", 2)
+B = FunctionSpace(submesh, "DG", 0)
 
 W = MixedFunctionSpace(*[A, B])
 
@@ -61,29 +59,29 @@ wh = Function(W)
 u = wh.sub(0)
 psi = wh.sub(1)
 n =approximate_facet_normal(VectorFunctionSpace(mesh, "DG", 2))
-
+n.set_allow_extrapolation(True)
 psi_k = Function(B)
+psi_k.set_allow_extrapolation(True)
 
 
 
 
-alpha = Constant(10.0)
-f = Constant((0.0, -10.0))
+alpha = Constant(1.0)
+f = Constant((0.0, 0))
 g = Constant(0.0)
 
 
 F00 = alpha * inner(sigma(u, mesh.geometry().dim()), grad(v)) * dx(domain=mesh) - alpha * inner(f, v) * dx(domain=mesh)
-F01 = inner(psi_k, dot(v, n)) * dx(domain=submesh)
+F01 = -inner(psi-psi_k, dot(v, n)) * dx(domain=submesh)
 F10 = inner(dot(u, n), w)  * dx(domain=submesh)
-F11 = -inner(exp(psi), w)  * dx(domain=submesh) - inner(g, w)  * dx(domain=submesh)
+F11 = inner(exp(psi), w)  * dx(domain=submesh) - inner(g, w)  * dx(domain=submesh)
 F0 = F00 + F01 
 F1 = F10 + F11
 
 u_bc = Function(W.sub_space(0))
-u_bc.interpolate(Expression(("0", "-1"), degree=degree))
+u_bc.interpolate(Expression(("0", "-0.1"), degree=2))
 bc = DirichletBC(W.sub_space(0), u_bc, ff, 1)
 bcs = [bc]
-
 jac00 = derivative(F0, u)
 jac01 = derivative(F0, psi)
 jac10 = derivative(F1, u)
@@ -92,13 +90,14 @@ jac11 = derivative(F1, psi)
 J = jac00 + jac01 + jac10 + jac11
 L = F0 + F1
 
-solve(L==0, wh, bcs, solver_parameters={"newton_solver": {"linear_solver": "mumps"}})
-uh = wh.sub(0, deepcopy=True)
-uh.rename("displacement", "displacement")
-
-psih = wh.sub(1, deepcopy=True)
-psih.rename("aux field", "aux field")
-with XDMFFile("output/legacy.xdmf") as xdmf:
-    xdmf.write_checkpoint(uh, "uh", 0, append=False)
-    xdmf.write_checkpoint(psih, "psi", 0, append=True)
-    xdmf.write_checkpoint(n, "nh", 0, append=True)
+xdmf =  XDMFFile("output/legacy.xdmf")
+xdmf.write(u,  0)
+xdmf.write(psi,0)
+for i in range(2):
+    alpha.assign(1)
+    solve(L==0, wh, bcs, solver_parameters={"newton_solver": {"linear_solver": "mumps"}})
+    print(assemble_mixed((dot(u, n)- exp(psi))*dx(domain=submesh)))
+    psi_k.assign(psi)
+    xdmf.write(u,  i+1)
+    xdmf.write(psi, i+1)
+xdmf.close()
