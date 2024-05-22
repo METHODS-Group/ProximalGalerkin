@@ -49,8 +49,8 @@ def approximate_facet_normal(V):
     solve(A, nh.vector(), L)
     return nh
 
-A = VectorFunctionSpace(mesh, "Lagrange", 2)
-B = FunctionSpace(submesh, "DG", 0)
+A = VectorFunctionSpace(mesh, "Lagrange", 1)
+B = FunctionSpace(submesh, "Lagrange", 1)
 
 W = MixedFunctionSpace(*[A, B])
 
@@ -68,18 +68,20 @@ psi_k.set_allow_extrapolation(True)
 
 alpha = Constant(1.0)
 f = Constant((0.0, 0))
-g = Constant(0.0)
+from ufl_legacy import conditional
+x = SpatialCoordinate(submesh)
+g = 0#0.2*x[0]#conditional(gt(x[0], 0.5), 1.0, 0.0)
 
-
+dx_s = Measure("dx", domain=submesh, metadata={"quadrature_scheme": "vertex"})
 F00 = alpha * inner(sigma(u, mesh.geometry().dim()), grad(v)) * dx(domain=mesh) - alpha * inner(f, v) * dx(domain=mesh)
-F01 = -inner(psi-psi_k, dot(v, n)) * dx(domain=submesh)
-F10 = inner(dot(u, n), w)  * dx(domain=submesh)
-F11 = inner(exp(psi), w)  * dx(domain=submesh) - inner(g, w)  * dx(domain=submesh)
+F01 = -inner(psi-psi_k, dot(v, n)) * dx_s
+F10 = inner(dot(u, n), w)  * dx_s
+F11 = inner(exp(psi), w)  * dx_s - inner(g, w)  * dx_s
 F0 = F00 + F01 
 F1 = F10 + F11
 
 u_bc = Function(W.sub_space(0))
-u_bc.interpolate(Expression(("0", "-0.1"), degree=2))
+u_bc.interpolate(Expression(("0", "-0.2"), degree=2))
 bc = DirichletBC(W.sub_space(0), u_bc, ff, 1)
 bcs = [bc]
 jac00 = derivative(F0, u)
@@ -93,10 +95,10 @@ L = F0 + F1
 xdmf =  XDMFFile("output/legacy.xdmf")
 xdmf.write(u,  0)
 xdmf.write(psi,0)
-for i in range(2):
+for i in range(5):
     alpha.assign(1)
     solve(L==0, wh, bcs, solver_parameters={"newton_solver": {"linear_solver": "mumps"}})
-    print(assemble_mixed((dot(u, n)- exp(psi))*dx(domain=submesh)))
+    print(assemble_mixed(abs(dot(u, n) - g + exp(psi))*dx(domain=submesh)))
     psi_k.assign(psi)
     xdmf.write(u,  i+1)
     xdmf.write(psi, i+1)
