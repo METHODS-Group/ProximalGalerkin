@@ -20,8 +20,7 @@ class NewtonSolver():
     dx: PETSc.Vec
     def __init__(self, F:list[dolfinx.fem.form], J:list[list[dolfinx.fem.form]], w: list[dolfinx.fem.Function], 
                  bcs: list[dolfinx.fem.DirichletBC]|None=None, max_iterations:int=5,
-                 petsc_options: dict[str, str|float|int|None]=None,
-                 problem_prefix = "newton"):
+                 petsc_options: dict[str, str|float|int|None]=None):
         self.max_iterations = max_iterations
         self.bcs = [] if bcs is None else bcs
         self.b = dolfinx.fem.petsc.create_vector_block(F)
@@ -34,11 +33,9 @@ class NewtonSolver():
 
         # Set PETSc options
         opts = PETSc.Options()
-        opts.prefixPush(problem_prefix)
         if petsc_options is not None:
             for k, v in petsc_options.items():
                 opts[k] = v
-        opts.prefixPop()
 
         # Define KSP solver    
         self._solver = PETSc.KSP().create(self.b.getComm().tompi4py())
@@ -46,9 +43,7 @@ class NewtonSolver():
         self._solver.setFromOptions()
 
         # Set matrix and vector PETSc options
-        self.A.setOptionsPrefix(problem_prefix)
         self.A.setFromOptions()
-        self.b.setOptionsPrefix(problem_prefix)
         self.b.setFromOptions()
 
    
@@ -57,14 +52,6 @@ class NewtonSolver():
 
 
         while i < self.max_iterations:
-            dolfinx.cpp.la.petsc.scatter_local_vectors(
-                self.x,
-                [si.x.petsc_vec.array_r for si in self.w],
-                [
-                    (si.function_space.dofmap.index_map, si.function_space.dofmap.index_map_bs)
-                    for si in self.w
-                ])
-            self.x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
             # Assemble F(u_{i-1}) - J(u_D - u_{i-1}) and set du|_bc= u_D - u_{i-1}
             self.b.zeroEntries()
@@ -85,9 +72,21 @@ class NewtonSolver():
                 s.x.array[:num_sub_dofs] -= beta*self.dx.array_r[offset_start:offset_start+num_sub_dofs]
                 s.x.scatter_forward()
                 offset_start += num_sub_dofs
-            # Compute norm of update
+            # Compute norm of primal space diff
+            norm = self.b.copy()
+            norm.zeroEntries()
+
+            dolfinx.cpp.la.petsc.scatter_local_vectors(
+                self.x,
+                [si.x.petsc_vec.array_r for si in self.w],
+                [
+                    (si.function_space.dofmap.index_map, si.function_space.dofmap.index_map_bs)
+                    for si in self.w
+                ])
+            self.x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
             correction_norm = self.dx.norm(0)
+            
             print(f"Iteration {i}: Correction norm {correction_norm}")
             if correction_norm < tol:
                 break
@@ -138,7 +137,7 @@ enriched_element = basix.ufl.enriched_element(
 element_u = basix.ufl.element("Lagrange", mesh.topology.cell_name(), degree, shape=(mesh.geometry.dim, ))
 V = dolfinx.fem.functionspace(mesh, element_u)
 
-u = dolfinx.fem.Function(V)
+u = dolfinx.fem.Function(V, name="displacement")
 v = ufl.TestFunction(V)
 
 
@@ -202,8 +201,9 @@ bp_psi = dolfinx.io.VTXWriter(mesh.comm, "psi.bp", [psi], engine="BP4")
 
 M = 10
 for it in range(M):
-    u_bc.x.array[V0_to_V] = (it+1)/M * disp
-    print((it+1)/M * disp)
+    u_bc.x.array[V0_to_V] = disp #(it+1)/M * disp
+    
+    #print((it+1)/M * disp)
     #alpha.value += 0.
     solver.solve(1e-4, 1)
     psi_k.x.array[:] = psi.x.array
