@@ -44,7 +44,8 @@ def solve_problem(N: int, M: int,
     _cell_type = dolfinx.mesh.to_type(cell_type)
 
     mesh = dolfinx.mesh.create_unit_square(
-        MPI.COMM_WORLD, N, M, cell_type=_cell_type)
+        MPI.COMM_WORLD, N, M, cell_type=_cell_type,
+        diagonal=dolfinx.mesh.DiagonalType.crossed)
 
     el_0 = basix.ufl.element(
        "P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
@@ -66,24 +67,24 @@ def solve_problem(N: int, M: int,
 
     w_prev = dolfinx.fem.Function(V_trial)
     c_prev, _, psi_prev = ufl.split(w_prev)
-    dt = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.1))
+    dt = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.01))
     m_ij = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(-1))
     m_ii = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(2))
     M = ufl.as_tensor([[m_ii if i == j else m_ij for i in range(num_species)] for j in range(num_species)])
-
-    u = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type((0.1, 0.1)))
+    M = ufl.Identity(num_species)
+    u = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type((0.0, 0.0)))
     i, j, k = ufl.indices(3)
     F_0 = (c[i] - c_prev[i])/dt * v[i] * dx 
     F_0 += ufl.dot(u, ufl.grad(c[i])) * v[i] * dx
     F_0 +=  M[i,j] * ufl.grad(mu[j])[k] * ufl.grad(v[i])[k] * dx
     
     h = ufl.Circumradius(mesh)
-    epsilon = ufl.sqrt(h) 
-    sigma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type([[1 for _ in range(num_species)] for _ in range(num_species)]))
+    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))#ufl.sqrt(h) 
+    sigma = ufl.Identity(num_species)
     ones = dolfinx.fem.Constant(
         mesh, dolfinx.default_scalar_type([1,]*num_species))
     F_1 = mu[i] * nu[i] * dx
-    F_1 += epsilon**2 * sigma[i,j] * ufl.grad(c[j])[k]*ufl.grad(nu[i])[k] * dx
+    F_1 -= epsilon**2 * sigma[i,j] * ufl.grad(c[j])[k]*ufl.grad(nu[i])[k] * dx
     F_1 -= ((0.5*ones[i] - c[i])) * nu[i] *dx
     F_1 -= 1/alpha * (psi[i] - psi_prev[i]) * nu[i] * dx
 
@@ -91,10 +92,14 @@ def solve_problem(N: int, M: int,
     F_2 = sum((c[m] - ufl.exp(psi[m]) / sum_psi) * w[m]
              for m in range(num_species))*dx
 
-    #Everything is mixed as initial guess
-    for i in range(num_species):
-        sol.sub(0).sub(i).interpolate(lambda x: np.full(
-            x.shape[1], 1/num_species, dtype=dolfinx.default_scalar_type))
+    # Random values between 0 and 1 that sum to 1
+    num_dofs = len(w_prev.sub(0).sub(0).collapse().x.array[:])
+    rands = np.random.rand(num_dofs, num_species)
+    norm_rand = np.linalg.norm(rands,axis=1)
+    c_0, c_to_V = V_trial.sub(0).collapse()
+    w_prev.x.array[c_to_V] = (rands / norm_rand.reshape(-1, 1)).reshape(-1)
+    sol.sub(0).interpolate(w_prev.sub(0))
+    
     bcs = []
     F = F_0 + F_1 + F_2
     problem = NonlinearProblem(F, sol, bcs=bcs)
@@ -102,13 +107,13 @@ def solve_problem(N: int, M: int,
     solver.convergence_criterion = "residual"
     solver.rtol = 1e-8
     solver.atol = 1e-8
-    solver.max_it = 20
-    solver.error_on_nonconvergence = True
+    solver.max_it = 1
+    solver.error_on_nonconvergence = False
 
     ksp = solver.krylov_solver
     opts = PETSc.Options()  # type: ignore
     option_prefix = ksp.getOptionsPrefix()
-    opts[f"{option_prefix}ksp_type"] = "cg"
+    opts[f"{option_prefix}ksp_type"] = "preonly"
     opts[f"{option_prefix}pc_type"] = "lu"
     opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
     ksp.setFromOptions()
@@ -119,7 +124,7 @@ def solve_problem(N: int, M: int,
     bp_c = dolfinx.io.VTXWriter(
         mesh.comm, result_dir / "c.bp", [c_out], engine="BP4")
 
-    c_out.interpolate(sol.sub(0).collapse())
+    c_out.interpolate(w_prev.sub(0).collapse())
     bp_c.write(0)
 
     prox_prev = dolfinx.fem.Function(V_trial)
@@ -141,8 +146,8 @@ def solve_problem(N: int, M: int,
                 alpha.value = alpha_0 + alpha_c * i
             elif alpha_scheme == AlphaScheme.doubling:
                 alpha.value = alpha_0 * 2**i
-            solver.rtol *= 0.5
-            solver.atol *= 0.5
+            # solver.rtol *= 0.5
+            # solver.atol *= 0.5
 
             num_newton_iterations, converged = solver.solve(sol)
             newton_iterations[i] = num_newton_iterations
@@ -155,14 +160,15 @@ def solve_problem(N: int, M: int,
                     f"|delta u |= {global_diff}")
             # Update solution
             prox_prev.x.array[:] = sol.x.array[:]
-            
+            print(sol.x.array)
             c_out.interpolate(sol.sub(0).collapse())
             bp_c.write(i)
             # bp_grad_u.write(i)
             if global_diff < stopping_tol:
                 break
-            break
+
         break
+        
     bp_c.close()
     return newton_iterations, L2_diff
 
