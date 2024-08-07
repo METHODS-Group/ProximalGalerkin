@@ -95,7 +95,6 @@ def solve_problem(N: int, M: int,
     for i in range(num_species):
         sol.sub(0).sub(i).interpolate(lambda x: np.full(
             x.shape[1], 1/num_species, dtype=dolfinx.default_scalar_type))
-
     bcs = []
     F = F_0 + F_1 + F_2
     problem = NonlinearProblem(F, sol, bcs=bcs)
@@ -116,59 +115,55 @@ def solve_problem(N: int, M: int,
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
-    # W = dolfinx.fem.functionspace(mesh, ("DG", (primal_degree-1), (mesh.geometry.dim, )))
-    # global_feasible_gradient = phi * psi / ufl.sqrt(1+ ufl.dot(psi, psi))
-    # feas_grad = dolfinx.fem.Expression(global_feasible_gradient, W.element.interpolation_points())
-    # pg_grad = dolfinx.fem.Function(W)
-    # pg_grad.name = "Global feasible gradient"
-    V_out = dolfinx.fem.functionspace(
-        mesh, ("Lagrange", primal_degree+3, (num_species, )))
-    u_out = dolfinx.fem.Function(V_out)
-    bp_u = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
+    c_out = dolfinx.fem.Function(V_trial.sub(0).collapse()[0])
+    bp_c = dolfinx.io.VTXWriter(
+        mesh.comm, result_dir / "c.bp", [c_out], engine="BP4")
 
-    u_out.interpolate(sol.sub(0).collapse())
-    bp_u.write(0)
-    # grad_u = dolfinx.fem.Function(W)
-    # grad_u.name = "grad(u)"
-    # grad_u_expr = dolfinx.fem.Expression(ufl.grad(u), W.element.interpolation_points())
-    # bp_grad_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "grad_u.bp", [grad_u, pg_grad], engine="BP4")
-    diff = sol.sub(0)-phi
+    c_out.interpolate(sol.sub(0).collapse())
+    bp_c.write(0)
+
+    prox_prev = dolfinx.fem.Function(V_trial)
+    diff = sol.sub(0)-prox_prev.sub(0)
 
     L2_squared = ufl.dot(diff, diff)*dx
     compiled_diff = dolfinx.fem.form(L2_squared)
-    newton_iterations = np.zeros(max_iterations, dtype=np.int32)
-    L2_diff = np.zeros(max_iterations, dtype=np.float64)
-    for i in range(1, max_iterations+1):
-        if alpha_scheme == AlphaScheme.constant:
-            pass
-        elif alpha_scheme == AlphaScheme.linear:
-            alpha.value = alpha_0 + alpha_c * i
-        elif alpha_scheme == AlphaScheme.doubling:
-            alpha.value = alpha_0 * 2**i
-        solver.rtol *= 0.5
-        solver.atol *= 0.5
+    
+    T = 1
+    num_steps = int(T/float(dt))
+    for j in range(num_steps):
+        for i in range(1, max_iterations+1):
+            newton_iterations = np.zeros(max_iterations, dtype=np.int32)
+            L2_diff = np.zeros(max_iterations, dtype=np.float64)
 
-        num_newton_iterations, converged = solver.solve(sol)
-        newton_iterations[i] = num_newton_iterations
-        local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
-        global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
-        L2_diff[i-1] = global_diff
-        if mesh.comm.rank == 0:
-            print(
-                f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}",
-                f"|delta u |= {global_diff}")
-        # Update solution
-        phi.x.array[:] = sol.x.array[U_to_W]
+            if alpha_scheme == AlphaScheme.constant:
+                pass
+            elif alpha_scheme == AlphaScheme.linear:
+                alpha.value = alpha_0 + alpha_c * i
+            elif alpha_scheme == AlphaScheme.doubling:
+                alpha.value = alpha_0 * 2**i
+            solver.rtol *= 0.5
+            solver.atol *= 0.5
 
-        u_out.interpolate(sol.sub(0).collapse())
-        bp_u.write(i)
-        # bp_grad_u.write(i)
-        if global_diff < stopping_tol:
+            num_newton_iterations, converged = solver.solve(sol)
+            newton_iterations[i] = num_newton_iterations
+            local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
+            global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
+            L2_diff[i-1] = global_diff
+            if mesh.comm.rank == 0:
+                print(
+                    f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}",
+                    f"|delta u |= {global_diff}")
+            # Update solution
+            prox_prev.x.array[:] = sol.x.array[:]
+            
+            c_out.interpolate(sol.sub(0).collapse())
+            bp_c.write(i)
+            # bp_grad_u.write(i)
+            if global_diff < stopping_tol:
+                break
             break
-
-    bp_u.close()
-    # bp_grad_u.close()
+        break
+    bp_c.close()
     return newton_iterations, L2_diff
 
 
