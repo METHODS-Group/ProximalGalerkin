@@ -73,7 +73,7 @@ def solve_problem(N: int, M: int,
     m_ij = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(-1))
     m_ii = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(num_species-1))
     M = ufl.as_tensor([[m_ii if i == j else m_ij for i in range(num_species)] for j in range(num_species)])
-    M = ufl.Identity(num_species)
+    #M = ufl.Identity(num_species)
     u = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type((0.0, 0.0)))
     i, j, k = ufl.indices(3)
     F_0 = (c[i] - c_prev[i])/dt * v[i] * dx 
@@ -94,13 +94,21 @@ def solve_problem(N: int, M: int,
     F_2 = sum((c[m] - ufl.exp(psi[m]) / sum_psi) * w[m]
              for m in range(num_species))*dx
 
+    # Patrick's master-plan
+    # 1. Create manufactured solution with ufl
+    # 2. Set source on RHS
+    # 3. Set strong Dirichlet on mu and c.
+    # 4. Solve with manufactured solution as initial guess
+    # 5. Relax assumptions
+    # At manufactured level we find a mu and remove it from the LHS of the system.
+
     # Random values between 0 and 1 that sum to 1
     num_dofs = len(w_prev.sub(0).sub(0).collapse().x.array[:])
     rands = np.random.rand(num_dofs, num_species)
     norm_rand = np.linalg.norm(rands,axis=1)
     _, c_to_V = V_trial.sub(0).collapse()
     w_prev.x.array[c_to_V] = (rands / norm_rand.reshape(-1, 1)).reshape(-1)
-    # sol.sub(0).interpolate(w_prev.sub(0))
+    sol.sub(0).interpolate(w_prev.sub(0))
     
     bcs = []
     F = F_0 + F_1 + F_2
@@ -118,6 +126,8 @@ def solve_problem(N: int, M: int,
     opts[f"{option_prefix}ksp_type"] = "preonly"
     opts[f"{option_prefix}pc_type"] = "lu"
     opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
+    opts[f"{option_prefix}mat_mumps_icntl_14"] = 500  # Increase MUMPS working memory
+    opts[f"{option_prefix}ksp_view"] = None
     ksp.setFromOptions()
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
@@ -158,6 +168,8 @@ def solve_problem(N: int, M: int,
                 print(
                     f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}",
                     f"|delta u |= {global_diff}")
+            ksp.view()
+            print(ksp.getConvergedReason())
             # Update solution
             prox_prev.x.array[:] = sol.x.array[:]
             print(sol.x.array)
