@@ -8,10 +8,48 @@ import ufl
 import numpy as np
 from petsc4py import PETSc
 import basix.ufl
+import argparse
+from enum import Enum
+
+class CustomParser(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+    ...
+
+parser = argparse.ArgumentParser(description="Signorini contact problem solver", formatter_class=CustomParser)
+physical_parameters = parser.add_argument_group("Physical parameters")
+physical_parameters.add_argument("--E", dest="E", type=float, default=2.0e4, help="Young's modulus")
+physical_parameters.add_argument("--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio")
+fem_parameters = parser.add_argument_group("FEM parameters")
+fem_parameters.add_argument("--degree", dest="degree", type=int, default=1, help="Degree of primal and latent space")
+
+newton_parameters = parser.add_argument_group("Newton solver parameters")
+newton_parameters.add_argument("--n-max-iterations", dest="newton_max_iterations", type=int, default=25, help="Maximum number of iterations of Newton iteration")
+newton_parameters.add_argument("--n-tol", dest="newton_tol", type=float, default=1e-6, help="Tolerance for Newton iteration")
+
+llvp_parameters = parser.add_argument_group("Latent Variable Proximal Point parameters")
+llvp_parameters.add_argument("--max-iterations", dest="max_iterations", type=int, default=10, help="Maximum number of iterations of the Latent Variable Proximal Point algorithm")
+alpha_options = llvp_parameters.add_argument_group("Options for alpha-variable in Proximal Galerkin scheme")
+alpha_options.add_argument("--alpha_scheme", type=str, default="linear", choices=["constant", "linear", "doubling"], help="Scheme for updating alpha")
+alpha_options.add_argument("--alpha_0", type=float, default=1.0, help="Initial value of alpha")
+alpha_options.add_argument("--alpha_c", type=float, default=1.0, help="Increment of alpha in linear scheme")
 
 
 dst = dolfinx.default_scalar_type
 
+class AlphaScheme(Enum):
+    constant = 1 # Constant alpha (alpha_0)
+    linear = 2 # Linearly increasing alpha (alpha_0 + alpha_c * i) where i is the iteration number
+    doubling = 3 # Doubling alpha (alpha_0 * 2^i) where i is the iteration number
+
+    @classmethod
+    def from_string(cls, method:str):
+        if method == "constant":
+            return AlphaScheme.constant
+        elif method == "linear":
+            return AlphaScheme.linear
+        elif method == "doubling":
+            return AlphaScheme.doubling
+        else:
+            raise ValueError(f"Unknown alpha scheme {method}")
 
 class NewtonSolver:
     max_iterations: int
@@ -159,11 +197,18 @@ def sigma(w, mu, lmbda):
 
 
 
-def solve_contact_problem(degree:int, E:float, nu:float):
+def solve_contact_problem(degree:int, E:float, nu:float, newton_max_its:int, newton_tol:float,            alpha_scheme: AlphaScheme,
+                  alpha_0: float,
+                  alpha_c: float):
     """
     Solve a contact problem with Signorini contact conditions using the Latent Variable Proximal Point algorithm
 
     :param degree: Degree of primal and latent space
+    :param E: Young's modulus
+    :param nu: Poisson's ratio
+    :param newton_max_its: Maximum number of iterations in a Newton iteration
+    :param newton_tol: Tolerance for Newton iteration
+
 
     """
     mesh = dolfinx.mesh.create_unit_cube(
@@ -226,7 +271,7 @@ def solve_contact_problem(degree:int, E:float, nu:float):
     )
     n = ufl.FacetNormal(mesh)
     n_g = dolfinx.fem.Constant(mesh, dst((0.0, 0.0, -1.0)))
-    alpha = dolfinx.fem.Constant(mesh, dst(1.0))
+    alpha = dolfinx.fem.Constant(mesh, dst(alpha_0))
     f = dolfinx.fem.Constant(mesh, dst((0.0, 0.0, 0.0)))
     x = ufl.SpatialCoordinate(mesh)
     g = x[2] + dolfinx.fem.Constant(mesh, dst(0.05))
@@ -278,7 +323,7 @@ def solve_contact_problem(degree:int, E:float, nu:float):
         J,
         [u, psi],
         bcs=bcs,
-        max_iterations=25,
+        max_iterations=newton_max_its,
         petsc_options={
             "ksp_type": "preonly",
             "pc_type": "lu",
@@ -294,9 +339,14 @@ def solve_contact_problem(degree:int, E:float, nu:float):
     for it in range(M):
         u_bc.x.array[V0_to_V] = disp  # (it+1)/M * disp
 
-        # print((it+1)/M * disp)
-        alpha.value += 1
-        converged = solver.solve(1e-6, 1)
+        if alpha_scheme == AlphaScheme.constant:
+            pass
+        elif alpha_scheme == AlphaScheme.linear:
+            alpha.value = alpha_0 + alpha_c * it
+        elif alpha_scheme == AlphaScheme.doubling:
+            alpha.value = alpha_0 * 2**it
+
+        converged = solver.solve(newton_tol, 1)
         psi_k.x.array[:] = psi.x.array
         bp.write(it)
         bp_psi.write(it)
@@ -307,4 +357,8 @@ def solve_contact_problem(degree:int, E:float, nu:float):
 
 
 if __name__ == "__main__":
-    solve_contact_problem(2, E=2.0e4, nu=0.3)
+    args = parser.parse_args()
+    solve_contact_problem(args.degree, E=args.E, nu=args.nu, newton_max_its=args.newton_max_iterations, newton_tol=args.newton_tol,
+                              alpha_scheme=AlphaScheme.from_string(args.alpha_scheme),
+                    alpha_0=args.alpha_0,
+                    alpha_c=args.alpha_c,)
