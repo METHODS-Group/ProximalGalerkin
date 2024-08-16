@@ -67,9 +67,11 @@ def solve_problem(N: int, M: int,
 
     w_prev = dolfinx.fem.Function(V_trial)
     c_prev, _, psi_prev = ufl.split(w_prev)
-    dt = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.01))
+    dt = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.00001))
+    # Onsager assumption
+    # sum_j m_[i,j] = sum_j m_[j,i] = 0 for all i
     m_ij = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(-1))
-    m_ii = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(2))
+    m_ii = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(num_species-1))
     M = ufl.as_tensor([[m_ii if i == j else m_ij for i in range(num_species)] for j in range(num_species)])
     M = ufl.Identity(num_species)
     u = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type((0.0, 0.0)))
@@ -79,7 +81,7 @@ def solve_problem(N: int, M: int,
     F_0 +=  M[i,j] * ufl.grad(mu[j])[k] * ufl.grad(v[i])[k] * dx
     
     h = ufl.Circumradius(mesh)
-    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))#ufl.sqrt(h) 
+    epsilon = ufl.sqrt(h) 
     sigma = ufl.Identity(num_species)
     ones = dolfinx.fem.Constant(
         mesh, dolfinx.default_scalar_type([1,]*num_species))
@@ -96,9 +98,9 @@ def solve_problem(N: int, M: int,
     num_dofs = len(w_prev.sub(0).sub(0).collapse().x.array[:])
     rands = np.random.rand(num_dofs, num_species)
     norm_rand = np.linalg.norm(rands,axis=1)
-    c_0, c_to_V = V_trial.sub(0).collapse()
+    _, c_to_V = V_trial.sub(0).collapse()
     w_prev.x.array[c_to_V] = (rands / norm_rand.reshape(-1, 1)).reshape(-1)
-    sol.sub(0).interpolate(w_prev.sub(0))
+    # sol.sub(0).interpolate(w_prev.sub(0))
     
     bcs = []
     F = F_0 + F_1 + F_2
@@ -146,11 +148,9 @@ def solve_problem(N: int, M: int,
                 alpha.value = alpha_0 + alpha_c * i
             elif alpha_scheme == AlphaScheme.doubling:
                 alpha.value = alpha_0 * 2**i
-            # solver.rtol *= 0.5
-            # solver.atol *= 0.5
 
             num_newton_iterations, converged = solver.solve(sol)
-            newton_iterations[i] = num_newton_iterations
+            newton_iterations[i-1] = num_newton_iterations
             local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
             global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
             L2_diff[i-1] = global_diff
@@ -166,9 +166,9 @@ def solve_problem(N: int, M: int,
             # bp_grad_u.write(i)
             if global_diff < stopping_tol:
                 break
-
+        w_prev.x.array[:] = sol.x.array[:]
         break
-        
+
     bp_c.close()
     return newton_iterations, L2_diff
 
@@ -190,14 +190,14 @@ def main(argv: Optional[list[str]] = None):
                               choices=["triangle", "quadrilateral"], help="Cell type")
     element_options = parser.add_argument_group(
         "Finite element discretization options")
-    element_options.add_argument("--primal_degree", type=int, default=2, choices=[
-                                 2, 3, 4, 5, 6, 7, 8], help="Polynomial degree for primal variable")
+    element_options.add_argument("--primal_degree", type=int, default=1, choices=[
+                                 1, 2, 3, 4, 5, 6, 7, 8], help="Polynomial degree for primal variable")
     alpha_options = parser.add_argument_group(
         "Options for alpha-variable in Proximal Galerkin scheme")
-    alpha_options.add_argument("--alpha_scheme", type=str, default="linear", choices=[
+    alpha_options.add_argument("--alpha_scheme", type=str, default="constant", choices=[
                                "constant", "linear", "doubling"], help="Scheme for updating alpha")
     alpha_options.add_argument(
-        "--alpha_0", type=float, default=1.0, help="Initial value of alpha")
+        "--alpha_0", type=float, default=100.0, help="Initial value of alpha")
     alpha_options.add_argument(
         "--alpha_c", type=float, default=1.0, help="Increment of alpha in linear scheme")
     pg_options = parser.add_argument_group("Proximal Galerkin options")
