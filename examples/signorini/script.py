@@ -75,7 +75,7 @@ newton_parameters.add_argument(
     "--n-tol",
     dest="newton_tol",
     type=float,
-    default=1e-6,
+    default=1e-4,
     help="Tolerance for Newton iteration",
 )
 
@@ -89,6 +89,9 @@ llvp.add_argument(
     type=int,
     default=10,
     help="Maximum number of iterations of the Latent Variable Proximal Point algorithm",
+)
+llvp.add_argument(
+    "--tol", type=float, default=1e-6, help="Tolerance for the Latent Variable Proximal Point algorithm"
 )
 alpha_options = parser.add_argument_group(
     title="Options for alpha-variable in Proximal Galerkin scheme"
@@ -113,8 +116,9 @@ built_in_parser.add_argument("--nx", type=int, default=16, help="Number of eleme
 built_in_parser.add_argument("--ny", type=int, default=7, help="Number of elements in y-direction")
 built_in_parser.add_argument("--nz", type=int, default=5, help="Number of elements in z-direction")
 load_mesh = mesh.add_parser("file", help="Load mesh from file", formatter_class=CustomParser)
-load_mesh.add_argument("filename", type=Path, help="Filename of mesh to load")
-
+load_mesh.add_argument("--filename", type=Path, help="Filename of mesh to load")
+load_mesh.add_argument("--contact-tag", dest="ct", type=int, default=2, help="Tag of contact surface")
+load_mesh.add_argument("--displacement-tag", dest="dt", type=int, default=1, help="Tag of displacement surface")
 dst = dolfinx.default_scalar_type
 
 
@@ -302,6 +306,7 @@ def solve_contact_problem(
     alpha_scheme: AlphaScheme,
     alpha_0: float,
     alpha_c: float,
+    tol: float,
     quadrature_degree: int = 4,
 ):
     """
@@ -321,6 +326,7 @@ def solve_contact_problem(
     :param alpha_scheme: Scheme for updating alpha
     :param alpha_0: Initial value of alpha
     :param alpha_c: Increment of alpha in linear scheme
+    :param tol: Tolerance for the Latent Variable Proximal Point algorithm
     :param quadrature_degree: Quadrature degree for integration
     """
 
@@ -337,11 +343,11 @@ def solve_contact_problem(
     lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
 
     # NOTE: If we get facet-bubble spaces in DOLFINx we could use an alternative pair here
+    gdim = mesh.geometry.dim
     element_u = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), degree, shape=(mesh.geometry.dim,)
+        "Lagrange", mesh.topology.cell_name(), degree, shape=(gdim, )
     )
     V = dolfinx.fem.functionspace(mesh, element_u)
-
     u = dolfinx.fem.Function(V, name="displacement")
     v = ufl.TestFunction(V)
 
@@ -365,7 +371,6 @@ def solve_contact_problem(
         metadata=metadata
     )
     n = ufl.FacetNormal(mesh)
-    gdim = mesh.geometry.dim
     n_g = dolfinx.fem.Constant(mesh, np.zeros(gdim, dtype=dst))
     n_g.value[-1] = -1
 
@@ -408,16 +413,14 @@ def solve_contact_problem(
         values[gdim-1, :] = disp
         return values
     u_bc.interpolate(disp_func)
-    V0, V0_to_V = V.sub(gdim-1).collapse()
+    _, V0_to_V = V.sub(gdim-1).collapse()  # Used for partial loading in y/z direction
     disp_facets = [facet_tag.find(d) for d in boundary_conditions["displacement"]]
     bc_facets = np.unique(np.concatenate(disp_facets))
-    print(len(bc_facets), MPI.COMM_WORLD.allreduce(len(bc_facets), op=MPI.SUM))
     bc = dolfinx.fem.dirichletbc(
         u_bc, dolfinx.fem.locate_dofs_topological(V, fdim, bc_facets)
     )
     bcs = [bc]
 
-    A =  dolfinx.fem.petsc.create_matrix_block(J)
     solver = NewtonSolver(
         F,
         J,
@@ -435,6 +438,8 @@ def solve_contact_problem(
     bp = dolfinx.io.VTXWriter(mesh.comm, "uh.bp", [u])
     bp_psi = dolfinx.io.VTXWriter(mesh.comm, "psi.bp", [psi])
     print(max_iterations)
+    u_prev = dolfinx.fem.Function(V)
+    diff = dolfinx.fem.Function(V)
     for it in range(max_iterations):
         print(f"{it=}")
         u_bc.x.array[V0_to_V] = disp  # (it+1)/M * disp
@@ -448,9 +453,17 @@ def solve_contact_problem(
 
         converged = solver.solve(newton_tol, 1)
 
+        diff.x.array[:] = u.x.array - u_prev.x.array
+        diff.x.petsc_vec.normBegin(2)
+        normed_diff = diff.x.petsc_vec.normEnd(2)
+        print(f"{it=}, {normed_diff=}")
+        if normed_diff <= tol:
+            break
+        u_prev.x.array[:] = u.x.array
         psi_k.x.array[:] = psi.x.array
         bp.write(it)
         bp_psi.write(it)
+
         if not converged:
             print(f"Solver did not convert at {it=}, exiting")
             break
@@ -498,7 +511,12 @@ if __name__ == "__main__":
             xdmf.write_meshtags(mt, mesh.geometry)
         bcs = {"contact": (2,), "displacement": (1,)}
     else:
-        raise NotImplementedError("Only built-in meshes are supported")
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, args.filename, "r") as xdmf:
+            mesh = xdmf.read_mesh()
+            mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
+            mt = xdmf.read_meshtags(mesh, name="Facet tags")
+            bcs = {"contact": (args.ct,), "displacement": (args.dt,)}
+
 
     solve_contact_problem(
         mesh = mesh,
@@ -515,5 +533,6 @@ if __name__ == "__main__":
         alpha_scheme=AlphaScheme.from_string(args.alpha_scheme),
         alpha_0=args.alpha_0,
         alpha_c=args.alpha_c,
+        tol=args.tol,
         quadrature_degree=args.quadrature_degree
     )
