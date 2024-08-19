@@ -75,7 +75,7 @@ newton_parameters.add_argument(
     "--n-tol",
     dest="newton_tol",
     type=float,
-    default=1e-4,
+    default=1e-6,
     help="Tolerance for Newton iteration",
 )
 
@@ -99,7 +99,7 @@ alpha_options = parser.add_argument_group(
 alpha_options.add_argument(
     "--alpha_scheme",
     type=str,
-    default="linear",
+    default="constant",
     choices=["constant", "linear", "doubling"],
     help="Scheme for updating alpha",
 )
@@ -227,7 +227,9 @@ class NewtonSolver:
             if self.error_on_nonconvergence:
                 assert (
                     self._solver.getConvergedReason() > 0
-                ), "Linear solver did not converge"
+                ), "Linear solver did not converge, received reason {}".format(
+                    self._solver.getConvergedReason()
+                )
             else:
                 converged = self._solver.getConvergedReason()
                 import warnings
@@ -431,6 +433,7 @@ def solve_contact_problem(
             "ksp_type": "preonly",
             "pc_type": "lu",
             "pc_factor_mat_solver_type": "mumps",
+            "ksp_error_if_not_converged": True
         },
         error_on_nonconvergence=True,
     )
