@@ -44,6 +44,7 @@ desc = (
 )
 parser = argparse.ArgumentParser(description=desc, formatter_class=CustomParser, add_help=False)
 parser.add_argument("--help", "-h", action=_HelpAction, help="show this help message and exit")
+parser.add_argument("--output", "-o", type=Path, default=Path("output"), help="Output directory")
 physical_parameters = parser.add_argument_group("Physical parameters")
 physical_parameters.add_argument(
     "--E", dest="E", type=float, default=2.0e4, help="Young's modulus"
@@ -309,6 +310,7 @@ def solve_contact_problem(
     alpha_0: float,
     alpha_c: float,
     tol: float,
+    output:Path,
     quadrature_degree: int = 4,
 ):
     """
@@ -386,6 +388,8 @@ def solve_contact_problem(
         domain=mesh
     ) - alpha * ufl.inner(f, v) * ufl.dx(domain=mesh)
     F01 = -ufl.inner(psi - psi_k, ufl.dot(v, n)) * ds
+    # FIXME: Use alternative formulation (use residual form) delta psi du
+    # Scale update by a parameter (damped Newton) start with 1/2
     F10 = ufl.inner(ufl.dot(u, n_g), w) * ds
     F11 = ufl.inner(ufl.exp(psi), w) * ds - ufl.inner(g, w) * ds
 
@@ -438,13 +442,20 @@ def solve_contact_problem(
         error_on_nonconvergence=True,
     )
 
-    bp = dolfinx.io.VTXWriter(mesh.comm, "uh.bp", [u])
-    bp_psi = dolfinx.io.VTXWriter(mesh.comm, "psi.bp", [psi])
-    print(max_iterations)
+    bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u])
+    bp_psi = dolfinx.io.VTXWriter(mesh.comm, output / "psi.bp", [psi])
+    V_von_mises = dolfinx.fem.functionspace(mesh, ("DG", degree))
+    stresses = dolfinx.fem.Function(V_von_mises, name="VonMises")
+    bp_vonmises = dolfinx.io.VTXWriter(mesh.comm, output / "von_mises.bp", [stresses])
+    s = sigma(u, mu, lmbda) - 1. / 3 * ufl.tr(sigma(u, mu, lmbda)) * ufl.Identity(len(u))
+    von_Mises = ufl.sqrt(3. / 2 * ufl.inner(s, s))
+    stress_expr = dolfinx.fem.Expression(von_Mises, V_von_mises.element.interpolation_points())
+
     u_prev = dolfinx.fem.Function(V)
     diff = dolfinx.fem.Function(V)
+    normed_diff = -1.
     for it in range(max_iterations):
-        print(f"{it=}")
+        print(f"{it=} {normed_diff:.2e}")
         u_bc.x.array[V0_to_V] = disp  # (it+1)/M * disp
 
         if alpha_scheme == AlphaScheme.constant:
@@ -459,21 +470,25 @@ def solve_contact_problem(
         diff.x.array[:] = u.x.array - u_prev.x.array
         diff.x.petsc_vec.normBegin(2)
         normed_diff = diff.x.petsc_vec.normEnd(2)
-        print(f"{it=}, {normed_diff=}")
         if normed_diff <= tol:
             break
         u_prev.x.array[:] = u.x.array
         psi_k.x.array[:] = psi.x.array
+
+        stresses.interpolate(stress_expr)
+        bp_vonmises.write(it)
+
         bp.write(it)
         bp_psi.write(it)
 
         if not converged:
             print(f"Solver did not convert at {it=}, exiting")
             break
-
+    bp_psi.close()
     bp.close()
+    bp_vonmises.close()
 
-
+# python3 script.py --alpha_0=0.1 --degree=2 file --filename=sphere.xdmf
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.mesh == "native":
@@ -509,9 +524,6 @@ if __name__ == "__main__":
             np.arange(num_facets_local, dtype=np.int32),
             values
         )
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "facet_tags.xdmf", "w") as xdmf:
-            xdmf.write_mesh(mesh)
-            xdmf.write_meshtags(mt, mesh.geometry)
         bcs = {"contact": (2,), "displacement": (1,)}
     else:
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, args.filename, "r") as xdmf:
@@ -537,5 +549,6 @@ if __name__ == "__main__":
         alpha_0=args.alpha_0,
         alpha_c=args.alpha_c,
         tol=args.tol,
+        output=args.output,
         quadrature_degree=args.quadrature_degree
     )

@@ -7,7 +7,7 @@ from pathlib import Path
 def create_half_sphere(
     filename: str|Path = "sphere.xdmf",
     model_name: str|None=None,
-    order: int = 1,
+    order: int = 2,
     center: tuple[float,float,float]=(0.,0.,0.5),
     res:float=0.04,
     r:float=0.4,
