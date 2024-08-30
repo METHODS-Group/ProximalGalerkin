@@ -186,7 +186,7 @@ def solve_problem(
     sol_k.x.array[:] = sol.x.array[:]
     alpha_k = 1
     step_size_rule = "constant"
-    C = 0.1
+    C = 0.05
     r = 2
     q = 0.5
 
@@ -194,10 +194,6 @@ def solve_problem(
     complementarities = []
     feasibilities = []
     dual_feasibilities = []
-    H1primal_errors = []
-    L2primal_errors = []
-    L2latent_errors = []
-    L2multiplier_errors = []
     Newton_steps = []
     step_sizes = []
     primal_increments = []
