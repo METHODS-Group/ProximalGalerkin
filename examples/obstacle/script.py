@@ -5,6 +5,7 @@ SPDX-License-Identifier: MIT
 The SNES solver is based on https://github.com/Wells-Group/asimov-contact and is distributed under the MIT License
 """
 
+import numpy as np
 from mpi4py import MPI
 from petsc4py import PETSc
 import dolfinx.fem.petsc
@@ -100,11 +101,12 @@ def solve_problem(
     petsc_options = {} if petsc_options is None else petsc_options
 
     mesh = dolfinx.mesh.create_rectangle(
-        MPI.COMM_WORLD,  [[-1,-1],[1,1]], [N, N],dolfinx.cpp.mesh.CellType.triangle
+        MPI.COMM_WORLD,  [[0,0],[1,1]], [N, N],dolfinx.cpp.mesh.CellType.triangle
     )
     x = ufl.SpatialCoordinate(mesh)
-    u_ex = ufl.conditional(ufl.le(x[0], 0), ufl.zero(), x[0] ** 4)
-    f = ufl.conditional(ufl.le(x[0], 0), ufl.zero(), -12 * x[0] ** 2)
+    #
+    v_hat = ufl.sin(3*ufl.pi*x[0])*ufl.sin(3*ufl.pi*x[1])
+    f = ufl.div(ufl.grad(v_hat))
 
     V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
     uh = dolfinx.fem.Function(V)
@@ -114,9 +116,10 @@ def solve_problem(
     F_compiled = dolfinx.fem.form(F)
     J_compiled = dolfinx.fem.form(J)
 
-    bc_expr = dolfinx.fem.Expression(u_ex, V.element.interpolation_points())
+    #bc_expr = dolfinx.fem.Expression(u_ex, V.element.interpolation_points())
     u_bc = dolfinx.fem.Function(V)
-    u_bc.interpolate(bc_expr)
+    u_bc.x.array[:] = 0.0   
+    #u_bc.interpolate(bc_expr)
     mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
     boundary_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
     boundary_dofs = dolfinx.fem.locate_dofs_topological(
@@ -124,9 +127,13 @@ def solve_problem(
     )
     bcs = [dolfinx.fem.dirichletbc(u_bc, boundary_dofs)]
 
+    def phi_set(x):
+        return -1./4 + 1./10*np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
+
     # Lower bound for the obstacle
     phi = dolfinx.fem.Function(V)
-    phi.x.array[:] = 0.0
+    #phi.x.array[:] = 0.0
+    phi.interpolate(phi_set)
 
     u_max = dolfinx.fem.Function(V)
     u_max.x.array[:] = PETSc.INFINITY
@@ -157,7 +164,7 @@ def solve_problem(
     # Set solve functions and variable bounds
     snes.setFunction(problem.F, b_vec)
     snes.setJacobian(problem.J, A)
-    snes.setVariableBounds(phi.x.petsc_vec, u_max.x.petsc_vec)
+    snes.setVariableBounds(phi.x.petsc_vec, u_max.x.petsc_vec )
 
     # Set ksp options
     ksp = snes.ksp
@@ -172,10 +179,13 @@ def solve_problem(
 
     snes.solve(None, uh.x.petsc_vec)
 
-    with dolfinx.io.XDMFFile(mesh.comm, "u.xdmf", "w") as xdmf:
+    with dolfinx.io.XDMFFile(mesh.comm, "u_snes.xdmf", "w") as xdmf:
         xdmf.write_mesh(mesh)
         xdmf.write_function(uh)
 
+    with dolfinx.io.XDMFFile(mesh.comm, "phi.xdmf", "w") as xdmf:
+        xdmf.write_mesh(mesh)
+        xdmf.write_function(phi)
 
 if __name__ == "__main__":
     args = parser.parse_args()  

@@ -1,5 +1,10 @@
 """
-    FEniCSx code to reproduce obstacle problem results in [1].
+
+    Obstacle problem based of example 3 (P3) in: https://doi.org/10.1137/040611598
+
+    FEniCSx code solve this problem is based of the paper [1]:
+
+    SPXD License: MIT License
 
     [1] Keith, B. and Surowiec, T. (2023) Proximal Galerkin: A structure-
        preserving finite element method for pointwise bound constraints.
@@ -45,7 +50,6 @@ def allreduce_scalar(form: fem.Form, op: MPI.Op = MPI.SUM) -> np.floating:
 
 
 def solve_problem(
-    example: int,
     m: int,
     polynomial_order: int,
     maximum_number_of_outer_loop_iterations: int,
@@ -70,28 +74,12 @@ def solve_problem(
 
     """
 
-    # Set problem specific parameters
-    if example == 1:
-        C = 1.0
-        r = 1.5
-        q = 1.5
-        step_size_rule = "double_exponential"
-    elif example == 2:
-        C = 1.0
-        r = 2
-        step_size_rule = "geometric"
-    elif example == 3:
-        C = 1.0
-        r = 1.2
-        step_size_rule = "geometric"
-    else:
-        raise RuntimeError(f"Unknown example number {example}")
-
+    
     # Create mesh
     num_cells_per_direction = 2**m
     msh = mesh.create_rectangle(
         comm=MPI.COMM_WORLD,
-        points=((-1.0, -1.0), (1.0, 1.0)),
+        points=((0.0, 0.0), (1.0, 1.0)),
         n=(num_cells_per_direction, num_cells_per_direction),
         cell_type=CellType.triangle,
         ghost_mode=GhostMode.shared_facet,
@@ -109,35 +97,9 @@ def solve_problem(
     alpha = fem.Constant(msh, ScalarType(1))
     x = ufl.SpatialCoordinate(msh)
 
-    if example == 1:
-        f = conditional(gt(x[0], 0.0), -12 * x[0] ** 2, fem.Constant(msh, 0.0))
-        u_exact = conditional(gt(x[0], 0.0), x[0] ** 4, fem.Constant(msh, 0.0))
-        lambda_exact = fem.Constant(msh, 0.0)
-
-    elif example == 2:
-        f = 2.0 * pi * pi * sin(pi * x[0]) * sin(pi * x[1])
-        u_exact = fem.Constant(msh, 0.0)  # placeholder
-        lambda_exact = fem.Constant(msh, 0.0)  # placeholder
-
-    elif example == 3:
-        z_1 = dot(x, x)
-        z_2 = (x[0] ** 2 + x[1] ** 2 - 0.25) ** 2
-        z_3 = 7 * x[0] ** 2 + x[1] ** 2 - 0.25
-        z_4 = x[0] ** 2 + 7 * x[1] ** 2 - 0.25
-        lambda_exact = conditional(
-            lt(0.75, z_1), fem.Constant(msh, 1.0), fem.Constant(msh, 0.0)
-        )
-        f = (
-            256
-            * conditional(
-                lt(z_1, 0.25), -8 * z_2 * z_3 - 8 *
-                z_2 * z_4, fem.Constant(msh, 0.0)
-            )
-            - lambda_exact
-        )
-        u_exact = 256 * conditional(
-            lt(z_1, 0.25), (0.25 - z_1) ** 4, fem.Constant(msh, 0.0)
-        )
+    #
+    v_hat = ufl.sin(3*ufl.pi*x[0])*ufl.sin(3*ufl.pi*x[1])
+    f = ufl.div(ufl.grad(v_hat))
 
     # Define BCs
     msh.topology.create_connectivity(msh.topology.dim - 1, msh.topology.dim)
@@ -147,8 +109,7 @@ def solve_problem(
         (V.sub(0), V0), entity_dim=1, entities=facets)
 
     u_bc = fem.Function(V0)
-    u_bc.interpolate(fem.Expression(
-        u_exact, V.sub(0).element.interpolation_points()))
+    u_bc.x.array[:] = 0.0
     bcs = fem.dirichletbc(value=u_bc, dofs=dofs, V=V.sub(0))
 
     # Define solution variables
@@ -158,6 +119,15 @@ def solve_problem(
     u, psi = ufl.split(sol)
     u_k, psi_k = ufl.split(sol_k)
 
+    def phi_set(x):
+        return -1./4 + 1./10*np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
+
+    # Lower bound for the obstacle
+    V0, _ = V.sub(0).collapse()
+    phi = fem.Function(V0)
+    phi.interpolate(phi_set)
+
+
     # Define non-linear residual
     (v, w) = ufl.TestFunctions(V)
     F = (
@@ -165,6 +135,7 @@ def solve_problem(
         + psi * v * dx
         + u * w * dx
         - exp(psi) * w * dx
+        - phi * w * dx
         - alpha * f * v * dx
         - psi_k * v * dx
     )
@@ -206,22 +177,18 @@ def solve_problem(
         inner(grad(u - u_k), grad(u - u_k)) * dx + (u - u_k) ** 2 * dx
     )
     L2increment_form = fem.form((exp(psi) - exp(psi_k)) ** 2 * dx)
-    H1primal_error_form = fem.form(
-        inner(grad(u - u_exact), grad(u - u_exact)) *
-        dx + (u - u_exact) ** 2 * dx
-    )
-    L2primal_error_form = fem.form((u - u_exact) ** 2 * dx)
-    L2latent_error_form = fem.form((exp(psi) - u_exact) ** 2 * dx)
-    L2multiplier_error_form = fem.form(
-        (lambda_exact - ((psi_k - psi) / alpha)) ** 2 * dx
-    )
+
 
     # Proximal point outer loop
     n = 0
     increment_k = 0.0
     sol.x.array[:] = 0.0
     sol_k.x.array[:] = sol.x.array[:]
-    alpha_k = C
+    alpha_k = 1
+    step_size_rule = "constant"
+    C = 0.1
+    r = 2
+    q = 0.5
 
     energies = []
     complementarities = []
@@ -264,15 +231,9 @@ def solve_problem(
         dual_feasibility = allreduce_scalar(dual_feasibility_form)
         increment = np.sqrt(allreduce_scalar(H1increment_form))
         latent_increment = np.sqrt(allreduce_scalar(L2increment_form))
-        H1primal_error = np.sqrt(allreduce_scalar(H1primal_error_form))
-        L2primal_error = np.sqrt(allreduce_scalar(L2primal_error_form))
-        L2latent_error = np.sqrt(allreduce_scalar(L2latent_error_form))
-        L2multiplier_error = np.sqrt(allreduce_scalar(L2multiplier_error_form))
+
 
         tol_Newton = increment
-
-        rank_print(f"‖u - uₕ‖_H¹: {H1primal_error}" +
-                   f"  ‖u - ũₕ‖_L² : {L2latent_error}", msh.comm)
 
         if increment_k > 0.0:
             rank_print(f"Increment size: {increment}" +
@@ -285,14 +246,11 @@ def solve_problem(
         complementarities.append(complementarity)
         feasibilities.append(feasibility)
         dual_feasibilities.append(dual_feasibility)
-        H1primal_errors.append(H1primal_error)
-        L2primal_errors.append(L2primal_error)
-        L2latent_errors.append(L2latent_error)
-        L2multiplier_errors.append(L2multiplier_error)
         Newton_steps.append(n)
         step_sizes.append(np.copy(alpha.value))
         primal_increments.append(increment)
         latent_increments.append(latent_increment)
+
         if tol_Newton < tol_exit:
             break
 
@@ -304,32 +262,32 @@ def solve_problem(
         sol_k.x.array[:] = sol.x.array[:]
         increment_k = increment
 
-    # Save data
+    # # Save data
     cwd = Path.cwd()
     output_dir = cwd / "output"
     output_dir.mkdir(exist_ok=True)
 
-    df = pd.DataFrame()
-    df["Energy"] = energies
-    df["Complementarity"] = complementarities
-    df["Feasibility"] = feasibilities
-    df["Dual Feasibility"] = dual_feasibilities
-    df["H1 Primal errors"] = H1primal_errors
-    df["L2 Primal errors"] = L2primal_errors
-    df["L2 Latent errors"] = L2latent_errors
-    df["L2 Multiplier errors"] = L2multiplier_errors
-    df["Newton steps"] = Newton_steps
-    df["Step sizes"] = step_sizes
-    df["Primal increments"] = primal_increments
-    df["Latent increments"] = latent_increments
-    df["Polynomial order"] = [polynomial_order] * (k + 1)
-    df["Mesh size"] = [1 / 2 ** (m - 1)] * (k + 1)
-    df["dofs"] = [np.size(sol_k.x.array[:])] * (k + 1)
-    df["Step size rule"] = [step_size_rule] * (k + 1)
-    filename = f"./example{example}_polyorder{polynomial_order}_m{m}.csv"
-    rank_print(f"Saving data to: {str(output_dir / filename)}", msh.comm)
-    df.to_csv(output_dir / filename, index=False)
-    rank_print(df, msh.comm)
+    # df = pd.DataFrame()
+    # df["Energy"] = energies
+    # df["Complementarity"] = complementarities
+    # df["Feasibility"] = feasibilities
+    # df["Dual Feasibility"] = dual_feasibilities
+    # df["H1 Primal errors"] = H1primal_errors
+    # df["L2 Primal errors"] = L2primal_errors
+    # df["L2 Latent errors"] = L2latent_errors
+    # df["L2 Multiplier errors"] = L2multiplier_errors
+    # df["Newton steps"] = Newton_steps
+    # df["Step sizes"] = step_sizes
+    # df["Primal increments"] = primal_increments
+    # df["Latent increments"] = latent_increments
+    # df["Polynomial order"] = [polynomial_order] * (k + 1)
+    # df["Mesh size"] = [1 / 2 ** (m - 1)] * (k + 1)
+    # df["dofs"] = [np.size(sol_k.x.array[:])] * (k + 1)
+    # df["Step size rule"] = [step_size_rule] * (k + 1)
+    # filename = f"./example_polyorder{polynomial_order}_m{m}.csv"
+    # rank_print(f"Saving data to: {str(output_dir / filename)}", msh.comm)
+    # df.to_csv(output_dir / filename, index=False)
+    # rank_print(df, msh.comm)
 
     # Create output space for bubble function
     V_out = fem.functionspace(
@@ -347,18 +305,10 @@ def solve_problem(
     # Export interpolant of exact solution u
     V_alt = fem.functionspace(msh, ("Lagrange", polynomial_order))
     q = fem.Function(V_alt)
-    expr = fem.Expression(u_exact, V_alt.element.interpolation_points())
-    q.interpolate(expr)
-    with io.VTXWriter(msh.comm, output_dir / "u_exact.bp", [q]) as vtx:
-        vtx.write(0.0)
 
     # Export interpolant of Lagrange multiplier λ
     W_out = fem.functionspace(msh, ("DG", max(1, polynomial_order - 1)))
     q = fem.Function(W_out)
-    expr = fem.Expression(lambda_exact, W_out.element.interpolation_points())
-    q.interpolate(expr)
-    with io.VTXWriter(msh.comm, output_dir / "lambda_exact.bp", [q]) as vtx:
-        vtx.write(0.0)
 
     # Export latent solution variable
     q = fem.Function(W_out)
@@ -368,18 +318,12 @@ def solve_problem(
         vtx.write(0.0)
 
     # Export feasible discrete solution
-    exp_psi = exp(sol.sub(1))
+    exp_psi = exp(sol.sub(1)) - phi
     expr = fem.Expression(exp_psi, W_out.element.interpolation_points())
     q.interpolate(expr)
     with io.VTXWriter(msh.comm, output_dir / "tilde_u.bp", [q]) as vtx:
         vtx.write(0.0)
 
-    # Export "Lagrange multiplier"
-    lam = (sol_k.sub(1) - sol.sub(1)) / alpha.value
-    expr = fem.Expression(lam, W_out.element.interpolation_points())
-    q.interpolate(expr)
-    with io.VTXWriter(msh.comm, output_dir / "lambda.bp", [q]) as vtx:
-        vtx.write(0.0)
 
 # -------------------------------------------------------
 if __name__ == "__main__":
@@ -387,15 +331,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=desc, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument(
-        "--example",
-        "-e",
-        dest="example",
-        type=int,
-        choices=[1, 2, 3],
-        default=1,
-        help="The example number",
-    )
+
     parser.add_argument(
         "--mesh-density",
         "-m",
@@ -434,12 +370,11 @@ if __name__ == "__main__":
         "-t",
         dest="tol_exit",
         type=float,
-        default=1e-10,
+        default=1e-6,
         help="Tolerance for exiting Newton iteration",
     )
     args = parser.parse_args()
     solve_problem(
-        args.example,
         args.m,
         args.polynomial_order,
         args.maximum_number_of_outer_loop_iterations,
