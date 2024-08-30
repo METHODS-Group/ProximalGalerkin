@@ -7,6 +7,7 @@ The SNES solver is based on https://github.com/Wells-Group/asimov-contact and is
 
 from mpi4py import MPI
 from petsc4py import PETSc
+import numpy as np
 import dolfinx.fem.petsc
 import argparse
 import ufl
@@ -100,23 +101,25 @@ def solve_problem(
     petsc_options = {} if petsc_options is None else petsc_options
 
     mesh = dolfinx.mesh.create_rectangle(
-        MPI.COMM_WORLD,  [[-1,-1],[1,1]], [N, N],dolfinx.cpp.mesh.CellType.triangle
+        MPI.COMM_WORLD,  [[0,0],[1,1]], [N, N],dolfinx.cpp.mesh.CellType.triangle
     )
     x = ufl.SpatialCoordinate(mesh)
-    u_ex = ufl.conditional(ufl.le(x[0], 0), ufl.zero(), x[0] ** 4)
-    f = ufl.conditional(ufl.le(x[0], 0), ufl.zero(), -12 * x[0] ** 2)
-
+    # u_ex = ufl.conditional(ufl.le(x[0], 0), ufl.zero(), x[0] ** 4)
+    # f = ufl.conditional(ufl.le(x[0], 0), ufl.zero(), -12 * x[0] ** 2)
+    f = 500 *x[0] *ufl.sin(5*x[0]) * ufl.cos(x[1])
     V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
     uh = dolfinx.fem.Function(V)
     v = ufl.TestFunction(V)
-    F = (ufl.inner(ufl.grad(uh), ufl.grad(v)) - ufl.inner(f, v)) * ufl.dx
+    A = ufl.Identity(2)
+    F = (ufl.inner(A*ufl.grad(uh), ufl.grad(v)) - ufl.inner(f, v)) * ufl.dx
     J = ufl.derivative(F, uh)
     F_compiled = dolfinx.fem.form(F)
     J_compiled = dolfinx.fem.form(J)
 
-    bc_expr = dolfinx.fem.Expression(u_ex, V.element.interpolation_points())
+    #bc_expr = dolfinx.fem.Expression(u_ex, V.element.interpolation_points())
     u_bc = dolfinx.fem.Function(V)
-    u_bc.interpolate(bc_expr)
+    #u_bc.interpolate(bc_expr)
+    u_bc.x.array[:] = 0.0
     mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
     boundary_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
     boundary_dofs = dolfinx.fem.locate_dofs_topological(
@@ -125,11 +128,21 @@ def solve_problem(
     bcs = [dolfinx.fem.dirichletbc(u_bc, boundary_dofs)]
 
     # Lower bound for the obstacle
-    phi = dolfinx.fem.Function(V)
-    phi.x.array[:] = 0.0
+    def marker(x):
+        """
+        1 when x in ball with radius^2 between 1/5 and 2/5 around (0.5 0.5) else 10
+        """
+        center = np.array([[0.5], [0.5], [0.0]])
+        distance = np.linalg.norm(x -center, axis=0)
+        indicator = (distance >1./5) & (distance < 2./5) 
+        inv_ind = np.invert(indicator)
+        return (1*indicator + 10 * inv_ind).astype(dolfinx.default_scalar_type)
 
-    u_max = dolfinx.fem.Function(V)
-    u_max.x.array[:] = PETSc.INFINITY
+    phi = dolfinx.fem.Function(V)
+    phi.interpolate(marker)
+
+    u_min = dolfinx.fem.Function(V)
+    u_min.x.array[:] = -PETSc.INFINITY
 
     # Create semismooth Newton solver (SNES)
     snes = PETSc.SNES().create(comm=mesh.comm)  # type: ignore
@@ -157,7 +170,7 @@ def solve_problem(
     # Set solve functions and variable bounds
     snes.setFunction(problem.F, b_vec)
     snes.setJacobian(problem.J, A)
-    snes.setVariableBounds(phi.x.petsc_vec, u_max.x.petsc_vec)
+    snes.setVariableBounds(u_min.x.petsc_vec, phi.x.petsc_vec)
 
     # Set ksp options
     ksp = snes.ksp
@@ -172,9 +185,15 @@ def solve_problem(
 
     snes.solve(None, uh.x.petsc_vec)
 
-    with dolfinx.io.XDMFFile(mesh.comm, "u.xdmf", "w") as xdmf:
+    with dolfinx.io.XDMFFile(mesh.comm, "snes.xdmf", "w") as xdmf:
         xdmf.write_mesh(mesh)
         xdmf.write_function(uh)
+
+
+    with dolfinx.io.XDMFFile(mesh.comm, "phi.xdmf", "w") as xdmf:
+        xdmf.write_mesh(mesh)
+        xdmf.write_function(phi)
+
 
 
 if __name__ == "__main__":
