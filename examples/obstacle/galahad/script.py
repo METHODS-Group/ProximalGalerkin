@@ -62,13 +62,15 @@ def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellTy
     return S.to_scipy(), M.to_scipy(), Vh, f, (lower_bound, upper_bound), bcs
 
 
-def galahad(S, M, f, x, bounds):
+def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True):
     """
     :param S: Stiffness matrix
     :param M: Mass matrix
     :param f: Source function interpolated into primal space_
     :param x: Initial condition
     :param bounds: (lower_bound, upper_bound)_
+    :param loglevel: Verbosity level for galahad (0-3)
+    :param use_hessian: If True use second order method, otherwise use first order
     :return: Optimized solution
     """
     # Flatten hessian and pre-compute Mf
@@ -89,12 +91,13 @@ def galahad(S, M, f, x, bounds):
     options = trb.initialize()
 
     # set some non-default options
-    options['print_level'] = 3
-    options['model'] = 2
+    options['print_level'] = log_level
+    options['model'] = 2 if use_hessian else 1
     options['maxit'] = 1000
     options['hessian_available'] = True
-    n = len(keep_indices)
+    n = len(x)
     H_type="dense"
+    # Irrelevant for dense Hessian
     H_ne = 0
     H_row = np.zeros(H_ne, dtype=np.int64)
     H_col = np.zeros(H_ne, dtype=np.int64)
