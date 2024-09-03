@@ -1,3 +1,10 @@
+"""
+Solving the obstacle problem using Galahad with DOLFINx generating the system matrices
+Author: Jørgen S. Dokken
+SPDX-License-Identifier: MIT
+"""
+
+
 from mpi4py import MPI
 import dolfinx
 import ufl
@@ -31,8 +38,10 @@ def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellTy
     mesh.topology.create_connectivity(tdim-1, tdim)
     boundary_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
     boundary_dofs = dolfinx.fem.locate_dofs_topological(Vh, tdim-1, boundary_facets)
-    bcs = [dolfinx.fem.dirichletbc(dolfinx.default_scalar_type(0.), boundary_dofs, Vh)]
 
+    # Get dofs to deactivate
+    bcs = [dolfinx.fem.dirichletbc(dolfinx.default_scalar_type(0.), boundary_dofs, Vh)]
+    
     def psi(x):
         return -1./4 + 1./10 * np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
 
@@ -47,19 +56,22 @@ def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellTy
     f = dolfinx.fem.Function(Vh)
     f.interpolate(f_expr)
 
-    S = dolfinx.fem.assemble_matrix(dolfinx.fem.form(stiffness), bcs=bcs)
-    M = dolfinx.fem.assemble_matrix(dolfinx.fem.form(mass), bcs=bcs)
-    dof_indices = np.unique(np.hstack([bc._cpp_object.dof_indices()[0] for bc in bcs]))
-    keep = np.full(len(f.x.array), True, dtype=np.bool_)
-    keep[dof_indices] = False
-    return S.to_scipy(), M.to_scipy(), Vh, f, (lower_bound, upper_bound), np.flatnonzero(keep)
+    S = dolfinx.fem.assemble_matrix(dolfinx.fem.form(stiffness))
+    M = dolfinx.fem.assemble_matrix(dolfinx.fem.form(mass))
+
+    return S.to_scipy(), M.to_scipy(), Vh, f, (lower_bound, upper_bound), bcs
 
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     
-    S, M, V, f, bounds, keep_indices = setup_problem(args.N)
+    S, M, V, f, bounds, bcs = setup_problem(args.N)
+    dof_indices = np.unique(np.hstack([bc._cpp_object.dof_indices()[0] for bc in bcs]))
+    keep = np.full(len(f.x.array), True, dtype=np.bool_)
+    keep[dof_indices] = False
+    keep_indices = np.flatnonzero(keep)
+
     S_d = S[keep_indices].tocsc()[:, keep_indices].tocsr()
     M_d = M[keep_indices].tocsc()[:, keep_indices].tocsr()
     f_d = f.x.array[keep_indices]
@@ -86,7 +98,7 @@ if __name__ == "__main__":
     # set some non-default options
     options['print_level'] = 3
     options['model'] = 2
-    options['maxit'] = 100
+    options['maxit'] = 1000
     options['hessian_available'] = True
     n = len(keep_indices)
     H_type="dense"
@@ -101,11 +113,10 @@ if __name__ == "__main__":
 
 
     x = dolfinx.fem.Function(V)
-    x.x.array[:] = 0
+    dolfinx.fem.set_bc(x.x.array, bcs)
     x_d = x.x.array[keep_indices]
     trb.solve(n, H_ne, x_d, J, G, H)
     x.x.array[keep_indices] = x_d
 
-    with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "output.xdmf", "w") as xdmf:
-        xdmf.write_mesh(V.mesh)
-        xdmf.write_function(x)
+    with dolfinx.io.VTXWriter(V.mesh.comm, "galahad.bp", [x]) as bp:
+        bp.write(0.0)
