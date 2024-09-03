@@ -108,6 +108,7 @@ if __name__ == "__main__":
     # set some non-default options
     options['print_level'] = 2
     options['model'] = 1
+    options['maxit'] = 100 
 
     n = len(f.x.array)
     H_type="dense"
@@ -125,7 +126,9 @@ if __name__ == "__main__":
     x = dolfinx.fem.Function(V)
     x.x.array[:] = 0
     trb.solve(n, H_ne, x.x.array, Jh, Gh, lambda x: np.zeros((len(x), len(x)), dtype=x.dtype))
-        
+    with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "output.xdmf", "w") as xdmf:
+        xdmf.write_mesh(V.mesh)
+        xdmf.write_function(x)
     # from galahad import trb
     # import numpy as np
     # np.set_printoptions(precision=4,suppress=True,floatmode='fixed')
