@@ -35,70 +35,47 @@ def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellTy
     bcs = [dolfinx.fem.dirichletbc(dolfinx.default_scalar_type(0.), boundary_dofs, Vh)]
 
     def psi(x):
-        return 1./4 - 1./10 * np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
+        return -1./4 + 1./10 * np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
 
     lower_bound = dolfinx.fem.Function(Vh)
     upper_bound = dolfinx.fem.Function(Vh)
-    lower_bound.x.petsc_vec.set(-PETSc.INFINITY)
-    upper_bound.interpolate(psi)
-
-
-
+    lower_bound.interpolate(psi)
+    upper_bound.x.petsc_vec.set(PETSc.INFINITY)
 
     x = ufl.SpatialCoordinate(mesh)
     v = ufl.sin(3*ufl.pi*x[0])*ufl.sin(3*ufl.pi*x[1])
-    f_expr = dolfinx.fem.Expression(-ufl.div(ufl.grad(v)), Vh.element.interpolation_points())
+    f_expr = dolfinx.fem.Expression(ufl.div(ufl.grad(v)), Vh.element.interpolation_points())
     f = dolfinx.fem.Function(Vh)
     f.interpolate(f_expr)
 
-    S = dolfinx.fem.petsc.assemble_matrix(dolfinx.fem.form(stiffness))
-    M = dolfinx.fem.petsc.assemble_matrix(dolfinx.fem.form(mass))
-    S.assemble()
-    M.assemble()
-    return S, M, Vh, f, bcs, (lower_bound, upper_bound)
+    S = dolfinx.fem.assemble_matrix(dolfinx.fem.form(stiffness), bcs=bcs)
+    M = dolfinx.fem.assemble_matrix(dolfinx.fem.form(mass), bcs=bcs)
+    return S.to_scipy(), M.to_scipy(), Vh, f, bcs, (lower_bound, upper_bound)
 
 
-def create_structures(S, M, V, f, bcs):
-    x_vec = dolfinx.fem.Function(V)
-    work_vec = dolfinx.fem.Function(V)
-    def J(x):
-        # Set input values and set bc dofs
-        x_vec.x.petsc_vec.array_w[:] = x
-        dolfinx.fem.petsc.set_bc(x_vec.x.petsc_vec, bcs)
-        
-        # Compute 0.5 x^T S x
-        work_vec.x.petsc_vec.set(0)
-        S.mult(x_vec.x.petsc_vec, work_vec.x.petsc_vec)        
-        xTSx = work_vec.x.petsc_vec.dot(x_vec.x.petsc_vec)
-
-        # Compute I(f)^T M x
-        work_vec.x.petsc_vec.set(0)
-        M.mult(x_vec.x.petsc_vec, work_vec.x.petsc_vec)        
-        IfTMx = work_vec.x.petsc_vec.dot(f.x.petsc_vec)
-        return 0.5 * xTSx - IfTMx
-
-    x_vec_G = dolfinx.fem.Function(V)
-    work_vec_G = dolfinx.fem.Function(V)
-    Mf = dolfinx.fem.Function(V)
-    Mf.x.array[:] = 0.0
-    M.mult(f.x.petsc_vec, Mf.x.petsc_vec)
-    def G(x):
-        x_vec_G.x.petsc_vec.array_w[:] = x
-        work_vec_G.x.petsc_vec.set(0)
-        S.mult(x_vec_G.x.petsc_vec, work_vec_G.x.petsc_vec)
-        work_vec_G.x.petsc_vec.axpy(-1, Mf.x.petsc_vec)
-        return work_vec_G.x.array
-
-    return J, G
 
 if __name__ == "__main__":
     args = parser.parse_args()
     
     S, M, V, f, bcs, bounds = setup_problem(args.N)
 
-    Jh, Gh = create_structures(S, M, V,f, bcs)
-    input = dolfinx.fem.Function(V)
-    input.x.array[:] = 10
+    x_vec = dolfinx.fem.Function(V)
+    work_vec = dolfinx.fem.Function(V)
+    def J(x):
+        return 0.5 * x.T @ (S @ x) - f.x.array.T @ (M @ x)
+        
+
+    x_vec_G = dolfinx.fem.Function(V)
+    work_vec_G = dolfinx.fem.Function(V)
+
+    Mf = M @ f.x.array
+    def G(x):
+        return S @ x - Mf
+
+    def H(x):
+        return S.todense().reshape(-1).copy()
+
+
 
 
     from galahad import trb
@@ -106,9 +83,9 @@ if __name__ == "__main__":
     options = trb.initialize()
 
     # set some non-default options
-    options['print_level'] = 2
-    options['model'] = 1
-    options['maxit'] = 100 
+    options['print_level'] = 1
+    options['model'] = 2
+    options['maxit'] = 10
 
     n = len(f.x.array)
     H_type="dense"
@@ -119,13 +96,12 @@ if __name__ == "__main__":
     x_l = bounds[0].x.array
     x_u = bounds[1].x.array
 
-    breakpoint()
     trb.load(n, x_l, x_u, H_type, H_ne, H_row, H_col, H_ptr=None, options=options)
 
 
     x = dolfinx.fem.Function(V)
     x.x.array[:] = 0
-    trb.solve(n, H_ne, x.x.array, Jh, Gh, lambda x: np.zeros((len(x), len(x)), dtype=x.dtype))
+    trb.solve(n, H_ne, x.x.array, J, G, H)
     with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "output.xdmf", "w") as xdmf:
         xdmf.write_mesh(V.mesh)
         xdmf.write_function(x)
