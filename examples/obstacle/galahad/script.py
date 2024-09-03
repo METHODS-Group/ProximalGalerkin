@@ -62,37 +62,30 @@ def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellTy
     return S.to_scipy(), M.to_scipy(), Vh, f, (lower_bound, upper_bound), bcs
 
 
-
-if __name__ == "__main__":
-    args = parser.parse_args()
-    
-    S, M, V, f, bounds, bcs = setup_problem(args.N)
-    dof_indices = np.unique(np.hstack([bc._cpp_object.dof_indices()[0] for bc in bcs]))
-    keep = np.full(len(f.x.array), True, dtype=np.bool_)
-    keep[dof_indices] = False
-    keep_indices = np.flatnonzero(keep)
-
-    S_d = S[keep_indices].tocsc()[:, keep_indices].tocsr()
-    M_d = M[keep_indices].tocsc()[:, keep_indices].tocsr()
-    f_d = f.x.array[keep_indices]
-
-    Mf = (M_d @ f_d)
-    S_flattened = S_d.todense().reshape(-1)
+def galahad(S, M, f, x, bounds):
+    """
+    :param S: Stiffness matrix
+    :param M: Mass matrix
+    :param f: Source function interpolated into primal space_
+    :param x: Initial condition
+    :param bounds: (lower_bound, upper_bound)_
+    :return: Optimized solution
+    """
+    # Flatten hessian and pre-compute Mf
+    S_flattened = S.todense().reshape(-1)
+    Mf = (M @ f)
 
     def J(x):
-        return 0.5 * x.T @ (S_d @ x) - f_d.T @ (M_d @ x)        
+        return 0.5 * x.T @ (S @ x) - f.T @ (M @ x)        
 
     def G(x):
-        return S_d @ x - Mf
+        return S @ x - Mf
 
     def H(x):
         return S_flattened
 
 
-
-
     from galahad import trb
-    np.set_printoptions(precision=4,suppress=True,floatmode='fixed')
     options = trb.initialize()
 
     # set some non-default options
@@ -106,16 +99,38 @@ if __name__ == "__main__":
     H_row = np.zeros(H_ne, dtype=np.int64)
     H_col = np.zeros(H_ne, dtype=np.int64)
     H_ptr = None
-    x_l = bounds[0].x.array[keep_indices]
-    x_u = bounds[1].x.array[keep_indices]
+    
     # Add Dirichlet bounds 0 here
-    trb.load(n, x_l, x_u, H_type, H_ne, H_row, H_col, H_ptr=None, options=options)
-
-
-    x = dolfinx.fem.Function(V)
-    dolfinx.fem.set_bc(x.x.array, bcs)
-    x_d = x.x.array[keep_indices]
+    trb.load(n, bounds[0], bounds[1], H_type, H_ne, H_row, H_col, H_ptr=H_ptr, options=options)
     trb.solve(n, H_ne, x_d, J, G, H)
+
+    return x
+
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    
+    S, M, V, f, bounds, bcs = setup_problem(args.N)
+    dof_indices = np.unique(np.hstack([bc._cpp_object.dof_indices()[0] for bc in bcs]))
+    keep = np.full(len(f.x.array), True, dtype=np.bool_)
+    keep[dof_indices] = False
+    keep_indices = np.flatnonzero(keep)
+
+    # Restrict all matrices and vectors to interior dofs
+    S_d = S[keep_indices].tocsc()[:, keep_indices].tocsr()
+    M_d = M[keep_indices].tocsc()[:, keep_indices].tocsr()
+    f_d = f.x.array[keep_indices]
+    x = dolfinx.fem.Function(V)
+    x_d = x.x.array[keep_indices]
+    
+    lower_bound = bounds[0].x.array[keep_indices]
+    upper_bound = bounds[1].x.array[keep_indices]
+
+    
+    x_out = galahad(S_d, M_d, f_d, x_d, (lower_bound, upper_bound))
+   
+    dolfinx.fem.set_bc(x.x.array, bcs)
     x.x.array[keep_indices] = x_d
 
     with dolfinx.io.VTXWriter(V.mesh.comm, "galahad.bp", [x]) as bp:
