@@ -1,6 +1,5 @@
 from mpi4py import MPI
-from petsc4py import PETSc
-import dolfinx.fem.petsc
+import dolfinx
 import ufl
 import argparse
 import numpy as np
@@ -40,7 +39,7 @@ def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellTy
     lower_bound = dolfinx.fem.Function(Vh)
     upper_bound = dolfinx.fem.Function(Vh)
     lower_bound.interpolate(psi)
-    upper_bound.x.petsc_vec.set(PETSc.INFINITY)
+    upper_bound.x.array[:] = np.inf
 
     x = ufl.SpatialCoordinate(mesh)
     v = ufl.sin(3*ufl.pi*x[0])*ufl.sin(3*ufl.pi*x[1])
@@ -50,30 +49,32 @@ def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellTy
 
     S = dolfinx.fem.assemble_matrix(dolfinx.fem.form(stiffness), bcs=bcs)
     M = dolfinx.fem.assemble_matrix(dolfinx.fem.form(mass), bcs=bcs)
-    return S.to_scipy(), M.to_scipy(), Vh, f, bcs, (lower_bound, upper_bound)
+    dof_indices = np.unique(np.hstack([bc._cpp_object.dof_indices()[0] for bc in bcs]))
+    keep = np.full(len(f.x.array), True, dtype=np.bool_)
+    keep[dof_indices] = False
+    return S.to_scipy(), M.to_scipy(), Vh, f, (lower_bound, upper_bound), np.flatnonzero(keep)
 
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     
-    S, M, V, f, bcs, bounds = setup_problem(args.N)
+    S, M, V, f, bounds, keep_indices = setup_problem(args.N)
+    S_d = S[keep_indices].tocsc()[:, keep_indices].tocsr()
+    M_d = M[keep_indices].tocsc()[:, keep_indices].tocsr()
+    f_d = f.x.array[keep_indices]
 
-    x_vec = dolfinx.fem.Function(V)
-    work_vec = dolfinx.fem.Function(V)
+    Mf = (M_d @ f_d)
+    S_flattened = S_d.todense().reshape(-1)
+
     def J(x):
-        return 0.5 * x.T @ (S @ x) - f.x.array.T @ (M @ x)
-        
+        return 0.5 * x.T @ (S_d @ x) - f_d.T @ (M_d @ x)        
 
-    x_vec_G = dolfinx.fem.Function(V)
-    work_vec_G = dolfinx.fem.Function(V)
-
-    Mf = M @ f.x.array
     def G(x):
-        return S @ x - Mf
+        return S_d @ x - Mf
 
     def H(x):
-        return S.todense().reshape(-1).copy()
+        return S_flattened
 
 
 
@@ -83,74 +84,28 @@ if __name__ == "__main__":
     options = trb.initialize()
 
     # set some non-default options
-    options['print_level'] = 1
+    options['print_level'] = 3
     options['model'] = 2
-    options['maxit'] = 10
-
-    n = len(f.x.array)
+    options['maxit'] = 100
+    options['hessian_available'] = True
+    n = len(keep_indices)
     H_type="dense"
     H_ne = 0
     H_row = np.zeros(H_ne, dtype=np.int64)
     H_col = np.zeros(H_ne, dtype=np.int64)
     H_ptr = None
-    x_l = bounds[0].x.array
-    x_u = bounds[1].x.array
-
+    x_l = bounds[0].x.array[keep_indices]
+    x_u = bounds[1].x.array[keep_indices]
+    # Add Dirichlet bounds 0 here
     trb.load(n, x_l, x_u, H_type, H_ne, H_row, H_col, H_ptr=None, options=options)
 
 
     x = dolfinx.fem.Function(V)
     x.x.array[:] = 0
-    trb.solve(n, H_ne, x.x.array, J, G, H)
+    x_d = x.x.array[keep_indices]
+    trb.solve(n, H_ne, x_d, J, G, H)
+    x.x.array[keep_indices] = x_d
+
     with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "output.xdmf", "w") as xdmf:
         xdmf.write_mesh(V.mesh)
         xdmf.write_function(x)
-    # from galahad import trb
-    # import numpy as np
-    # np.set_printoptions(precision=4,suppress=True,floatmode='fixed')
-    # print("\n** python test: trb")
-
-    # # allocate internal data and set default options
-    # options = trb.initialize()
-
-    # # set some non-default options
-    # options['print_level'] = 0
-    # #options['trs_options']['print_level'] = 0
-    # #print("options:", options)
-
-    # # set parameters
-    # p = 4
-    # # set bounds
-    # n = 3
-    # x_l = np.array([-np.inf,-np.inf,0.0])
-    # x_u = np.array([1.1,1.1,1.1])
-
-    # # set Hessian sparsity
-    # H_type = 'coordinate'
-    # H_ne = 5
-    # H_row = np.array([0,2,1,2,2])
-    # H_col = np.array([0,0,1,1,2])
-    # H_ptr = None
-
-    # load data (and optionally non-default options)
-
-    # # define objective function and its derivatives
-    # def eval_f(x):
-    #     return (x[0] + x[2] + p)**2 + (x[1] + x[2])**2 + np.cos(x[0])
-    # def eval_g(x):
-    #     return np.array([2.0* ( x[0] + x[2] + p ) - np.sin(x[0]),
-    #                     2.0* ( x[1] + x[2] ),
-    #                     2.0* ( x[0] + x[2] + p ) + 2.0 * ( x[1] + x[2] )])
-    # def eval_h(x):
-    #     return np.array([2. - np.cos(x[0]),2.0,2.0,2.0,4.0])
-
-    # # set starting point
-    # x = np.array([1.,1.,1.])
-
-    # # find optimum
-    # breakpoint()
-    # x, g = trb.solve(n, H_ne, x, eval_f, eval_g, eval_h)
-    # print(" x:",x)
-    # print(" g:",g)
-
-    # # get information
