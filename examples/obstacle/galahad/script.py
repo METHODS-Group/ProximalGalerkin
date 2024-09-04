@@ -4,12 +4,14 @@ Author: Jørgen S. Dokken
 SPDX-License-Identifier: MIT
 """
 
+import cyipopt
 
 from mpi4py import MPI
 import dolfinx
 import ufl
 import argparse
 import numpy as np
+import scipy.sparse
 parser = argparse.ArgumentParser(
     description="Solve the obstacle problem on a unit square using Galahad.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -24,7 +26,7 @@ parser.add_argument(
 )
 parser.add_argument("--ipopt", action="store_true", default=False, help="Use Ipopt")
 parser.add_argument("--galahad", action="store_true", default=False, help="Use Galahad")
-
+parser.add_argument("--max-iter", type=int, default=50, help="Maximum number of iterations")
 
 def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellType.triangle):
     mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, N, cell_type)
@@ -64,7 +66,7 @@ def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellTy
     return S.to_scipy(), M.to_scipy(), Vh, f, (lower_bound, upper_bound), bcs
 
 
-def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True):
+def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True, max_iter:int=100, tol:float=1e-6):
     """
     :param S: Stiffness matrix
     :param M: Mass matrix
@@ -73,19 +75,22 @@ def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True):
     :param bounds: (lower_bound, upper_bound)_
     :param loglevel: Verbosity level for galahad (0-3)
     :param use_hessian: If True use second order method, otherwise use first order
+    :param max_iter: Maximum number of iterations
+    :param tol: Relative convergence tolerance
     :return: Optimized solution
     """
     # Flatten hessian and pre-compute Mf
+    S.eliminate_zeros()
     S_flattened = S.todense().reshape(-1)
     Mf = (M @ f)
 
-    def J(x):
+    def Functional(x):
         return 0.5 * x.T @ (S @ x) - f.T @ (M @ x)        
 
-    def G(x):
+    def Jacobian(x):
         return S @ x - Mf
 
-    def H(x):
+    def Hessian(x):
         return S_flattened
 
 
@@ -95,23 +100,53 @@ def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True):
     # set some non-default options
     options['print_level'] = log_level
     options['model'] = 2 if use_hessian else 1
-    options['maxit'] = 1000
+    options['maxit'] = max_iter
     options['hessian_available'] = True
+    options['stop_pg_relative'] = tol    
     n = len(x)
     H_type="dense"
     # Irrelevant for dense Hessian
-    H_ne = 0
+    H_ne = n**2
     H_row = np.zeros(H_ne, dtype=np.int64)
     H_col = np.zeros(H_ne, dtype=np.int64)
     H_ptr = None
-    
     # Add Dirichlet bounds 0 here
-    trb.load(n, bounds[0], bounds[1], H_type, H_ne, H_row, H_col, H_ptr=H_ptr, options=options)
-    trb.solve(n, H_ne, x_d, J, G, H)
+    trb.load(n, bounds[0].copy(), bounds[1].copy(), H_type, H_ne, H_row, H_col, H_ptr=H_ptr, options=options)
+    x_out, _ = trb.solve(n, H_ne, x, Functional, Jacobian, Hessian)
+    return x_out
 
-    return x
 
-def ipopt(S, M, f, x, bounds,log_level:int=5):
+class ObstacleProblem():
+
+    def __init__(self, S, M, f):
+
+        self._S = S
+        self._M = M
+        self._Mf = M @ f
+        self._f = f
+        self._tri_S = scipy.sparse.tril(self._S)
+
+    def objective(self, x):
+        """Returns the scalar value of the objective given x."""
+        return 0.5 * x.T @ (self._S @ x) - self._f.T @ (self._M @ x)        
+
+    def gradient(self, x):
+        """Returns the gradient of the objective with respect to x."""
+
+        return self._S @ x - self._Mf
+
+    def hessian(self, x, lagrange, obj_factor):
+        row, col = self.hessianstructure()
+        return np.copy(self._tri_S.todense())[row, col]
+
+    def hessianstructure(self):
+        return self._tri_S.nonzero()
+
+
+
+
+
+def ipopt(S, M, f, x, bounds,log_level:int=5, max_iter:int=100, tol:float=1e-6):
     """
     :param S: Stiffness matrix
     :param M: Mass matrix
@@ -119,66 +154,64 @@ def ipopt(S, M, f, x, bounds,log_level:int=5):
     :param x: Initial condition
     :param log_level: Veribosity level for Ipopt
     :param bounds: (lower_bound, upper_bound)
+    :param tol: Relative convergence tolerance
     :return: Optimized solution
     """
-    # Flatten hessian and pre-compute Mf
-    S_flattened = S.todense().reshape(-1)
-    Mf = (M @ f)
 
-    def J(x):
-        return 0.5 * x.T @ (S @ x) - f.T @ (M @ x)        
+    options = {"print_level": log_level, "max_iter": max_iter, "tol":tol,
+               "hessian_approximation": "exact", 
+               "jacobian_approximation": "exact",
+               "hessian_constant": "yes",
+               }
 
-    def G(x):
-        return S @ x - Mf
+    problem = ObstacleProblem(S, M, f)
+    problem.gradient(np.arange(len(f)))
+    nlp = cyipopt.Problem(n=len(x), m=0, lb=bounds[0], ub=bounds[1],
+                                problem_obj=problem)
+    for key, val in options.items():
+        nlp.add_option(key, val)
 
-    def H(x, _lambda):
-        breakpoint()
-        return S_flattened
-
-
-    import cyipopt
-    bounds_ipopt = [(lower, upper) for (lower, upper) in zip(*bounds)]
-    res = cyipopt.minimize_ipopt(J, jac=G, hess=H, bounds=bounds_ipopt, x0=x, options={"disp": log_level})
-
-    return res.x
+    x_opt, _ = nlp.solve(x)
+    return x_opt
 
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    
-    S, M, V, f, bounds, bcs = setup_problem(args.N)
+
+    S_, M_, V, f_, bounds, bcs = setup_problem(args.N)
     dof_indices = np.unique(np.hstack([bc._cpp_object.dof_indices()[0] for bc in bcs]))
-    keep = np.full(len(f.x.array), True, dtype=np.bool_)
+    keep = np.full(len(f_.x.array), True, dtype=np.bool_)
     keep[dof_indices] = False
     keep_indices = np.flatnonzero(keep)
 
     # Restrict all matrices and vectors to interior dofs
-    S_d = S[keep_indices].tocsc()[:, keep_indices].tocsr()
-    M_d = M[keep_indices].tocsc()[:, keep_indices].tocsr()
-    f_d = f.x.array[keep_indices]
+    S_d = S_[keep_indices].tocsc()[:, keep_indices].tocsr()
+    M_d = M_[keep_indices].tocsc()[:, keep_indices].tocsr()
+    f_d = f_.x.array[keep_indices]
     
     lower_bound = bounds[0].x.array[keep_indices]
     upper_bound = bounds[1].x.array[keep_indices]
 
-    if args.ipopt:
-        x = dolfinx.fem.Function(V, name="ipopt")
-        x_d = x.x.array[keep_indices]
-        x_ipopt = ipopt(S_d, M_d, f_d, x_d, (lower_bound, upper_bound))
-    
-        x.x.array[keep_indices] = x_ipopt
-        dolfinx.fem.set_bc(x.x.array, bcs)
+    if args.galahad:
+        x_g = dolfinx.fem.Function(V, name="galahad")
+        x_g.x.array[:] = 0.0
+        init_galahad = x_g.x.array[keep_indices].copy()
+        x_galahad = galahad(S_d.copy(), M_d.copy(), f_d.copy(), init_galahad, (lower_bound, upper_bound), max_iter=args.max_iter)
+        x_g.x.array[keep_indices] = x_galahad
+        dolfinx.fem.set_bc(x_g.x.array, bcs)
 
-        with dolfinx.io.VTXWriter(V.mesh.comm, "ipopt.bp", [x]) as bp:
+        with dolfinx.io.VTXWriter(V.mesh.comm, "galahad.bp", [x_g]) as bp:
             bp.write(0.0)
 
-    if args.galahad:
-        x = dolfinx.fem.Function(V, name="galahad")
-        x_d = x.x.array[keep_indices]
-        x_galahad = galahad(S_d, M_d, f_d, x_d, (lower_bound, upper_bound))
-   
-        x.x.array[keep_indices] = x_galahad
-        dolfinx.fem.set_bc(x.x.array, bcs)
+    if args.ipopt:
+        x_i = dolfinx.fem.Function(V, name="ipopt")
+        x_i.x.array[:] = 0.0
+        init_ipopt = x_i.x.array[keep_indices].copy()
+        x_ipopt = ipopt(S_d.copy(), M_d.copy(), f_d.copy(), init_ipopt, (lower_bound, upper_bound), max_iter=args.max_iter)
+    
+        x_i.x.array[keep_indices] = x_ipopt
+        dolfinx.fem.set_bc(x_i.x.array, bcs)
 
-        with dolfinx.io.VTXWriter(V.mesh.comm, "galahad.bp", [x]) as bp:
+        with dolfinx.io.VTXWriter(V.mesh.comm, "ipopt.bp", [x_i]) as bp:
             bp.write(0.0)
