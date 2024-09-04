@@ -22,6 +22,8 @@ parser.add_argument(
     default=10,
     help="Number of elements in each direction",
 )
+parser.add_argument("--ipopt", action="store_true", default=False, help="Use Ipopt")
+parser.add_argument("--galahad", action="store_true", default=False, help="Use Galahad")
 
 
 def setup_problem(N: int, cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellType.triangle):
@@ -109,6 +111,37 @@ def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True):
 
     return x
 
+def ipopt(S, M, f, x, bounds,log_level:int=5):
+    """
+    :param S: Stiffness matrix
+    :param M: Mass matrix
+    :param f: Source function interpolated into primal space_
+    :param x: Initial condition
+    :param log_level: Veribosity level for Ipopt
+    :param bounds: (lower_bound, upper_bound)
+    :return: Optimized solution
+    """
+    # Flatten hessian and pre-compute Mf
+    S_flattened = S.todense().reshape(-1)
+    Mf = (M @ f)
+
+    def J(x):
+        return 0.5 * x.T @ (S @ x) - f.T @ (M @ x)        
+
+    def G(x):
+        return S @ x - Mf
+
+    def H(x, _lambda):
+        breakpoint()
+        return S_flattened
+
+
+    import cyipopt
+    bounds_ipopt = [(lower, upper) for (lower, upper) in zip(*bounds)]
+    res = cyipopt.minimize_ipopt(J, jac=G, hess=H, bounds=bounds_ipopt, x0=x, options={"disp": log_level})
+
+    return res.x
+
 
 
 if __name__ == "__main__":
@@ -124,17 +157,28 @@ if __name__ == "__main__":
     S_d = S[keep_indices].tocsc()[:, keep_indices].tocsr()
     M_d = M[keep_indices].tocsc()[:, keep_indices].tocsr()
     f_d = f.x.array[keep_indices]
-    x = dolfinx.fem.Function(V)
-    x_d = x.x.array[keep_indices]
     
     lower_bound = bounds[0].x.array[keep_indices]
     upper_bound = bounds[1].x.array[keep_indices]
 
+    if args.ipopt:
+        x = dolfinx.fem.Function(V, name="ipopt")
+        x_d = x.x.array[keep_indices]
+        x_ipopt = ipopt(S_d, M_d, f_d, x_d, (lower_bound, upper_bound))
     
-    x_out = galahad(S_d, M_d, f_d, x_d, (lower_bound, upper_bound))
-   
-    dolfinx.fem.set_bc(x.x.array, bcs)
-    x.x.array[keep_indices] = x_d
+        x.x.array[keep_indices] = x_ipopt
+        dolfinx.fem.set_bc(x.x.array, bcs)
 
-    with dolfinx.io.VTXWriter(V.mesh.comm, "galahad.bp", [x]) as bp:
-        bp.write(0.0)
+        with dolfinx.io.VTXWriter(V.mesh.comm, "ipopt.bp", [x]) as bp:
+            bp.write(0.0)
+
+    if args.galahad:
+        x = dolfinx.fem.Function(V, name="galahad")
+        x_d = x.x.array[keep_indices]
+        x_galahad = galahad(S_d, M_d, f_d, x_d, (lower_bound, upper_bound))
+   
+        x.x.array[keep_indices] = x_galahad
+        dolfinx.fem.set_bc(x.x.array, bcs)
+
+        with dolfinx.io.VTXWriter(V.mesh.comm, "galahad.bp", [x]) as bp:
+            bp.write(0.0)

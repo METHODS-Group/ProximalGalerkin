@@ -1,14 +1,70 @@
 FROM ghcr.io/fenics/dolfinx/dolfinx:nightly
+ARG TARGETPLATFORM
+
 
 WORKDIR /galahad
 RUN python3 -m pip install meson
 
 RUN git clone https://github.com/ralna/GALAHAD.git
-ENV MESON_DIR build-dir-galahad
+ENV MESON_DIR=build-dir-galahad
 WORKDIR /galahad/GALAHAD
 RUN meson setup ${MESON_DIR} -Dpythoniface=true -Dpython.install_env=auto && \
     meson compile -C ${MESON_DIR} && \
     meson install -C ${MESON_DIR} && \
     meson test -C ${MESON_DIR} --suite=Python
-ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
-WORKDIR /root
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
+
+RUN python3 -m pip install scipy
+
+WORKDIR /ipopt
+
+ARG IPOPT_VERSION=3.14.11
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
+
+# Pull MUMPS 
+RUN git clone https://github.com/coin-or-tools/ThirdParty-Mumps --single-branch --branch stable/3.0
+
+
+# Build MUMPS for correct architecture
+WORKDIR /ipopt/ThirdParty-Mumps
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
+    then ./get.Mumps; \
+    ./ThirdParty-Mumps/configure --build=aarch64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local"; \
+    make :\
+    make install; \
+    elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
+    then ./get.Mumps; \
+    ./configure --build=amd64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local"  ; \
+    make; \
+    make install; \
+    else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
+    fi
+
+
+WORKDIR /ipopt
+
+# Pull IPOPT 
+RUN git clone https://github.com/coin-or/Ipopt --single-branch --branch releases/${IPOPT_VERSION}
+
+
+# Build Ipopt for correct architecture
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
+    then ./Ipopt/configure --build=aarch64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local" --enable-debug --enable-shared --with-mumps-cflags="-I/usr/local/include/coin-or/mumps" --with-mumps-lflags="-L/usr/local/lib -lcoinmumps" ; \
+    make install; \
+    elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
+    then ./Ipopt/configure --build=amd64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local" --enable-debug --enable-shared --with-mumps-cflags="-I/usr/local/include/coin-or/mumps" --with-mumps-lflags="-L/usr/local/lib -lcoinmumps" ; \
+    make install; \
+    else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
+    fi
+
+
+
+# Build pyipopt
+ARG CYIPOPT_VERSION=1.4.1
+RUN python3 -m pip install --no-cache git+https://github.com/mechmotum/cyipopt.git@v${CYIPOPT_VERSION}
+
+
+# WORKDIR /root
