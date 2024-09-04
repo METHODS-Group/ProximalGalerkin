@@ -1,5 +1,5 @@
 """
-Solving the obstacle problem using Galahad with DOLFINx generating the system matrices
+Solving the obstacle problem using Galahad or IPOPT with DOLFINx generating the system matrices
 Author: Jørgen S. Dokken
 SPDX-License-Identifier: MIT
 """
