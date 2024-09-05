@@ -88,7 +88,7 @@ llvp.add_argument(
     "--max-iterations",
     dest="max_iterations",
     type=int,
-    default=10,
+    default=25,
     help="Maximum number of iterations of the Latent Variable Proximal Point algorithm",
 )
 llvp.add_argument(
@@ -201,8 +201,12 @@ class NewtonSolver:
 
     def solve(self, tol=1e-6, beta=1.0):
         i = 0
-
+        tol_ = tol
         while i < self.max_iterations:
+            if i < self.max_iterations // 2:
+                tol = 10*tol_
+            else:
+                tol = tol_
             # Assemble F(u_{i-1}) - J(u_D - u_{i-1}) and set du|_bc= u_D - u_{i-1}
             with self.b.localForm() as b_loc:
                 b_loc.set(0)
@@ -382,8 +386,8 @@ def solve_contact_problem(
     
     f = dolfinx.fem.Constant(mesh, np.zeros(gdim, dtype=dst))
     x = ufl.SpatialCoordinate(mesh)
+    #g = -0.2*x[0] + x[gdim-1] + dolfinx.fem.Constant(mesh, dst(-gap))
     g = x[gdim-1] + dolfinx.fem.Constant(mesh, dst(-gap))
-
     F00 = alpha * ufl.inner(sigma(u, mu, lmbda), epsilon(v)) * ufl.dx(
         domain=mesh
     ) - alpha * ufl.inner(f, v) * ufl.dx(domain=mesh)
@@ -441,21 +445,31 @@ def solve_contact_problem(
         },
         error_on_nonconvergence=True,
     )
-
-    bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u])
+    violation = dolfinx.fem.Function(V)
+    bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u, violation])
     bp_psi = dolfinx.io.VTXWriter(mesh.comm, output / "psi.bp", [psi])
-    V_von_mises = dolfinx.fem.functionspace(mesh, ("DG", degree))
-    stresses = dolfinx.fem.Function(V_von_mises, name="VonMises")
-    bp_vonmises = dolfinx.io.VTXWriter(mesh.comm, output / "von_mises.bp", [stresses])
+    V_DG = dolfinx.fem.functionspace(mesh, ("DG", degree, (mesh.geometry.dim,)))
+    stresses = dolfinx.fem.Function(V_DG, name="VonMises")
+    u_dg = dolfinx.fem.Function(V_DG, name="u")
+    bp_vonmises = dolfinx.io.VTXWriter(mesh.comm, output / "von_mises.bp", [stresses, u_dg])
     s = sigma(u, mu, lmbda) - 1. / 3 * ufl.tr(sigma(u, mu, lmbda)) * ufl.Identity(len(u))
     von_Mises = ufl.sqrt(3. / 2 * ufl.inner(s, s))
-    stress_expr = dolfinx.fem.Expression(von_Mises, V_von_mises.element.interpolation_points())
+    stress_expr = dolfinx.fem.Expression(von_Mises, V_DG.element.interpolation_points())
 
     u_prev = dolfinx.fem.Function(V)
     diff = dolfinx.fem.Function(V)
     normed_diff = -1.
+    displacement = ufl.inner(u, n_g) - g
+    expr = dolfinx.fem.Expression(displacement, V.element.interpolation_points())
+    penetration = ufl.conditional(ufl.gt(displacement, 0), displacement, 0)
+    boundary_penetration = dolfinx.fem.form(ufl.inner(penetration, penetration) *ds)
+
+    def assemble_penetration():
+        local_penetration = dolfinx.fem.assemble_scalar(boundary_penetration)
+        return np.sqrt(mesh.comm.allreduce(local_penetration, op=MPI.SUM))
+    
     for it in range(max_iterations):
-        print(f"{it=} {normed_diff:.2e}")
+        print(f"{it=}/{max_iterations} {normed_diff:.2e} Penetration L2(Gamma): {assemble_penetration():.2e}")
         u_bc.x.array[V0_to_V] = disp  # (it+1)/M * disp
 
         if alpha_scheme == AlphaScheme.constant:
@@ -471,19 +485,24 @@ def solve_contact_problem(
         diff.x.petsc_vec.normBegin(2)
         normed_diff = diff.x.petsc_vec.normEnd(2)
         if normed_diff <= tol:
+            print(f"Converged at {it=} with increment norm {normed_diff:.2e}<{tol:.2e}")
             break
         u_prev.x.array[:] = u.x.array
         psi_k.x.array[:] = psi.x.array
 
-        stresses.interpolate(stress_expr)
+        stresses.sub(0).interpolate(stress_expr)
+        u_dg.interpolate(u)
         bp_vonmises.write(it)
-
+        violation.sub(0).interpolate(expr)
         bp.write(it)
         bp_psi.write(it)
 
         if not converged:
             print(f"Solver did not convert at {it=}, exiting")
             break
+
+    if it == max_iterations - 1:
+        print(f"Did not converge within {max_iterations} iterations")
     bp_psi.close()
     bp.close()
     bp_vonmises.close()
