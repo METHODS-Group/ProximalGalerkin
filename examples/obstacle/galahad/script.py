@@ -81,8 +81,8 @@ def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True, max_iter
     """
     # Flatten hessian and pre-compute Mf
     S.eliminate_zeros()
-    S_flattened = S.todense().reshape(-1)
     Mf = (M @ f)
+    tri_S = scipy.sparse.tril(S)
 
     def Functional(x):
         return 0.5 * x.T @ (S @ x) - f.T @ (M @ x)        
@@ -91,8 +91,12 @@ def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True, max_iter
         return S @ x - Mf
 
     def Hessian(x):
-        return S_flattened
+        return tri_S.data
 
+    
+    H_row = tri_S.nonzero()[0]
+
+    H_col = tri_S.nonzero()[1]
 
     from galahad import trb
     options = trb.initialize()
@@ -104,14 +108,12 @@ def galahad(S, M, f, x, bounds, log_level:int=1, use_hessian:bool=True, max_iter
     options['hessian_available'] = True
     options['stop_pg_relative'] = tol    
     n = len(x)
-    H_type="dense"
+    H_type="coordinate"
     # Irrelevant for dense Hessian
-    H_ne = n**2
-    H_row = np.zeros(H_ne, dtype=np.int64)
-    H_col = np.zeros(H_ne, dtype=np.int64)
+    H_ne = len(tri_S.data)
     H_ptr = None
     # Add Dirichlet bounds 0 here
-    trb.load(n, bounds[0].copy(), bounds[1].copy(), H_type, H_ne, H_row, H_col, H_ptr=H_ptr, options=options)
+    trb.load(n, bounds[0].copy(), bounds[1].copy(), H_type, H_ne, H_row.astype(np.int64), H_col.astype(np.int64), H_ptr=H_ptr, options=options)
     x_out, _ = trb.solve(n, H_ne, x, Functional, Jacobian, Hessian)
     return x_out
 
@@ -197,7 +199,8 @@ if __name__ == "__main__":
         x_g = dolfinx.fem.Function(V, name="galahad")
         x_g.x.array[:] = 0.0
         init_galahad = x_g.x.array[keep_indices].copy()
-        x_galahad = galahad(S_d.copy(), M_d.copy(), f_d.copy(), init_galahad, (lower_bound, upper_bound), max_iter=args.max_iter)
+        x_galahad = galahad(S_d.copy(), M_d.copy(), f_d.copy(), init_galahad, (lower_bound, upper_bound), max_iter=args.max_iter,
+                           use_hessian=True)
         x_g.x.array[keep_indices] = x_galahad
         dolfinx.fem.set_bc(x_g.x.array, bcs)
 
