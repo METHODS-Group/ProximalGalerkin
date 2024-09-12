@@ -49,6 +49,18 @@ def allreduce_scalar(form: fem.Form, op: MPI.Op = MPI.SUM) -> np.floating:
     return comm.allreduce(fem.assemble_scalar(form), op=op)
 
 
+
+def precondtioner(V, f)->fem.Function:
+    u = ufl.TrialFunction(V)
+    v = ufl.TestFunction(V)
+    a = ufl.inner(ufl.grad(u),ufl.grad(v))*ufl.dx
+    L = ufl.inner(f, v)*ufl.dx
+    exterior_facets = mesh.exterior_facet_indices(V.mesh.topology)
+    boundary_dofs = fem.locate_dofs_topological(V, V.mesh.topology.dim - 1, exterior_facets)
+    bcs = [fem.dirichletbc(fem.Function(V), boundary_dofs)]
+    problem = fem.petsc.LinearProblem(a, L, bcs)
+    return problem.solve()
+
 def solve_problem(
     m: int,
     polynomial_order: int,
@@ -76,21 +88,38 @@ def solve_problem(
 
     
     # Create mesh
-    num_cells_per_direction = 2**m
-    msh = mesh.create_rectangle(
-        comm=MPI.COMM_WORLD,
-        points=((0.0, 0.0), (1.0, 1.0)),
-        n=(num_cells_per_direction, num_cells_per_direction),
-        cell_type=CellType.triangle,
-        ghost_mode=GhostMode.shared_facet,
-    )
+    # num_cells_per_direction = 2**m
+    # msh = mesh.create_rectangle(
+    #     comm=MPI.COMM_WORLD,
+    #     points=((0.0, 0.0), (1.0, 1.0)),
+    #     n=(num_cells_per_direction, num_cells_per_direction),
+    #     cell_type=CellType.triangle,
+    #     ghost_mode=GhostMode.shared_facet,
+    # )
+    res = 0.0125/2#0.0125
+    import gmsh
+    gmsh.initialize()
+    membrane = gmsh.model.occ.addDisk(0, 0, 0, 1, 1)
+    gmsh.model.occ.synchronize()
+    gdim = 2
+    gmsh.model.addPhysicalGroup(gdim, [membrane], 1)
+    gmsh.option.setNumber("Mesh.CharacteristicLengthMin", res)
+    gmsh.option.setNumber("Mesh.CharacteristicLengthMax", res)
+    gmsh.model.mesh.generate(gdim)
 
+
+
+    gmsh_model_rank = 0
+    mesh_comm = MPI.COMM_WORLD
+    msh, cell_markers, facet_markers = io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=gdim)
+  
     # Define FE subspaces
     P = basix.ufl.element("Lagrange", msh.basix_cell(), polynomial_order)
     B = basix.ufl.element("Bubble", msh.basix_cell(), polynomial_order + 2)
     Pm1 = basix.ufl.element("Lagrange",msh.basix_cell(),polynomial_order-1, discontinuous=True )
     mixed_element= basix.ufl.mixed_element([basix.ufl.enriched_element(
     [P, B]), Pm1])
+    mixed_element = basix.ufl.mixed_element([P, P])
     V = fem.functionspace(msh, mixed_element)
 
     # Define functions and parameters
@@ -98,9 +127,9 @@ def solve_problem(
     x = ufl.SpatialCoordinate(msh)
 
     #
-    v_hat = ufl.sin(3*ufl.pi*x[0])*ufl.sin(3*ufl.pi*x[1])
-    f = ufl.div(ufl.grad(v_hat))
-
+    # v_hat = ufl.sin(3*ufl.pi*x[0])*ufl.sin(3*ufl.pi*x[1])
+    # f = ufl.div(ufl.grad(v_hat))
+    f = fem.Constant(msh, 0.0)    
     # Define BCs
     msh.topology.create_connectivity(msh.topology.dim - 1, msh.topology.dim)
     facets = mesh.exterior_facet_indices(msh.topology)
@@ -116,17 +145,43 @@ def solve_problem(
     sol = fem.Function(V)
     sol_k = fem.Function(V)
 
+
+    # Add preconditioned solution for `u`
+    V0, primal_to_mixed = V.sub(0).collapse()    
+    u_prec = precondtioner(V0, f)
+    
+    #sol.x.array[primal_to_mixed] = u_prec.x.array
+    
+
+
     u, psi = ufl.split(sol)
     u_k, psi_k = ufl.split(sol_k)
 
     def phi_set(x):
-        return -1./4 + 1./10*np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
+        r = np.sqrt(x[0] ** 2 + x[1] ** 2)
+        r0 = 0.5
+        beta =  0.9
+        b = r0*beta
+        tmp = np.sqrt(r0**2 - b**2)
+        B = tmp + b * b / tmp
+        C = -b / tmp
+        cond_true = B + r * C
+        cond_false = np.sqrt(r0 ** 2 - r ** 2)
+        true_indices = np.flatnonzero(r > b)
+        cond_false[true_indices] = cond_true[true_indices]
+        return cond_false
 
     # Lower bound for the obstacle
     V0, _ = V.sub(0).collapse()
     phi = fem.Function(V0)
     phi.interpolate(phi_set)
 
+
+    #tol = fem.Constant(msh, 1e-6)
+    #psi_prec = ufl.ln(ufl.conditional(ufl.gt(u_prec- phi, tol), u_prec- phi, tol))
+    #psi_prec_expr = fem.Expression(psi_prec, V.sub(1).element.interpolation_points())
+    #sol_k.sub(1).interpolate(psi_prec_expr)
+    #print(sol_k.x.array)
 
     # Define non-linear residual
     (v, w) = ufl.TestFunctions(V)
@@ -151,11 +206,11 @@ def solve_problem(
     newton_solver.convergence_criterion = "incremental"
     #newton_solver.max_it = 50
     ksp = newton_solver.krylov_solver
-    # petsc_options={"ksp_type": "preonly", "pc_type": "lu", "pc_factor_mat_solver_type": "mumps",
-                                                                    #   "ksp_error_if_not_converged":True,
-                                                                    #   "ksp_monitor":None,
-    #                                                                  }
-    petsc_options = {}
+    petsc_options={"ksp_type": "preonly", "pc_type": "lu", "pc_factor_mat_solver_type": "mumps",
+                                                                    "ksp_error_if_not_converged":True,
+                                                                     "ksp_monitor":None,
+                                                                      }
+    #petsc_options = {}
     opts = PETSc.Options()  # type: ignore
     option_prefix = ksp.getOptionsPrefix()
     opts.prefixPush(option_prefix)
@@ -185,11 +240,11 @@ def solve_problem(
     sol.x.array[:] = 0.0
     sol_k.x.array[:] = sol.x.array[:]
     alpha_k = 1
-    step_size_rule = "constant"
-    C = 0.05
-    r = 2
-    q = 0.5
-
+    step_size_rule = "constant" # "double_exponential"
+    C = 1.0
+    r = 1.5
+    q = 1.5
+    
     energies = []
     complementarities = []
     feasibilities = []
@@ -288,11 +343,12 @@ def solve_problem(
     # Create output space for bubble function
     V_out = fem.functionspace(
         msh, basix.ufl.element(
-            "Lagrange", msh.basix_cell(), polynomial_order + 2)
+            "Lagrange", msh.basix_cell(), polynomial_order)
     )
     u_out = fem.Function(V_out)
     u_out.interpolate(sol.sub(0).collapse())
 
+    # u_out.x.array[:] = sol.x.array[primal_to_mixed]
     # Export primal solution variable
     # Use VTX to capture high-order dofs
     with io.VTXWriter(msh.comm, output_dir / "u.bp", [u_out]) as vtx:
@@ -358,7 +414,7 @@ if __name__ == "__main__":
         "-a",
         dest="alpha_max",
         type=float,
-        default=1e3,
+        default=1e5,
         help="Maximum alpha",
     )
     parser.add_argument(

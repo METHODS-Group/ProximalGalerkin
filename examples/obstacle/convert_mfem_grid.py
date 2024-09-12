@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 
 parser = argparse.ArgumentParser(description="Convert a MFEM mesh to a FEniCS mesh.")
-parser.add_argument("-i", dest="intput", type=Path, help="Path to MFEM mesh (to vtu file)")
-parser.add_argument("-o", dest="output", type=Path, help="Path to FEniCS mesh")
+parser.add_argument("-i", dest="intput", type=Path, help="Path to MFEM mesh (to vtu file)", required=True)
+parser.add_argument("-o", dest="output", type=Path, help="Path to FEniCS mesh", required=True)
 
 
 
