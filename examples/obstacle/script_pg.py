@@ -12,21 +12,19 @@
 """
 
 import argparse
-from math import pi
 from pathlib import Path
-
-import numpy as np
 import pandas as pd
+import numpy as np
 import ufl
 import basix
-from dolfinx import fem, io, log, mesh
+from dolfinx import fem, io, log, mesh, default_scalar_type
 from dolfinx.fem.petsc import NonlinearProblem
-from dolfinx.mesh import CellType, GhostMode
 from dolfinx.nls.petsc import NewtonSolver
 from mpi4py import MPI
-from petsc4py.PETSc import ScalarType
-from ufl import conditional, div, dot, dx, exp, grad, gt, inner, lt, sin
 from petsc4py import PETSc
+
+from ufl import conditional, dx, exp, grad, inner, lt
+
 
 def rank_print(string: str, comm: MPI.Comm, rank: int = 0):
     """Helper function to print on a single rank
@@ -62,73 +60,31 @@ def precondtioner(V, f)->fem.Function:
     return problem.solve()
 
 def solve_problem(
-    m: int,
+    filename: Path,
     polynomial_order: int,
     maximum_number_of_outer_loop_iterations: int,
     alpha_max: float,
     tol_exit: float,
 ):
     """
-    Solve the obstacle problem in different example settings
-
-    Example 1 exhibits two properties that are challenging for active set solvers:
-    a) The transition from inactive to active is high order
-    b) There is a nontrivial biactive set
-
-    Example 2 is the non-pathological example.
-    Here, we witness linear convergence with a fixed step size
-
-    ..note::
-
-        The exact solution is not known
-
-    Example 3 is a second biactive example with a non-smooth multiplier
-
+    
     """
 
-    
-    # Create mesh
-    # num_cells_per_direction = 2**m
-    # msh = mesh.create_rectangle(
-    #     comm=MPI.COMM_WORLD,
-    #     points=((0.0, 0.0), (1.0, 1.0)),
-    #     n=(num_cells_per_direction, num_cells_per_direction),
-    #     cell_type=CellType.triangle,
-    #     ghost_mode=GhostMode.shared_facet,
-    # )
-    res = 0.0125/2#0.0125
-    import gmsh
-    gmsh.initialize()
-    membrane = gmsh.model.occ.addDisk(0, 0, 0, 1, 1)
-    gmsh.model.occ.synchronize()
-    gdim = 2
-    gmsh.model.addPhysicalGroup(gdim, [membrane], 1)
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMin", res)
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMax", res)
-    gmsh.model.mesh.generate(gdim)
+        # Create mesh
+    with io.XDMFFile(MPI.COMM_WORLD, filename, "r") as xdmf:
+        msh = xdmf.read_mesh(name="mesh")
 
-
-
-    gmsh_model_rank = 0
-    mesh_comm = MPI.COMM_WORLD
-    msh, cell_markers, facet_markers = io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=gdim)
-  
     # Define FE subspaces
     P = basix.ufl.element("Lagrange", msh.basix_cell(), polynomial_order)
-    B = basix.ufl.element("Bubble", msh.basix_cell(), polynomial_order + 2)
-    Pm1 = basix.ufl.element("Lagrange",msh.basix_cell(),polynomial_order-1, discontinuous=True )
-    mixed_element= basix.ufl.mixed_element([basix.ufl.enriched_element(
-    [P, B]), Pm1])
+    # B = basix.ufl.element("Bubble", msh.basix_cell(), polynomial_order + 2)
+    # Pm1 = basix.ufl.element("Lagrange",msh.basix_cell(),polynomial_order-1, discontinuous=True )
+    # mixed_element= basix.ufl.mixed_element([basix.ufl.enriched_element(
+    # [P, B]), Pm1])
     mixed_element = basix.ufl.mixed_element([P, P])
     V = fem.functionspace(msh, mixed_element)
 
     # Define functions and parameters
-    alpha = fem.Constant(msh, ScalarType(1))
-    x = ufl.SpatialCoordinate(msh)
-
-    #
-    # v_hat = ufl.sin(3*ufl.pi*x[0])*ufl.sin(3*ufl.pi*x[1])
-    # f = ufl.div(ufl.grad(v_hat))
+    alpha = fem.Constant(msh, default_scalar_type(1))
     f = fem.Constant(msh, 0.0)    
     # Define BCs
     msh.topology.create_connectivity(msh.topology.dim - 1, msh.topology.dim)
@@ -144,15 +100,6 @@ def solve_problem(
     # Define solution variables
     sol = fem.Function(V)
     sol_k = fem.Function(V)
-
-
-    # Add preconditioned solution for `u`
-    V0, primal_to_mixed = V.sub(0).collapse()    
-    u_prec = precondtioner(V0, f)
-    
-    #sol.x.array[primal_to_mixed] = u_prec.x.array
-    
-
 
     u, psi = ufl.split(sol)
     u_k, psi_k = ufl.split(sol_k)
@@ -175,13 +122,6 @@ def solve_problem(
     V0, _ = V.sub(0).collapse()
     phi = fem.Function(V0)
     phi.interpolate(phi_set)
-
-
-    #tol = fem.Constant(msh, 1e-6)
-    #psi_prec = ufl.ln(ufl.conditional(ufl.gt(u_prec- phi, tol), u_prec- phi, tol))
-    #psi_prec_expr = fem.Expression(psi_prec, V.sub(1).element.interpolation_points())
-    #sol_k.sub(1).interpolate(psi_prec_expr)
-    #print(sol_k.x.array)
 
     # Define non-linear residual
     (v, w) = ufl.TestFunctions(V)
@@ -318,37 +258,34 @@ def solve_problem(
     output_dir = cwd / "output"
     output_dir.mkdir(exist_ok=True)
 
-    # df = pd.DataFrame()
-    # df["Energy"] = energies
-    # df["Complementarity"] = complementarities
-    # df["Feasibility"] = feasibilities
-    # df["Dual Feasibility"] = dual_feasibilities
-    # df["H1 Primal errors"] = H1primal_errors
-    # df["L2 Primal errors"] = L2primal_errors
-    # df["L2 Latent errors"] = L2latent_errors
-    # df["L2 Multiplier errors"] = L2multiplier_errors
-    # df["Newton steps"] = Newton_steps
-    # df["Step sizes"] = step_sizes
-    # df["Primal increments"] = primal_increments
-    # df["Latent increments"] = latent_increments
-    # df["Polynomial order"] = [polynomial_order] * (k + 1)
-    # df["Mesh size"] = [1 / 2 ** (m - 1)] * (k + 1)
-    # df["dofs"] = [np.size(sol_k.x.array[:])] * (k + 1)
-    # df["Step size rule"] = [step_size_rule] * (k + 1)
-    # filename = f"./example_polyorder{polynomial_order}_m{m}.csv"
-    # rank_print(f"Saving data to: {str(output_dir / filename)}", msh.comm)
-    # df.to_csv(output_dir / filename, index=False)
-    # rank_print(df, msh.comm)
 
     # Create output space for bubble function
-    V_out = fem.functionspace(
-        msh, basix.ufl.element(
-            "Lagrange", msh.basix_cell(), polynomial_order)
-    )
-    u_out = fem.Function(V_out)
-    u_out.interpolate(sol.sub(0).collapse())
+    V_primal, primal_to_mixed = V.sub(0).collapse()
 
-    # u_out.x.array[:] = sol.x.array[primal_to_mixed]
+    num_primal_dofs = V_primal.dofmap.index_map.size_global
+
+    if MPI.COMM_WORLD.rank == 0:
+        df = pd.DataFrame()
+        df["Energy"] = energies
+        df["Complementarity"] = complementarities
+        df["Feasibility"] = feasibilities
+        df["Dual Feasibility"] = dual_feasibilities
+        df["Newton steps"] = Newton_steps
+        df["Step sizes"] = step_sizes
+        df["Primal increments"] = primal_increments
+        df["Latent increments"] = latent_increments
+        df["Polynomial order"] = np.full(k+1, polynomial_order)
+        df["dofs"] = np.full(k+1, num_primal_dofs)
+        df["Step size rule"] = [step_size_rule] * (k + 1)
+        filename = f"./example_polyorder{polynomial_order}_{num_primal_dofs}.csv"
+        print(f"Saving data to: {str(output_dir / filename)}")
+        df.to_csv(output_dir / filename, index=False)
+        rank_print(df, msh.comm)
+
+    #V_latent, latent_to_mixed = V.sub(1).collapse()
+    u_out = fem.Function(V_primal)
+    u_out.x.array[:] = sol.x.array[primal_to_mixed]
+   
     # Export primal solution variable
     # Use VTX to capture high-order dofs
     with io.VTXWriter(msh.comm, output_dir / "u.bp", [u_out]) as vtx:
@@ -385,12 +322,12 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--mesh-density",
-        "-m",
-        dest="m",
-        type=int,
-        default=5,
-        help="MESH DENSITY (m = 2 corresponds to h_∞)",
+        "--file-path",
+        "-f",
+        dest="filename",
+        type=Path,
+        required=True,
+        help="Name of input file",
     )
     parser.add_argument(
         "--polynomial_order",
@@ -427,7 +364,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     solve_problem(
-        args.m,
+        args.filename,
         args.polynomial_order,
         args.maximum_number_of_outer_loop_iterations,
         args.alpha_max,

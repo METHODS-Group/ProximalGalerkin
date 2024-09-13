@@ -39,4 +39,4 @@ def generate_disk(filename:Path, res:float, order:int=1,refinement_level: int=1)
 
 if __name__ == "__main__":
     for i in range(3):
-        generate_disk(Path("disk.xdmf"), res=0.8, order=2, refinement_level=i)
+        generate_disk(Path("disk.xdmf"), res=0.4, order=2, refinement_level=i)
