@@ -32,7 +32,7 @@ parser.add_argument(
 )
 parser.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
 parser.add_argument("--res", "-r", type=float, default=1e-6, help="Mesh resolution")
-
+parser.add_argument("--hessian", dest="use_hessian", action="store_true", default=False, help="Use exact hessian")
 def setup_problem(
      filename: Path,
      res: float
@@ -69,16 +69,6 @@ def setup_problem(
     # Get dofs to deactivate
     bcs = [dolfinx.fem.dirichletbc(dolfinx.default_scalar_type(0.0), boundary_dofs, Vh)]
 
-    # def psi(x):
-    #     r = np.sqrt(x[0] ** 2 + x[1] ** 2)
-    #     r0 = 0.5
-    #     a =  0.348982574111686
-    #     A = -0.340129705945858
-    #     cond_true = A * np.log(r)
-    #     cond_false = np.sqrt(r0 ** 2 - r ** 2)
-    #     true_indices = np.flatnonzero(r > a)
-    #     cond_false[true_indices] = cond_true[true_indices]
-    #     return cond_false
 
     def psi(x):
         r = np.sqrt(x[0] ** 2 + x[1] ** 2)
@@ -142,7 +132,7 @@ def galahad(
     options["model"] = 2 if use_hessian else 1
     options["maxit"] = max_iter
     options["hessian_available"] = True
-    options["stop_pg_relative"] = tol*len(x)/1265
+    options["stop_pg_relative"] = tol
     options["subproblem_direct"] = True
     n = len(x)
     H_type = "coordinate"
@@ -194,10 +184,12 @@ class ObstacleProblem:
 
     def hessianstructure(self):
         return self.sparsity
+    
 
 
 def ipopt(
-    problem, x, bounds, log_level: int = 5, max_iter: int = 100, tol: float = 1e-6
+    problem, x, bounds, log_level: int = 5, max_iter: int = 100, tol: float = 1e-6,
+    activate_hessian:bool=True
 ):
     """
     :param problem: Problem instance
@@ -207,15 +199,18 @@ def ipopt(
     :param tol: Relative convergence tolerance
     :return: Optimized solution
     """
-
     options = {
         "print_level": log_level,
         "max_iter": max_iter,
         "tol": tol,
-        "hessian_approximation": "exact",
         "jacobian_approximation": "exact",
-        "hessian_constant": "yes",
     }
+
+    if activate_hessian:
+        options["hessian_approximation"] = "exact"
+        options["hessian_constant"] = "yes"
+    else:
+        options["hessian_approximation"] = "limited-memory"
 
     nlp = cyipopt.Problem(
         n=len(x), m=0, lb=bounds[0], ub=bounds[1], problem_obj=problem
@@ -255,7 +250,7 @@ if __name__ == "__main__":
             init_galahad,
             (lower_bound, upper_bound),
             max_iter=args.max_iter,
-            use_hessian=True,
+            use_hessian=args.use_hessian,
             tol=args.tol
         )
         x_g.x.array[keep_indices] = x_galahad
@@ -270,7 +265,7 @@ if __name__ == "__main__":
         init_ipopt = x_i.x.array[keep_indices].copy()
         x_ipopt = ipopt(
             problem, init_ipopt, (lower_bound, upper_bound), max_iter=args.max_iter,
-            tol=args.tol
+            tol=args.tol, activate_hessian=args.use_hessian
         )
 
         x_i.x.array[keep_indices] = x_ipopt
