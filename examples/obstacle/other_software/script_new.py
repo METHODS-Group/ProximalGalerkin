@@ -28,32 +28,16 @@ parser.add_argument(
 parser.add_argument("--ipopt", action="store_true", default=False, help="Use Ipopt")
 parser.add_argument("--galahad", action="store_true", default=False, help="Use Galahad")
 parser.add_argument(
-    "--max-iter", type=int, default=50, help="Maximum number of iterations"
+    "--max-iter", type=int, default=200, help="Maximum number of iterations"
 )
 parser.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
-parser.add_argument("--res", "-r", type=float, default=1e-6, help="Mesh resolution")
 parser.add_argument("--hessian", dest="use_hessian", action="store_true", default=False, help="Use exact hessian")
 def setup_problem(
      filename: Path,
-     res: float
 ):
-    # with dolfinx.io.XDMFFile(MPI.COMM_WORLD, filename, "r") as xdmf:
-    #     mesh = xdmf.read_mesh(name="mesh")
-    import gmsh
-    gmsh.initialize()
-    membrane = gmsh.model.occ.addDisk(0, 0, 0, 1, 1)
-    gmsh.model.occ.synchronize()
-    gdim = 2
-    gmsh.model.addPhysicalGroup(gdim, [membrane], 1)
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMin", res)
-    gmsh.option.setNumber("Mesh.CharacteristicLengthMax", res)
-    gmsh.model.mesh.generate(gdim)
+    with dolfinx.io.XDMFFile(MPI.COMM_WORLD, filename, "r") as xdmf:
+        mesh = xdmf.read_mesh(name="mesh")
 
-
-
-    gmsh_model_rank = 0
-    mesh_comm = MPI.COMM_WORLD
-    mesh, cell_markers, facet_markers = dolfinx.io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=gdim)
     Vh = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
     u = ufl.TrialFunction(Vh)
     v = ufl.TestFunction(Vh)
@@ -89,14 +73,8 @@ def setup_problem(
     lower_bound.interpolate(psi)
     upper_bound.x.array[:] = np.inf
 
-    x = ufl.SpatialCoordinate(mesh)
-    #v = ufl.sin(3 * ufl.pi * x[0]) * ufl.sin(3 * ufl.pi * x[1])
-    #f_expr = dolfinx.fem.Expression(
-    #    ufl.div(ufl.grad(v)), Vh.element.interpolation_points()
-    #)
     f = dolfinx.fem.Function(Vh)
-    #f.interpolate(f_expr)
-
+    f.x.array[:] = 0.0
     S = dolfinx.fem.assemble_matrix(dolfinx.fem.form(stiffness))
     M = dolfinx.fem.assemble_matrix(dolfinx.fem.form(mass))
 
@@ -225,7 +203,7 @@ def ipopt(
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    S_, M_, V, f_, bounds, bcs = setup_problem(args.infile, args.res)
+    S_, M_, V, f_, bounds, bcs = setup_problem(args.infile)
     dof_indices = np.unique(np.hstack([bc._cpp_object.dof_indices()[0] for bc in bcs]))
     keep = np.full(len(f_.x.array), True, dtype=np.bool_)
     keep[dof_indices] = False
@@ -271,5 +249,11 @@ if __name__ == "__main__":
         x_i.x.array[keep_indices] = x_ipopt
         dolfinx.fem.set_bc(x_i.x.array, bcs)
 
-        with dolfinx.io.VTXWriter(V.mesh.comm, "ipopt.bp", [x_i]) as bp:
+        # Output on geometry space
+        mesh = x_i.function_space.mesh
+        degree = mesh.geometry.cmap.degree
+        V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree))
+        x_i_out = dolfinx.fem.Function(V_out, name="ipopt")
+        x_i_out.interpolate(x_i)
+        with dolfinx.io.VTXWriter(mesh.comm, "ipopt.bp", [x_i_out]) as bp:
             bp.write(0.0)
