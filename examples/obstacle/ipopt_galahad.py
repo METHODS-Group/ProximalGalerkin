@@ -32,6 +32,7 @@ parser.add_argument(
 )
 parser.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
 parser.add_argument("--hessian", dest="use_hessian", action="store_true", default=False, help="Use exact hessian")
+
 def setup_problem(
      filename: Path,
 ):
