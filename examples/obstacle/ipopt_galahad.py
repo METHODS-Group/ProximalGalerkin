@@ -69,8 +69,8 @@ def setup_problem(
         cond_false[true_indices] = cond_true[true_indices]
         return cond_false
 
-    lower_bound = dolfinx.fem.Function(Vh)
-    upper_bound = dolfinx.fem.Function(Vh)
+    lower_bound = dolfinx.fem.Function(Vh, name="lower_bound")
+    upper_bound = dolfinx.fem.Function(Vh, name="upper_bound")
     lower_bound.interpolate(psi)
     upper_bound.x.array[:] = np.inf
 
@@ -132,7 +132,7 @@ def galahad(
     x_out, _ = trb.solve(
         n, H_ne, x, problem.objective, problem.gradient, problem.pure_hessian
     )
-    return x_out
+    return x_out, trb.information()["iter"]
 
 
 class ObstacleProblem:

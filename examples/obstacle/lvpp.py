@@ -23,7 +23,7 @@ from dolfinx.nls.petsc import NewtonSolver
 from mpi4py import MPI
 from petsc4py import PETSc
 
-from ufl import conditional, dx, exp, grad, inner, lt
+from ufl import conditional, Measure, exp, grad, inner, lt
 
 
 def rank_print(string: str, comm: MPI.Comm, rank: int = 0):
@@ -59,7 +59,7 @@ def solve_problem(
     
     """
 
-        # Create mesh
+    # Create mesh
     with io.XDMFFile(MPI.COMM_WORLD, filename, "r") as xdmf:
         msh = xdmf.read_mesh(name="mesh")
 
@@ -103,13 +103,16 @@ def solve_problem(
         cond_false[true_indices] = cond_true[true_indices]
         return cond_false
 
+    quadrature_degree= 6
+    Qe = basix.ufl.quadrature_element(msh.topology.cell_name(), degree=quadrature_degree)
+    Vq = fem.functionspace(msh, Qe)
     # Lower bound for the obstacle
-    V0, _ = V.sub(0).collapse()
-    phi = fem.Function(V0)
+    phi = fem.Function(Vq)
     phi.interpolate(phi_set)
 
     # Define non-linear residual
     (v, w) = ufl.TestFunctions(V)
+    dx = Measure("dx", domain=msh, metadata={"quadrature_degree": quadrature_degree})
     F = (
         alpha * inner(grad(u), grad(v)) * dx
         + psi * v * dx
@@ -129,7 +132,7 @@ def solve_problem(
     newton_solver = NewtonSolver(
         comm=msh.comm, problem=problem)
     newton_solver.convergence_criterion = "incremental"
-    #newton_solver.max_it = 50
+    newton_solver.max_it = 100
     ksp = newton_solver.krylov_solver
     petsc_options={"ksp_type": "preonly", "pc_type": "lu", "pc_factor_mat_solver_type": "mumps",
                                                                     "ksp_error_if_not_converged":True,
@@ -165,7 +168,7 @@ def solve_problem(
     sol_k.x.array[:] = sol.x.array[:]
     alpha_k = 1
     step_size_rule = alpha_scheme
-    C = 1.0
+    C = 0.1
     r = 1.5
     q = 1.5
     
@@ -230,7 +233,7 @@ def solve_problem(
             break
 
         # Reset Newton solver options
-        newton_solver.atol = 1e-3
+        newton_solver.atol = 1e-4
         newton_solver.rtol = tol_Newton * 1e-4
 
         # Update sol_k with sol_new
@@ -266,36 +269,39 @@ def solve_problem(
         df.to_csv(output_dir / filename, index=False)
         rank_print(df, msh.comm)
 
-    #V_latent, latent_to_mixed = V.sub(1).collapse()
-    u_out = fem.Function(V_primal)
-    u_out.x.array[:] = sol.x.array[primal_to_mixed]
+    if k == maximum_number_of_outer_loop_iterations - 1:
+        rank_print("Maximum number of outer loop iterations reached", msh.comm)
+    return sol, k
+    # #V_latent, latent_to_mixed = V.sub(1).collapse()
+    # u_out = fem.Function(V_primal)
+    # u_out.x.array[:] = sol.x.array[primal_to_mixed]
    
-    # Export primal solution variable
-    # Use VTX to capture high-order dofs
-    with io.VTXWriter(msh.comm, output_dir / "u.bp", [u_out]) as vtx:
-        vtx.write(0.0)
+    # # Export primal solution variable
+    # # Use VTX to capture high-order dofs
+    # with io.VTXWriter(msh.comm, output_dir / "u.bp", [u_out]) as vtx:
+    #     vtx.write(0.0)
 
-    # Export interpolant of exact solution u
-    V_alt = fem.functionspace(msh, ("Lagrange", polynomial_order))
-    q = fem.Function(V_alt)
+    # # Export interpolant of exact solution u
+    # V_alt = fem.functionspace(msh, ("Lagrange", polynomial_order))
+    # q = fem.Function(V_alt)
 
-    # Export interpolant of Lagrange multiplier λ
-    W_out = fem.functionspace(msh, ("DG", max(1, polynomial_order - 1)))
-    q = fem.Function(W_out)
+    # # Export interpolant of Lagrange multiplier λ
+    # W_out = fem.functionspace(msh, ("DG", max(1, polynomial_order - 1)))
+    # q = fem.Function(W_out)
 
-    # Export latent solution variable
-    q = fem.Function(W_out)
-    expr = fem.Expression(sol.sub(1), W_out.element.interpolation_points())
-    q.interpolate(expr)
-    with io.VTXWriter(msh.comm, output_dir / "psi.bp", [q]) as vtx:
-        vtx.write(0.0)
+    # # Export latent solution variable
+    # q = fem.Function(W_out)
+    # expr = fem.Expression(sol.sub(1), W_out.element.interpolation_points())
+    # q.interpolate(expr)
+    # with io.VTXWriter(msh.comm, output_dir / "psi.bp", [q]) as vtx:
+    #     vtx.write(0.0)
 
-    # Export feasible discrete solution
-    exp_psi = exp(sol.sub(1)) - phi
-    expr = fem.Expression(exp_psi, W_out.element.interpolation_points())
-    q.interpolate(expr)
-    with io.VTXWriter(msh.comm, output_dir / "tilde_u.bp", [q]) as vtx:
-        vtx.write(0.0)
+    # # Export feasible discrete solution
+    # exp_psi = exp(sol.sub(1)) - phi
+    # expr = fem.Expression(exp_psi, W_out.element.interpolation_points())
+    # q.interpolate(expr)
+    # with io.VTXWriter(msh.comm, output_dir / "tilde_u.bp", [q]) as vtx:
+    #     vtx.write(0.0)
 
 
 # -------------------------------------------------------
@@ -348,7 +354,7 @@ if __name__ == "__main__":
         help="Tolerance for exiting Newton iteration",
     )
     args = parser.parse_args()
-    solve_prolem(
+    solve_problem(
         args.filename,
         args.polynomial_order,
         args.maximum_number_of_outer_loop_iterations,

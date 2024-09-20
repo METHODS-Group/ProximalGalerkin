@@ -66,5 +66,7 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
 ARG CYIPOPT_VERSION=1.4.1
 RUN python3 -m pip install --no-cache git+https://github.com/mechmotum/cyipopt.git@v${CYIPOPT_VERSION}
 
+# Install scipy
+RUN python3 -m pip install scipy
 
 # WORKDIR /root

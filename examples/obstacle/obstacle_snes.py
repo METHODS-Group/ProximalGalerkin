@@ -12,20 +12,20 @@ import dolfinx.fem.petsc
 import argparse
 import ufl
 import typing
+from pathlib import Path
 
 parser = argparse.ArgumentParser(
     description="Solve the obstacle problem on a unit square.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
 parser.add_argument(
-    "--N",
-    "-N",
-    dest="N",
-    type=int,
-    default=10,
-    help="Number of elements in each direction",
-)
-
+        "--path",
+        "-P",
+        dest="infile",
+        type=Path,
+        required=True,
+        help="Path to infile",
+    )
 
 class SNESProblem:
     def __init__(
@@ -93,20 +93,37 @@ class SNESProblem:
 
 
 def solve_problem(
-    N: int,
+    filename: Path,
     snes_options: typing.Optional[dict] = None,
     petsc_options: typing.Optional[dict] = None,
 ):
     snes_options = {} if snes_options is None else snes_options
     petsc_options = {} if petsc_options is None else petsc_options
 
-    mesh = dolfinx.mesh.create_rectangle(
-        MPI.COMM_WORLD,  [[0,0],[1,1]], [N, N],dolfinx.cpp.mesh.CellType.triangle
-    )
+    with dolfinx.io.XDMFFile(MPI.COMM_WORLD, filename, "r") as xdmf:
+        mesh = xdmf.read_mesh(name="mesh")
+
+
+    def phi_set(x):
+        r = np.sqrt(x[0] ** 2 + x[1] ** 2)
+        r0 = 0.5
+        beta =  0.9
+        b = r0*beta
+        tmp = np.sqrt(r0**2 - b**2)
+        B = tmp + b * b / tmp
+        C = -b / tmp
+        cond_true = B + r * C
+        cond_false = np.sqrt(r0 ** 2 - r ** 2)
+        true_indices = np.flatnonzero(r > b)
+        cond_false[true_indices] = cond_true[true_indices]
+        return cond_false
+
+    # Lower bound for the obstacle
+    V0, _ = V.sub(0).collapse()
+    phi = fem.Function(V0)
+    phi.interpolate(phi_set)
+
     x = ufl.SpatialCoordinate(mesh)
-    #
-    v_hat = ufl.sin(3*ufl.pi*x[0])*ufl.sin(3*ufl.pi*x[1])
-    f = ufl.div(ufl.grad(v_hat))
 
     V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
     uh = dolfinx.fem.Function(V)
