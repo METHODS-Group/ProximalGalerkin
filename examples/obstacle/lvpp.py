@@ -47,22 +47,11 @@ def allreduce_scalar(form: fem.Form, op: MPI.Op = MPI.SUM) -> np.floating:
     return comm.allreduce(fem.assemble_scalar(form), op=op)
 
 
-
-def precondtioner(V, f)->fem.Function:
-    u = ufl.TrialFunction(V)
-    v = ufl.TestFunction(V)
-    a = ufl.inner(ufl.grad(u),ufl.grad(v))*ufl.dx
-    L = ufl.inner(f, v)*ufl.dx
-    exterior_facets = mesh.exterior_facet_indices(V.mesh.topology)
-    boundary_dofs = fem.locate_dofs_topological(V, V.mesh.topology.dim - 1, exterior_facets)
-    bcs = [fem.dirichletbc(fem.Function(V), boundary_dofs)]
-    problem = fem.petsc.LinearProblem(a, L, bcs)
-    return problem.solve()
-
 def solve_problem(
     filename: Path,
     polynomial_order: int,
     maximum_number_of_outer_loop_iterations: int,
+    alpha_scheme: str,
     alpha_max: float,
     tol_exit: float,
 ):
@@ -76,10 +65,6 @@ def solve_problem(
 
     # Define FE subspaces
     P = basix.ufl.element("Lagrange", msh.basix_cell(), polynomial_order)
-    # B = basix.ufl.element("Bubble", msh.basix_cell(), polynomial_order + 2)
-    # Pm1 = basix.ufl.element("Lagrange",msh.basix_cell(),polynomial_order-1, discontinuous=True )
-    # mixed_element= basix.ufl.mixed_element([basix.ufl.enriched_element(
-    # [P, B]), Pm1])
     mixed_element = basix.ufl.mixed_element([P, P])
     V = fem.functionspace(msh, mixed_element)
 
@@ -150,7 +135,6 @@ def solve_problem(
                                                                     "ksp_error_if_not_converged":True,
                                                                      "ksp_monitor":None,
                                                                       }
-    #petsc_options = {}
     opts = PETSc.Options()  # type: ignore
     option_prefix = ksp.getOptionsPrefix()
     opts.prefixPush(option_prefix)
@@ -180,7 +164,7 @@ def solve_problem(
     sol.x.array[:] = 0.0
     sol_k.x.array[:] = sol.x.array[:]
     alpha_k = 1
-    step_size_rule = "constant" # "double_exponential"
+    step_size_rule = alpha_scheme
     C = 1.0
     r = 1.5
     q = 1.5
@@ -338,6 +322,7 @@ if __name__ == "__main__":
         choices=[1, 2],
         help="Polynomial order of primal space",
     )
+    parser.add_argument("--alpha-scheme", dest="alpha_scheme", type=str, default="constant", choices=["constant", "double_exponential", "geometric"], help="Step size rule")
     parser.add_argument(
         "--max-iter",
         "-i",
@@ -363,10 +348,11 @@ if __name__ == "__main__":
         help="Tolerance for exiting Newton iteration",
     )
     args = parser.parse_args()
-    solve_problem(
+    solve_prolem(
         args.filename,
         args.polynomial_order,
         args.maximum_number_of_outer_loop_iterations,
+        args.alpha_scheme,
         args.alpha_max,
         args.tol_exit,
     )
