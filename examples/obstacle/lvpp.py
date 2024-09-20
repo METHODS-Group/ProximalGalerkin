@@ -199,7 +199,7 @@ def solve_problem(
         # Solve problem
         log.set_log_level(log.LogLevel.INFO)
         (n, converged) = newton_solver.solve(sol)
-        log.set_log_level(log.LogLevel.WARNING)
+        #log.set_log_level(log.LogLevel.WARNING)
         rank_print(f"Newton steps: {n}   Converged: {converged}", msh.comm)
 
         # Check outer loop convergence
