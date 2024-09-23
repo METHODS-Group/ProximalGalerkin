@@ -38,7 +38,6 @@ if __name__ == "__main__":
     problem = setup_problem(args.infile)
     S_, M_, f_, bounds_ = setup_problem(args.infile)
 
-
     bounds = tuple(b.x.array for b in bounds_)
 
     problem = ObstacleProblem(S_.copy(), M_.copy(), f_.x.array)

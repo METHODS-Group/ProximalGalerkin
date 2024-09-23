@@ -3,12 +3,10 @@
 
 import argparse
 import typing
-from enum import Enum
 from pathlib import Path
 
 from mpi4py import MPI
-from petsc4py import PETSc
-
+from lvpp import AlphaScheme, NewtonSolver
 import basix.ufl
 import dolfinx
 import dolfinx.fem.petsc
@@ -133,160 +131,6 @@ load_mesh.add_argument(
     "--displacement-tag", dest="dt", type=int, default=1, help="Tag of displacement surface"
 )
 dst = dolfinx.default_scalar_type
-
-
-class AlphaScheme(Enum):
-    constant = 1  # Constant alpha (alpha_0)
-    linear = 2  # Linearly increasing alpha (alpha_0 + alpha_c * i) where i is the iteration number
-    doubling = 3  # Doubling alpha (alpha_0 * 2^i) where i is the iteration number
-
-    @classmethod
-    def from_string(cls, method: str):
-        if method == "constant":
-            return AlphaScheme.constant
-        elif method == "linear":
-            return AlphaScheme.linear
-        elif method == "doubling":
-            return AlphaScheme.doubling
-        else:
-            raise ValueError(f"Unknown alpha scheme {method}")
-
-
-class NewtonSolver:
-    max_iterations: int
-    bcs: list[dolfinx.fem.DirichletBC]
-    A: PETSc.Mat
-    b: PETSc.Vec
-    J: dolfinx.fem.Form
-    b: dolfinx.fem.Form
-    dx: PETSc.Vec
-    error_on_nonconvergence: bool
-
-    def __init__(
-        self,
-        F: list[dolfinx.fem.form],
-        J: list[list[dolfinx.fem.form]],
-        w: list[dolfinx.fem.Function],
-        bcs: list[dolfinx.fem.DirichletBC] | None = None,
-        max_iterations: int = 5,
-        petsc_options: dict[str, str | float | int | None] = None,
-        error_on_nonconvergence: bool = True,
-    ):
-        self.max_iterations = max_iterations
-        self.bcs = [] if bcs is None else bcs
-        self.b = dolfinx.fem.petsc.create_vector_block(F)
-        self.F = F
-        self.J = J
-        self.A = dolfinx.fem.petsc.create_matrix_block(J)
-        self.dx = dolfinx.fem.petsc.create_vector_block(F)
-        self.w = w
-        self.x = dolfinx.fem.petsc.create_vector_block(F)
-        self.norm_array = dolfinx.fem.Function(w[0].function_space)
-        self.error_on_nonconvergence = error_on_nonconvergence
-        # Set PETSc options
-        opts = PETSc.Options()
-        if petsc_options is not None:
-            for k, v in petsc_options.items():
-                opts[k] = v
-
-        # Define KSP solver
-        self._solver = PETSc.KSP().create(self.b.getComm().tompi4py())
-        self._solver.setOperators(self.A)
-        self._solver.setFromOptions()
-
-        # Set matrix and vector PETSc options
-        self.A.setFromOptions()
-        self.b.setFromOptions()
-
-    def _update_solution(self, beta):
-        offset_start = 0
-        for s in self.w:
-            num_sub_dofs = (
-                s.function_space.dofmap.index_map.size_local * s.function_space.dofmap.index_map_bs
-            )
-            s.x.array[:num_sub_dofs] -= (
-                beta * self.dx.array_r[offset_start : offset_start + num_sub_dofs]
-            )
-            s.x.scatter_forward()
-            offset_start += num_sub_dofs
-
-    def solve(self, tol=1e-6, beta=1.0):
-        i = 0
-        tol_ = tol
-        while i < self.max_iterations:
-            if i < self.max_iterations // 2:
-                tol = 10 * tol_
-            else:
-                tol = tol_
-            # Assemble F(u_{i-1}) - J(u_D - u_{i-1}) and set du|_bc= u_D - u_{i-1}
-            with self.b.localForm() as b_loc:
-                b_loc.set(0)
-            dolfinx.fem.petsc.assemble_vector_block(
-                self.b, self.F, self.J, bcs=self.bcs, x0=self.x, scale=-1.0
-            )
-            self.b.ghostUpdate(PETSc.InsertMode.INSERT_VALUES, PETSc.ScatterMode.FORWARD)
-
-            # Assemble Jacobian
-            self.A.zeroEntries()
-            dolfinx.fem.petsc.assemble_matrix_block(self.A, self.J, bcs=self.bcs)
-            self.A.assemble()
-            with self.dx.localForm() as dx_loc:
-                dx_loc.set(0)
-            self._solver.solve(self.b, self.dx)
-            self.dx.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-            self._update_solution(beta)
-
-            if self.error_on_nonconvergence:
-                assert (
-                    self._solver.getConvergedReason() > 0
-                ), "Linear solver did not converge, received reason {}".format(
-                    self._solver.getConvergedReason()
-                )
-            else:
-                converged = self._solver.getConvergedReason()
-                import warnings
-
-                if converged <= 0:
-                    warnings.warn("Linear solver did not converge, exiting", RuntimeWarning)
-                    return 0
-            # Compute norm of primal space diff
-            dolfinx.cpp.la.petsc.scatter_local_vectors(
-                self.x,
-                [si.x.petsc_vec.array_r for si in self.w],
-                [
-                    (
-                        si.function_space.dofmap.index_map,
-                        si.function_space.dofmap.index_map_bs,
-                    )
-                    for si in self.w
-                ],
-            )
-
-            self.x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-
-            local_du, _ = dolfinx.cpp.la.petsc.get_local_vectors(
-                self.dx,
-                [
-                    (
-                        si.function_space.dofmap.index_map,
-                        si.function_space.dofmap.index_map_bs,
-                    )
-                    for si in self.w
-                ],
-            )
-
-            self.norm_array.x.array[:] = local_du
-            self.norm_array.x.petsc_vec.ghostUpdate(
-                PETSc.InsertMode.INSERT_VALUES, PETSc.ScatterMode.FORWARD
-            )
-            self.norm_array.x.petsc_vec.normBegin(1)
-            correction_norm = self.norm_array.x.petsc_vec.normEnd(1)
-
-            print(f"Iteration {i}: Correction norm {correction_norm}")
-            if correction_norm < tol:
-                break
-            i += 1
-        return 1
 
 
 def epsilon(w):

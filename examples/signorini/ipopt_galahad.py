@@ -33,14 +33,23 @@ problem_params = parser.add_argument_group("Problem parameters")
 problem_params.add_argument("--E", dest="E", type=float, default=2.0e5, help="Young's modulus")
 problem_params.add_argument("--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio")
 problem_params.add_argument("-R", dest="R", type=float, default=1.0, help="Radius of the half disk")
-problem_params.add_argument("--cy", dest="cy", type=float, default=1.2, help="Center of the half disk")
+problem_params.add_argument(
+    "--cy", dest="cy", type=float, default=1.2, help="Center of the half disk"
+)
 problem_params.add_argument(
     "-g", type=float, dest="g", default=0.3, help="Amount of forced displacement in y direction"
 )
-problem_params.add_argument("-o", "--order", type=int, default=1,
-                            help="Order of finite element used to represent the geometry")
-problem_params.add_argument("-r", "--refinement-level", type=int, required=True,
-                            help="Refinement level of the mesh")
+problem_params.add_argument(
+    "-o",
+    "--order",
+    type=int,
+    default=1,
+    help="Order of finite element used to represent the geometry",
+)
+problem_params.add_argument(
+    "-r", "--refinement-level", type=int, required=True, help="Refinement level of the mesh"
+)
+
 
 def setup_problem(
     R: float,
@@ -51,7 +60,6 @@ def setup_problem(
     r_lvl: int,
     order: int,
     f: tuple[float, float] = (0.0, 0.0),
-
 ):
     """
     Generate the stiffness matrix, right hand side load vector
@@ -163,8 +171,15 @@ class SignoriniProblem:
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    S, f, bounds = setup_problem(R=args.R, cy=args.cy, g=args.g, E=args.E, nu=args.nu,
-                                 order=args.order, r_lvl=args.refinement_level)
+    S, f, bounds = setup_problem(
+        R=args.R,
+        cy=args.cy,
+        g=args.g,
+        E=args.E,
+        nu=args.nu,
+        order=args.order,
+        r_lvl=args.refinement_level,
+    )
     Vh = f.function_space
 
     # Restrict all matrices and vectors to interior dofs

@@ -34,8 +34,10 @@ parser.add_argument("--tol", type=float, default=1e-6, help="Convergence toleran
 parser.add_argument(
     "--hessian", dest="use_hessian", action="store_true", default=False, help="Use exact hessian"
 )
-parser.add_argument("--output", "-o", dest="outdir", type=Path, default=Path("results"),
-                    help="Output directory")
+parser.add_argument(
+    "--output", "-o", dest="outdir", type=Path, default=Path("results"), help="Output directory"
+)
+
 
 def setup_problem(
     filename: Path,
@@ -86,6 +88,7 @@ def setup_problem(
 
     return S.to_scipy(), M.to_scipy(), f, (lower_bound, upper_bound)
 
+
 class ObstacleProblem:
     def __init__(self, S, M, f):
         S.eliminate_zeros()
@@ -115,6 +118,7 @@ class ObstacleProblem:
     def hessianstructure(self):
         return self._sparsity
 
+
 if __name__ == "__main__":
     args = parser.parse_args()
 
@@ -137,7 +141,7 @@ if __name__ == "__main__":
             tol=args.tol,
         )
         x_g.x.array[:] = x_galahad
-        with dolfinx.io.VTXWriter(V.mesh.comm, outdir/"galahad_obstacle.bp", [x_g]) as bp:
+        with dolfinx.io.VTXWriter(V.mesh.comm, outdir / "galahad_obstacle.bp", [x_g]) as bp:
             bp.write(0.0)
 
     if args.ipopt:
@@ -161,5 +165,5 @@ if __name__ == "__main__":
         V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree))
         x_i_out = dolfinx.fem.Function(V_out, name="ipopt")
         x_i_out.interpolate(x_i)
-        with dolfinx.io.VTXWriter(mesh.comm, outdir/"ipopt_obstacle.bp", [x_i_out]) as bp:
+        with dolfinx.io.VTXWriter(mesh.comm, outdir / "ipopt_obstacle.bp", [x_i_out]) as bp:
             bp.write(0.0)

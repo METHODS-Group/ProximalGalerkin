@@ -31,9 +31,9 @@ def generate_half_disk(
         dirichlet_boundary = []
         for bnd in boundary:
             mass = gmsh.model.occ.getMass(bnd[0], bnd[1])
-            if np.isclose(mass, np.pi*R):
+            if np.isclose(mass, np.pi * R):
                 contact_boundary.append(bnd[1])
-            elif np.isclose(mass, 2*R):
+            elif np.isclose(mass, 2 * R):
                 dirichlet_boundary.append(bnd[1])
             else:
                 raise RuntimeError("Unknown boundary")
@@ -45,12 +45,11 @@ def generate_half_disk(
         threshold = gmsh.model.mesh.field.add("Threshold")
         gmsh.model.mesh.field.setNumber(threshold, "IField", distance_field)
         gmsh.model.mesh.field.setNumber(threshold, "LcMin", res)
-        gmsh.model.mesh.field.setNumber(threshold, "LcMax", 20*res)
+        gmsh.model.mesh.field.setNumber(threshold, "LcMax", 20 * res)
         gmsh.model.mesh.field.setNumber(threshold, "DistMin", 0.075 * R)
         gmsh.model.mesh.field.setNumber(threshold, "DistMax", 0.5 * R)
 
         gmsh.model.mesh.field.setAsBackgroundMesh(threshold)
-
 
         gmsh.model.mesh.generate(2)
         gmsh.model.mesh.setOrder(order)
