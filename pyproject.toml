@@ -1,0 +1,69 @@
+[build-system] # Require setuptool version due to https://github.com/pypa/setuptools/issues/2938
+requires = ["setuptools>=61.0.0", "wheel"]
+
+[project]
+name = "lvpp"
+version = "0.8.1.post0"
+description = "Tools for the Latent Variable Proximal Point method"
+authors = [{ name = "Jørgen S. Dokken", email = "dokken@simula.no" }]
+license = { file = "LICENSE" }
+readme = "README.md"
+dependencies = ["fenics-dolfinx>0.8.0"]
+
+[project.optional-dependencies]
+dev = ["pdbpp", "ipython", "mypy", "ruff"]
+docs = []
+all = ["lvpp[dev]"]
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["tests"]
+
+[tool.mypy]
+ignore_missing_imports = true
+# Folders to exclude
+exclude = ["docs/", "build/"]
+# Folder to check with mypy
+files = ["src", "tests"]
+
+[tool.ruff]
+src = ["src", "tests", "docs"]
+line-length = 100
+indent-width = 4
+
+[tool.ruff.lint]
+select = [
+    # Pyflakes
+    "F",
+    # Pycodestyle
+    "E",
+    "W",
+    # isort
+    "I001",
+]
+
+
+[tool.ruff.lint.isort]
+known-first-party = ["lvpp"]
+known-third-party = [
+    "basix",
+    "dolfinx",
+    "ffcx",
+    "ufl",
+    "gmsh",
+    "numpy",
+    "cyipopt",
+    "galahad",
+    "pandas",
+]
+section-order = [
+    "future",
+    "standard-library",
+    "mpi",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
+[tool.ruff.lint.isort.sections]
+"mpi" = ["mpi4py", "petsc4py"]
