@@ -20,26 +20,27 @@ parser = argparse.ArgumentParser(
     description="Solve the obstacle problem on a unit square using Galahad.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
-parser.add_argument("-R", dest="R", type=float, default=1.0, help="Radius of the half disk")
-parser.add_argument("--cy", dest="cy", type=float, default=1.2, help="Center of the half disk")
-parser.add_argument(
-    "-g", type=float, dest="g", default=0.3, help="Amount of forced displacement in y direction"
-)
-parser.add_argument("--ipopt", action="store_true", default=False, help="Use Ipopt")
-parser.add_argument("--galahad", action="store_true", default=False, help="Use Galahad")
-parser.add_argument("--max-iter", type=int, default=200, help="Maximum number of iterations")
-parser.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
-parser.add_argument(
+parser.add_argument("--outdir", type=Path, default=Path("results"), help="Output directory")
+solver_params = parser.add_argument_group("Solver parameters")
+solver_params.add_argument("--ipopt", action="store_true", default=False, help="Use Ipopt")
+solver_params.add_argument("--galahad", action="store_true", default=False, help="Use Galahad")
+solver_params.add_argument("--max-iter", type=int, default=200, help="Maximum number of iterations")
+solver_params.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
+solver_params.add_argument(
     "--hessian", dest="use_hessian", action="store_true", default=False, help="Use exact hessian"
 )
-physical_parameters = parser.add_argument_group("Physical parameters")
-physical_parameters.add_argument("--E", dest="E", type=float, default=2.0e5, help="Young's modulus")
-physical_parameters.add_argument("--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio")
-
-
-def epsilon(u):
-    return ufl.sym(ufl.grad(u))
-
+problem_params = parser.add_argument_group("Problem parameters")
+problem_params.add_argument("--E", dest="E", type=float, default=2.0e5, help="Young's modulus")
+problem_params.add_argument("--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio")
+problem_params.add_argument("-R", dest="R", type=float, default=1.0, help="Radius of the half disk")
+problem_params.add_argument("--cy", dest="cy", type=float, default=1.2, help="Center of the half disk")
+problem_params.add_argument(
+    "-g", type=float, dest="g", default=0.3, help="Amount of forced displacement in y direction"
+)
+problem_params.add_argument("-o", "--order", type=int, default=1,
+                            help="Order of finite element used to represent the geometry")
+problem_params.add_argument("-r", "--refinement-level", type=int, required=True,
+                            help="Refinement level of the mesh")
 
 def setup_problem(
     R: float,
@@ -47,9 +48,10 @@ def setup_problem(
     g: float,
     E: float,
     nu: float,
+    r_lvl: int,
+    order: int,
     f: tuple[float, float] = (0.0, 0.0),
-    r_lvl: int = 0,
-    order: int = 1,
+
 ):
     """
     Generate the stiffness matrix, right hand side load vector
@@ -69,10 +71,13 @@ def setup_problem(
     """
 
     # Generate the mesh and create function space
-    mesh = generate_half_disk(cy, R, 0.1, refinement_level=r_lvl, order=1)
+    mesh = generate_half_disk(cy, R, 0.02, refinement_level=r_lvl, order=order)
     Vh = dolfinx.fem.functionspace(mesh, ("Lagrange", 1, (mesh.geometry.dim,)))
 
     # Create variational form
+    def epsilon(u):
+        return ufl.sym(ufl.grad(u))
+
     u = ufl.TrialFunction(Vh)
     v = ufl.TestFunction(Vh)
     mu_s = E / (2.0 * (1.0 + nu))
@@ -134,7 +139,7 @@ class SignoriniProblem:
         self._f = f
         tri_S = scipy.sparse.tril(self._S)
         self._sparsity = tri_S.nonzero()
-        self._H_data = np.copy(tri_S.todense())[self._sparsity[0], self._sparsity[1]]
+        self._H_data = tri_S.data
 
     def objective(self, x: npt.NDArray[np.float64]) -> np.float64:
         """Returns the scalar value of the objective given x."""
@@ -158,7 +163,8 @@ class SignoriniProblem:
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    S, f, bounds = setup_problem(R=args.R, cy=args.cy, g=args.g, E=args.E, nu=args.nu)
+    S, f, bounds = setup_problem(R=args.R, cy=args.cy, g=args.g, E=args.E, nu=args.nu,
+                                 order=args.order, r_lvl=args.refinement_level)
     Vh = f.function_space
 
     # Restrict all matrices and vectors to interior dofs
@@ -169,7 +175,7 @@ if __name__ == "__main__":
 
     lower_bound = bounds[0].x.array
     upper_bound = bounds[1].x.array
-    outdir = Path("results")
+    outdir = args.outdir
     if args.galahad:
         x_g = dolfinx.fem.Function(Vh, name="galahad")
         x_g.x.array[:] = 0

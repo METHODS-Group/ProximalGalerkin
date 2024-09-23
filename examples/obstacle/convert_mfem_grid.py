@@ -1,18 +1,18 @@
-import meshio
-import basix.ufl
-from mpi4py import MPI
-import dolfinx
 import argparse
 from pathlib import Path
+
+from mpi4py import MPI
+
+import basix.ufl
+import dolfinx
+import meshio
 import numpy as np
 
 parser = argparse.ArgumentParser(description="Convert a MFEM mesh to a FEniCS mesh.")
-parser.add_argument("-i", dest="intput", type=Path, help="Path to MFEM mesh (to vtu file)", required=True)
+parser.add_argument(
+    "-i", dest="intput", type=Path, help="Path to MFEM mesh (to vtu file)", required=True
+)
 parser.add_argument("-o", dest="output", type=Path, help="Path to FEniCS mesh", required=True)
-
-
-
-
 
 
 def convert_mesh(in_mesh: Path, out_mesh: Path):
@@ -32,9 +32,6 @@ def convert_mesh(in_mesh: Path, out_mesh: Path):
 
 
 if __name__ == "__main__":
-
-
     args = parser.parse_args()
-
 
     convert_mesh(args.intput, args.output)

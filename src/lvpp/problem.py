@@ -30,6 +30,7 @@ class OptimizationProblem(typing.Protocol):
 
 try:
     from galahad import trb
+
     def galahad_solver(
         problem: OptimizationProblem,
         x_init: npt.NDArray[np.float64],
@@ -38,7 +39,7 @@ try:
         use_hessian: bool = True,
         max_iter: int = 100,
         tol: float = 1e-6,
-    )->tuple[npt.NDArray[np.float64], int]:
+    ) -> tuple[npt.NDArray[np.float64], int]:
         """A wrapper around Galahad to solve optimization problems with constrained primal variables
         Args:
             problem: An :class:`OptimizationProblem` instance.
@@ -88,15 +89,17 @@ try:
 
 except ModuleNotFoundError:
 
-    def galahad_solver(problem: OptimizationProblem,
+    def galahad_solver(
+        problem: OptimizationProblem,
         x_init: npt.NDArray[np.float64],
         bounds: tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
         log_level: int = 1,
         use_hessian: bool = True,
         max_iter: int = 100,
-        tol: float = 1e-6)->tuple[npt.NDArray[np.float64], int]:
-
+        tol: float = 1e-6,
+    ) -> tuple[npt.NDArray[np.float64], int]:
         raise ModuleNotFoundError("Galahad has not been installed")
+
 
 try:
     import cyipopt
@@ -149,11 +152,13 @@ try:
 
 except ModuleNotFoundError:
 
-    def ipopt_solver(problem: OptimizationProblem,
+    def ipopt_solver(
+        problem: OptimizationProblem,
         x_init: npt.NDArray[np.float64],
         bounds: tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
         log_level: int = 5,
         max_iter: int = 100,
         tol: float = 1e-6,
-        activate_hessian: bool = True)->npt.NDArray[np.float64]:
+        activate_hessian: bool = True,
+    ) -> npt.NDArray[np.float64]:
         raise ModuleNotFoundError("cyipopt has not been installed")

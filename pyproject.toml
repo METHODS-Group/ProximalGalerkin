@@ -24,7 +24,7 @@ ignore_missing_imports = true
 # Folders to exclude
 exclude = ["docs/", "build/"]
 # Folder to check with mypy
-files = ["src", "tests"]
+files = ["src", "examples"]
 
 [tool.ruff]
 src = ["src", "tests", "docs"]

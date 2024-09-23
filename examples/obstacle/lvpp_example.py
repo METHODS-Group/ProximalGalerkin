@@ -1,29 +1,30 @@
 """
 
-    Obstacle problem based of example 3 (P3) in: https://doi.org/10.1137/040611598
+Obstacle problem based of example 3 (P3) in: https://doi.org/10.1137/040611598
 
-    FEniCSx code solve this problem is based of the paper [1]:
+FEniCSx code solve this problem is based of the paper [1]:
 
-    SPXD License: MIT License
+SPXD License: MIT License
 
-    [1] Keith, B. and Surowiec, T. (2023) Proximal Galerkin: A structure-
-       preserving finite element method for pointwise bound constraints.
-       arXiv:2307.12444 [math.NA]
+[1] Keith, B. and Surowiec, T. (2023) Proximal Galerkin: A structure-
+   preserving finite element method for pointwise bound constraints.
+   arXiv:2307.12444 [math.NA]
 """
 
 import argparse
 from pathlib import Path
-import pandas as pd
-import numpy as np
-import ufl
-import basix
-from dolfinx import fem, io, log, mesh, default_scalar_type
-from dolfinx.fem.petsc import NonlinearProblem
-from dolfinx.nls.petsc import NewtonSolver
+
 from mpi4py import MPI
 from petsc4py import PETSc
 
-from ufl import conditional, Measure, exp, grad, inner, lt
+import basix
+import numpy as np
+import pandas as pd
+import ufl
+from dolfinx import default_scalar_type, fem, io, log, mesh
+from dolfinx.fem.petsc import NonlinearProblem
+from dolfinx.nls.petsc import NewtonSolver
+from ufl import Measure, conditional, exp, grad, inner, lt
 
 
 def rank_print(string: str, comm: MPI.Comm, rank: int = 0):
@@ -55,9 +56,7 @@ def solve_problem(
     alpha_max: float,
     tol_exit: float,
 ):
-    """
-    
-    """
+    """ """
 
     # Create mesh
     with io.XDMFFile(MPI.COMM_WORLD, filename, "r") as xdmf:
@@ -70,13 +69,12 @@ def solve_problem(
 
     # Define functions and parameters
     alpha = fem.Constant(msh, default_scalar_type(1))
-    f = fem.Constant(msh, 0.0)    
+    f = fem.Constant(msh, 0.0)
     # Define BCs
     msh.topology.create_connectivity(msh.topology.dim - 1, msh.topology.dim)
     facets = mesh.exterior_facet_indices(msh.topology)
     V0, _ = V.sub(0).collapse()
-    dofs = fem.locate_dofs_topological(
-        (V.sub(0), V0), entity_dim=1, entities=facets)
+    dofs = fem.locate_dofs_topological((V.sub(0), V0), entity_dim=1, entities=facets)
 
     u_bc = fem.Function(V0)
     u_bc.x.array[:] = 0.0
@@ -92,18 +90,18 @@ def solve_problem(
     def phi_set(x):
         r = np.sqrt(x[0] ** 2 + x[1] ** 2)
         r0 = 0.5
-        beta =  0.9
-        b = r0*beta
+        beta = 0.9
+        b = r0 * beta
         tmp = np.sqrt(r0**2 - b**2)
         B = tmp + b * b / tmp
         C = -b / tmp
         cond_true = B + r * C
-        cond_false = np.sqrt(r0 ** 2 - r ** 2)
+        cond_false = np.sqrt(r0**2 - r**2)
         true_indices = np.flatnonzero(r > b)
         cond_false[true_indices] = cond_true[true_indices]
         return cond_false
 
-    quadrature_degree= 6
+    quadrature_degree = 6
     Qe = basix.ufl.quadrature_element(msh.topology.cell_name(), degree=quadrature_degree)
     Vq = fem.functionspace(msh, Qe)
     # Lower bound for the obstacle
@@ -129,37 +127,34 @@ def solve_problem(
 
     # Setup newton solver
     log.set_log_level(log.LogLevel.WARNING)
-    newton_solver = NewtonSolver(
-        comm=msh.comm, problem=problem)
+    newton_solver = NewtonSolver(comm=msh.comm, problem=problem)
     newton_solver.convergence_criterion = "incremental"
     newton_solver.max_it = 100
     ksp = newton_solver.krylov_solver
-    petsc_options={"ksp_type": "preonly", "pc_type": "lu", "pc_factor_mat_solver_type": "mumps",
-                                                                    "ksp_error_if_not_converged":True,
-                                                                     "ksp_monitor":None,
-                                                                      }
+    petsc_options = {
+        "ksp_type": "preonly",
+        "pc_type": "lu",
+        "pc_factor_mat_solver_type": "mumps",
+        "ksp_error_if_not_converged": True,
+        "ksp_monitor": None,
+    }
     opts = PETSc.Options()  # type: ignore
     option_prefix = ksp.getOptionsPrefix()
     opts.prefixPush(option_prefix)
     for k, v in petsc_options.items():
-       opts[k] = v
+        opts[k] = v
     opts.prefixPop()
     ksp.setFromOptions()
 
     # observables
     energy_form = fem.form(0.5 * inner(grad(u), grad(u)) * dx - f * u * dx)
     complementarity_form = fem.form((psi_k - psi) / alpha * u * dx)
-    feasibility_form = fem.form(conditional(
-        lt(u, 0), -u, fem.Constant(msh, 0.0)) * dx)
+    feasibility_form = fem.form(conditional(lt(u, 0), -u, fem.Constant(msh, 0.0)) * dx)
     dual_feasibility_form = fem.form(
-        conditional(lt(psi_k, psi), (psi - psi_k) /
-                    alpha, fem.Constant(msh, 0.0)) * dx
+        conditional(lt(psi_k, psi), (psi - psi_k) / alpha, fem.Constant(msh, 0.0)) * dx
     )
-    H1increment_form = fem.form(
-        inner(grad(u - u_k), grad(u - u_k)) * dx + (u - u_k) ** 2 * dx
-    )
+    H1increment_form = fem.form(inner(grad(u - u_k), grad(u - u_k)) * dx + (u - u_k) ** 2 * dx)
     L2increment_form = fem.form((exp(psi) - exp(psi_k)) ** 2 * dx)
-
 
     # Proximal point outer loop
     n = 0
@@ -171,7 +166,7 @@ def solve_problem(
     C = 0.1
     r = 1.5
     q = 1.5
-    
+
     energies = []
     complementarities = []
     feasibilities = []
@@ -199,7 +194,7 @@ def solve_problem(
         # Solve problem
         log.set_log_level(log.LogLevel.INFO)
         (n, converged) = newton_solver.solve(sol)
-        #log.set_log_level(log.LogLevel.WARNING)
+        # log.set_log_level(log.LogLevel.WARNING)
         rank_print(f"Newton steps: {n}   Converged: {converged}", msh.comm)
 
         # Check outer loop convergence
@@ -210,12 +205,12 @@ def solve_problem(
         increment = np.sqrt(allreduce_scalar(H1increment_form))
         latent_increment = np.sqrt(allreduce_scalar(L2increment_form))
 
-
         tol_Newton = increment
 
         if increment_k > 0.0:
-            rank_print(f"Increment size: {increment}" +
-                       f"   Ratio: {increment / increment_k}", msh.comm)
+            rank_print(
+                f"Increment size: {increment}" + f"   Ratio: {increment / increment_k}", msh.comm
+            )
         else:
             rank_print(f"Increment size: {increment}", msh.comm)
         rank_print("", msh.comm)
@@ -245,7 +240,6 @@ def solve_problem(
     output_dir = cwd / "output"
     output_dir.mkdir(exist_ok=True)
 
-
     # Create output space for bubble function
     V_primal, primal_to_mixed = V.sub(0).collapse()
 
@@ -261,8 +255,8 @@ def solve_problem(
         df["Step sizes"] = step_sizes
         df["Primal increments"] = primal_increments
         df["Latent increments"] = latent_increments
-        df["Polynomial order"] = np.full(k+1, polynomial_order)
-        df["dofs"] = np.full(k+1, num_primal_dofs)
+        df["Polynomial order"] = np.full(k + 1, polynomial_order)
+        df["dofs"] = np.full(k + 1, num_primal_dofs)
         df["Step size rule"] = [step_size_rule] * (k + 1)
         filename = f"./example_polyorder{polynomial_order}_{num_primal_dofs}.csv"
         print(f"Saving data to: {str(output_dir / filename)}")
@@ -275,7 +269,7 @@ def solve_problem(
     # #V_latent, latent_to_mixed = V.sub(1).collapse()
     # u_out = fem.Function(V_primal)
     # u_out.x.array[:] = sol.x.array[primal_to_mixed]
-   
+
     # # Export primal solution variable
     # # Use VTX to capture high-order dofs
     # with io.VTXWriter(msh.comm, output_dir / "u.bp", [u_out]) as vtx:
@@ -328,7 +322,14 @@ if __name__ == "__main__":
         choices=[1, 2],
         help="Polynomial order of primal space",
     )
-    parser.add_argument("--alpha-scheme", dest="alpha_scheme", type=str, default="constant", choices=["constant", "double_exponential", "geometric"], help="Step size rule")
+    parser.add_argument(
+        "--alpha-scheme",
+        dest="alpha_scheme",
+        type=str,
+        default="constant",
+        choices=["constant", "double_exponential", "geometric"],
+        help="Step size rule",
+    )
     parser.add_argument(
         "--max-iter",
         "-i",

@@ -1,13 +1,16 @@
+from pathlib import Path
+
 from mpi4py import MPI
+
 import dolfinx.io
 import gmsh
-from pathlib import Path
 
 __all__ = ["generate_disk"]
 
-def generate_disk(filename:Path, res:float, order:int=1,refinement_level: int=1):
+
+def generate_disk(filename: Path, res: float, order: int = 1, refinement_level: int = 1):
     """Generate a disk around the origin with radius 1 and resolution `res`.
-    
+
     Args:
         filename: Name of the file to save the mesh to.
         res: Resolution of the mesh.
@@ -28,7 +31,6 @@ def generate_disk(filename:Path, res:float, order:int=1,refinement_level: int=1)
             gmsh.model.mesh.refine()
             gmsh.model.mesh.setOrder(order)
 
-
     gmsh_model_rank = 0
     mesh_comm = MPI.COMM_WORLD
     msh, _, _ = dolfinx.io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=gdim)
@@ -36,6 +38,7 @@ def generate_disk(filename:Path, res:float, order:int=1,refinement_level: int=1)
     out_name = filename.with_stem(f"{filename.stem}_{refinement_level}").with_suffix(".xdmf")
     with dolfinx.io.XDMFFile(mesh_comm, out_name, "w") as xdmf:
         xdmf.write_mesh(msh)
+
 
 if __name__ == "__main__":
     for i in range(4):
