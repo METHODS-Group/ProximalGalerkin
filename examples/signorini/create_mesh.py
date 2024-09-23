@@ -1,20 +1,23 @@
+from pathlib import Path
+
 from mpi4py import MPI
+
 import dolfinx.io.gmshio
 import gmsh
 import numpy as np
-from pathlib import Path
+
 
 def create_half_sphere(
-    filename: str|Path = "sphere.xdmf",
-    model_name: str|None=None,
+    filename: str | Path = "sphere.xdmf",
+    model_name: str | None = None,
     order: int = 2,
-    center: tuple[float,float,float]=(0.,0.,0.5),
-    res:float=0.04,
-    r:float=0.4,
+    center: tuple[float, float, float] = (0.0, 0.0, 0.5),
+    res: float = 0.02,
+    r: float = 0.4,
     comm: MPI.Comm = MPI.COMM_WORLD,
     rank: int = 0,
     sphere_surface: int = 2,
-    flat_surface: int = 1
+    flat_surface: int = 1,
 ):
     """Create a half-sphere 3D sphere at `center` with radius `r` in negative z-direction.
 
@@ -27,7 +30,7 @@ def create_half_sphere(
         comm: MPI communicator
         rank (int, optional): Rank of the process that creates the mesh.
         sphere_surface (int, optional): Tag of the sphere surface.
-        flat_surface (int, optional): Tag of the flat surface.        
+        flat_surface (int, optional): Tag of the flat surface.
     """
     gmsh.initialize()
     model_names = gmsh.model.list()
@@ -35,7 +38,7 @@ def create_half_sphere(
         model_name = "half_sphere"
         assert model_name not in model_names, "GMSH model already exists"
         gmsh.model.add(model_name)
-        gmsh.model.setCurrent(model_name)        
+        gmsh.model.setCurrent(model_name)
 
     angle = 0
     lc_min = res
@@ -43,20 +46,24 @@ def create_half_sphere(
     if comm.rank == rank:
         p0 = gmsh.model.occ.addPoint(center[0], center[1], center[2] - r)
         gmsh.model.occ.addSphere(
-            center[0], center[1], center[2], r, angle1=-np.pi / 2, angle2=-angle)
- 
+            center[0], center[1], center[2], r, angle1=-np.pi / 2, angle2=-angle
+        )
+
         # Synchronize and create physical tags
         gmsh.model.occ.synchronize()
         volumes = gmsh.model.getEntities(3)
 
         sphere_boundary = gmsh.model.getBoundary(volumes, oriented=False, combined=False)
-        for (dim, entity) in sphere_boundary:
-            tag = flat_surface if np.isclose(gmsh.model.occ.getCenterOfMass(dim, entity)[2], center[2]) else sphere_surface 
+        for dim, entity in sphere_boundary:
+            tag = (
+                flat_surface
+                if np.isclose(gmsh.model.occ.getCenterOfMass(dim, entity)[2], center[2])
+                else sphere_surface
+            )
             gmsh.model.addPhysicalGroup(dim, [entity], tag=tag)
 
         p_v = [v_tag[1] for v_tag in volumes]
         gmsh.model.addPhysicalGroup(3, p_v, tag=1)
-
 
         gmsh.model.mesh.field.add("Distance", 1)
         gmsh.model.mesh.field.setNumbers(1, "NodesList", [p0])
@@ -83,4 +90,4 @@ def create_half_sphere(
 
 
 if __name__ == "__main__":
-    create_half_sphere()
+    create_half_sphere(res=0.025)

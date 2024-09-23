@@ -38,7 +38,7 @@ try:
         use_hessian: bool = True,
         max_iter: int = 100,
         tol: float = 1e-6,
-    ):
+    )->tuple[npt.NDArray[np.float64], int]:
         """A wrapper around Galahad to solve optimization problems with constrained primal variables
         Args:
             problem: An :class:`OptimizationProblem` instance.
@@ -67,7 +67,7 @@ try:
         options["subproblem_direct"] = True
         n = len(x_init)
         H_type = "coordinate"
-        H_ne = len(problem.sparsity[0])
+        H_ne = len(problem.hessianstructure()[0])
         H_ptr = None
         # Add Dirichlet bounds 0 here
         trb.load(
@@ -76,8 +76,8 @@ try:
             bounds[1].copy(),
             H_type,
             H_ne,
-            problem.sparsity[0].astype(np.int64),
-            problem.sparsity[1].astype(np.int64),
+            problem.hessianstructure()[0].astype(np.int64),
+            problem.hessianstructure()[1].astype(np.int64),
             H_ptr=H_ptr,
             options=options,
         )
@@ -88,9 +88,15 @@ try:
 
 except ModuleNotFoundError:
 
-    def galahad_solver(*args, **kwargs):
-        raise ModuleNotFoundError("Galahad has not been instsalled")
+    def galahad_solver(problem: OptimizationProblem,
+        x_init: npt.NDArray[np.float64],
+        bounds: tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
+        log_level: int = 1,
+        use_hessian: bool = True,
+        max_iter: int = 100,
+        tol: float = 1e-6)->tuple[npt.NDArray[np.float64], int]:
 
+        raise ModuleNotFoundError("Galahad has not been installed")
 
 try:
     import cyipopt
@@ -143,5 +149,11 @@ try:
 
 except ModuleNotFoundError:
 
-    def ipopt_solver(*args, **kwargs):
+    def ipopt_solver(problem: OptimizationProblem,
+        x_init: npt.NDArray[np.float64],
+        bounds: tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]],
+        log_level: int = 5,
+        max_iter: int = 100,
+        tol: float = 1e-6,
+        activate_hessian: bool = True)->npt.NDArray[np.float64]:
         raise ModuleNotFoundError("cyipopt has not been installed")
