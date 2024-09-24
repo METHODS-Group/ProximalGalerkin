@@ -22,7 +22,9 @@ class _HelpAction(argparse._HelpAction):
 
         # retrieve subparsers from parser
         subparsers_actions = [
-            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+            action
+            for action in parser._actions
+            if isinstance(action, argparse._SubParsersAction)
         ]
         # there will probably only be one subparser_action,
         # but better save than sorry
@@ -45,12 +47,22 @@ desc = (
     + "Uses the Latent Variable Proximal Point algorithm combined with"
     + " a Newton solver at each step in the proximal point algorithm\n"
 )
-parser = argparse.ArgumentParser(description=desc, formatter_class=CustomParser, add_help=False)
-parser.add_argument("--help", "-h", action=_HelpAction, help="show this help message and exit")
-parser.add_argument("--output", "-o", type=Path, default=Path("output"), help="Output directory")
+parser = argparse.ArgumentParser(
+    description=desc, formatter_class=CustomParser, add_help=False
+)
+parser.add_argument(
+    "--help", "-h", action=_HelpAction, help="show this help message and exit"
+)
+parser.add_argument(
+    "--output", "-o", type=Path, default=Path("output"), help="Output directory"
+)
 physical_parameters = parser.add_argument_group("Physical parameters")
-physical_parameters.add_argument("--E", dest="E", type=float, default=2.0e4, help="Young's modulus")
-physical_parameters.add_argument("--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio")
+physical_parameters.add_argument(
+    "--E", dest="E", type=float, default=2.0e4, help="Young's modulus"
+)
+physical_parameters.add_argument(
+    "--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio"
+)
 physical_parameters.add_argument(
     "--disp", type=float, default=-0.2, help="Displacement in the y/z direction (2D/3D)"
 )
@@ -86,7 +98,9 @@ newton_parameters.add_argument(
 )
 
 
-llvp = parser.add_argument_group(title="Options for latent variable Proximal Point algorithm")
+llvp = parser.add_argument_group(
+    title="Options for latent variable Proximal Point algorithm"
+)
 llvp.add_argument(
     "--max-iterations",
     dest="max_iterations",
@@ -110,25 +124,43 @@ alpha_options.add_argument(
     choices=["constant", "linear", "doubling"],
     help="Scheme for updating alpha",
 )
-alpha_options.add_argument("--alpha_0", type=float, default=1.0, help="Initial value of alpha")
+alpha_options.add_argument(
+    "--alpha_0", type=float, default=1.0, help="Initial value of alpha"
+)
 alpha_options.add_argument(
     "--alpha_c", type=float, default=1.0, help="Increment of alpha in linear scheme"
 )
-mesh = parser.add_subparsers(dest="mesh", title="Parser for mesh options", required=True)
-built_in_parser = mesh.add_parser("native", help="Use built-in mesh", formatter_class=CustomParser)
+mesh = parser.add_subparsers(
+    dest="mesh", title="Parser for mesh options", required=True
+)
+built_in_parser = mesh.add_parser(
+    "native", help="Use built-in mesh", formatter_class=CustomParser
+)
 built_in_parser.add_argument(
     "--dim", type=int, default=3, choices=[2, 3], help="Geometrical dimension of mesh"
 )
-built_in_parser.add_argument("--nx", type=int, default=16, help="Number of elements in x-direction")
-built_in_parser.add_argument("--ny", type=int, default=7, help="Number of elements in y-direction")
-built_in_parser.add_argument("--nz", type=int, default=5, help="Number of elements in z-direction")
-load_mesh = mesh.add_parser("file", help="Load mesh from file", formatter_class=CustomParser)
+built_in_parser.add_argument(
+    "--nx", type=int, default=16, help="Number of elements in x-direction"
+)
+built_in_parser.add_argument(
+    "--ny", type=int, default=7, help="Number of elements in y-direction"
+)
+built_in_parser.add_argument(
+    "--nz", type=int, default=5, help="Number of elements in z-direction"
+)
+load_mesh = mesh.add_parser(
+    "file", help="Load mesh from file", formatter_class=CustomParser
+)
 load_mesh.add_argument("--filename", type=Path, help="Filename of mesh to load")
 load_mesh.add_argument(
     "--contact-tag", dest="ct", type=int, default=2, help="Tag of contact surface"
 )
 load_mesh.add_argument(
-    "--displacement-tag", dest="dt", type=int, default=1, help="Tag of displacement surface"
+    "--displacement-tag",
+    dest="dt",
+    type=int,
+    default=1,
+    help="Tag of displacement surface",
 )
 dst = dolfinx.default_scalar_type
 
@@ -192,14 +224,18 @@ def solve_contact_problem(
     contact_facets = np.unique(np.concatenate(all_contact_facets))
 
     fdim = mesh.topology.dim - 1
-    submesh, submesh_to_mesh = dolfinx.mesh.create_submesh(mesh, fdim, contact_facets)[0:2]
+    submesh, submesh_to_mesh = dolfinx.mesh.create_submesh(mesh, fdim, contact_facets)[
+        0:2
+    ]
 
     mu = E / (2.0 * (1.0 + nu))
     lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
 
     # NOTE: If we get facet-bubble spaces in DOLFINx we could use an alternative pair here
     gdim = mesh.geometry.dim
-    element_u = basix.ufl.element("Lagrange", mesh.topology.cell_name(), degree, shape=(gdim,))
+    element_u = basix.ufl.element(
+        "Lagrange", mesh.topology.cell_name(), degree, shape=(gdim,)
+    )
     V = dolfinx.fem.functionspace(mesh, element_u)
     u = dolfinx.fem.Function(V, name="displacement")
     v = ufl.TestFunction(V)
@@ -217,7 +253,6 @@ def solve_contact_problem(
     mesh_to_submesh = np.full(num_facets, -1)
     mesh_to_submesh[submesh_to_mesh] = np.arange(len(submesh_to_mesh))
     entity_maps = {submesh: mesh_to_submesh}
-
     metadata = {"quadrature_degree": quadrature_degree}
     ds = ufl.Measure(
         "ds",
@@ -275,7 +310,9 @@ def solve_contact_problem(
     _, V0_to_V = V.sub(gdim - 1).collapse()  # Used for partial loading in y/z direction
     disp_facets = [facet_tag.find(d) for d in boundary_conditions["displacement"]]
     bc_facets = np.unique(np.concatenate(disp_facets))
-    bc = dolfinx.fem.dirichletbc(u_bc, dolfinx.fem.locate_dofs_topological(V, fdim, bc_facets))
+    bc = dolfinx.fem.dirichletbc(
+        u_bc, dolfinx.fem.locate_dofs_topological(V, fdim, bc_facets)
+    )
     bcs = [bc]
 
     solver = NewtonSolver(
@@ -288,6 +325,7 @@ def solve_contact_problem(
             "ksp_type": "preonly",
             "pc_type": "lu",
             "pc_factor_mat_solver_type": "mumps",
+            # "mat_mumps_icntl_14": 120,
             "ksp_error_if_not_converged": True,
         },
         error_on_nonconvergence=True,
@@ -298,8 +336,12 @@ def solve_contact_problem(
     V_DG = dolfinx.fem.functionspace(mesh, ("DG", degree, (mesh.geometry.dim,)))
     stresses = dolfinx.fem.Function(V_DG, name="VonMises")
     u_dg = dolfinx.fem.Function(V_DG, name="u")
-    bp_vonmises = dolfinx.io.VTXWriter(mesh.comm, output / "von_mises.bp", [stresses, u_dg])
-    s = sigma(u, mu, lmbda) - 1.0 / 3 * ufl.tr(sigma(u, mu, lmbda)) * ufl.Identity(len(u))
+    bp_vonmises = dolfinx.io.VTXWriter(
+        mesh.comm, output / "von_mises.bp", [stresses, u_dg]
+    )
+    s = sigma(u, mu, lmbda) - 1.0 / 3 * ufl.tr(sigma(u, mu, lmbda)) * ufl.Identity(
+        len(u)
+    )
     von_Mises = ufl.sqrt(3.0 / 2 * ufl.inner(s, s))
     stress_expr = dolfinx.fem.Expression(von_Mises, V_DG.element.interpolation_points())
 
@@ -329,7 +371,8 @@ def solve_contact_problem(
         elif alpha_scheme == AlphaScheme.doubling:
             alpha.value = alpha_0 * 2**it
 
-        converged = solver.solve(newton_tol, 1)
+        solver_tol = 10*newton_tol if it < 2 else newton_tol
+        converged = solver.solve(solver_tol, 1)
 
         diff.x.array[:] = u.x.array - u_prev.x.array
         diff.x.petsc_vec.normBegin(2)
@@ -348,7 +391,7 @@ def solve_contact_problem(
         bp_psi.write(it)
 
         if not converged:
-            print(f"Solver did not convert at {it=}, exiting")
+            print(f"Solver did not convert at {it=}, exiting with {converged=}")
             break
 
     if it == max_iterations - 1:
@@ -371,7 +414,11 @@ if __name__ == "__main__":
 
         if args.dim == 3:
             mesh = dolfinx.mesh.create_unit_cube(
-                MPI.COMM_WORLD, args.nx, args.ny, args.nz, dolfinx.mesh.CellType.hexahedron
+                MPI.COMM_WORLD,
+                args.nx,
+                args.ny,
+                args.nz,
+                dolfinx.mesh.CellType.hexahedron,
             )
         elif args.dim == 2:
             mesh = dolfinx.mesh.create_unit_square(
@@ -381,14 +428,18 @@ if __name__ == "__main__":
         tdim = mesh.topology.dim
         fdim = tdim - 1
         top_facets = dolfinx.mesh.locate_entities_boundary(mesh, fdim, top_boundary)
-        contact_facets = dolfinx.mesh.locate_entities_boundary(mesh, fdim, bottom_boundary)
+        contact_facets = dolfinx.mesh.locate_entities_boundary(
+            mesh, fdim, bottom_boundary
+        )
         assert len(np.intersect1d(top_facets, contact_facets)) == 0
         facet_map = mesh.topology.index_map(fdim)
         num_facets_local = facet_map.size_local + facet_map.num_ghosts
         values = np.zeros(num_facets_local, dtype=np.int32)
         values[top_facets] = 1
         values[contact_facets] = 2
-        mt = dolfinx.mesh.meshtags(mesh, fdim, np.arange(num_facets_local, dtype=np.int32), values)
+        mt = dolfinx.mesh.meshtags(
+            mesh, fdim, np.arange(num_facets_local, dtype=np.int32), values
+        )
         bcs = {"contact": (2,), "displacement": (1,)}
     else:
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, args.filename, "r") as xdmf:

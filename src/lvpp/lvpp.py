@@ -124,7 +124,7 @@ class NewtonSolver:
         Returns:
             Number of iterations. If Krylov subspace solver doesn't converge, return 0.
         """
-        i = 0
+        i = 1
         tol_ = tol
         blocked_maps = [
             (
@@ -133,7 +133,7 @@ class NewtonSolver:
             )
             for si in self.w
         ]
-        while i < self.max_iterations:
+        while i <= self.max_iterations:
             if i < self.max_iterations // 2:
                 tol = 10 * tol_
             else:

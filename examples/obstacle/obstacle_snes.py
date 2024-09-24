@@ -15,7 +15,7 @@ from petsc4py import PETSc
 import dolfinx.fem.petsc
 import numpy as np
 import ufl
-
+from lvpp.problem import SNESProblem
 parser = argparse.ArgumentParser(
     description="Solve the obstacle problem on a unit square.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -30,63 +30,6 @@ parser.add_argument(
 )
 
 
-class SNESProblem:
-    def __init__(
-        self,
-        F: typing.Union[dolfinx.fem.form, ufl.form.Form],
-        u: dolfinx.fem.Function,
-        J: typing.Optional[typing.Union[dolfinx.fem.form, ufl.form.Form]] = None,
-        bcs: typing.Optional[list[dolfinx.fem.DirichletBC]] = None,
-        form_compiler_options: typing.Optional[dict] = None,
-        jit_options: typing.Optional[dict] = None,
-    ):
-        """
-        Initialize class for constructing the residual and Jacobian constructors for a SNES problem.
-
-        :param F: Variational form of the residual
-        :param u: The unknown function
-        :param J: Variational form of the Jacobian
-        :param bcs: List of Dirichlet boundary conditions to enforce
-        :param form_compiler_options: Options for form compiler
-        :param jit_options: Options for Just In Time compilation
-        """
-        form_compiler_options = {} if form_compiler_options is None else form_compiler_options
-        jit_options = {} if jit_options is None else jit_options
-
-        self.L = dolfinx.fem.form(
-            F, form_compiler_options=form_compiler_options, jit_options=jit_options
-        )
-        if J is None:
-            V = u.function_space
-            du = ufl.TrialFunction(V)
-            self.a = dolfinx.fem.form(
-                ufl.derivative(F, u, du),
-                form_compiler_options=form_compiler_options,
-                jit_options=jit_options,
-            )
-        else:
-            self.a = J
-        self.bcs = bcs
-        self._F, self._J = None, None
-        self.u = u
-
-    def F(self, snes, x, F):
-        """Assemble residual vector."""
-        x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-        x.copy(self.u.x.petsc_vec)
-        self.u.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-        with F.localForm() as f_local:
-            f_local.set(0.0)
-        dolfinx.fem.petsc.assemble_vector(F, self.L)
-        dolfinx.fem.petsc.apply_lifting(F, [self.a], bcs=[self.bcs], x0=[x], scale=-1.0)
-        F.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
-        dolfinx.fem.petsc.set_bc(F, self.bcs, x, -1.0)
-
-    def J(self, snes, x, J, P):
-        """Assemble Jacobian matrix."""
-        J.zeroEntries()
-        dolfinx.fem.petsc.assemble_matrix(J, self.a, self.bcs)
-        J.assemble()
 
 
 def solve_problem(
@@ -140,6 +83,7 @@ def solve_problem(
 
     u_max = dolfinx.fem.Function(V)
     u_max.x.array[:] = PETSc.INFINITY
+
 
     # Create semismooth Newton solver (SNES)
     snes = PETSc.SNES().create(comm=mesh.comm)  # type: ignore
