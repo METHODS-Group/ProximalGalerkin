@@ -64,7 +64,7 @@ physical_parameters.add_argument(
     "--nu", dest="nu", type=float, default=0.4, help="Poisson's ratio"
 )
 physical_parameters.add_argument(
-    "--disp", type=float, default=-0.0001, help="Displacement in the y/z direction (2D/3D)"
+    "--disp", type=float, default=-0.1, help="Displacement in the y/z direction (2D/3D)"
 )
 fem_parameters = parser.add_argument_group("FEM parameters")
 fem_parameters.add_argument(
@@ -243,7 +243,7 @@ def solve_contact_problem(
     sigma_max = dolfinx.fem.Constant(mesh, dst(1.0))
     F10 = ufl.inner(sigma(u,mu, lmbda), w) * ufl.dx(domain=mesh)
 
-    F11 = -ufl.inner(sigma_max*expm(psi), w) * ufl.dx(domain=mesh)
+    F11 = -ufl.inner(expm(psi), w) * ufl.dx(domain=mesh) + ufl.inner(sigma_max * ufl.Identity(gdim), w) * dx
     F0 = F00 + F01
     F1 = F10 + F11
 
@@ -296,7 +296,7 @@ def solve_contact_problem(
         petsc_options={
             "ksp_type": "preonly",
             "pc_type": "lu",
-            "pc_factor_mat_solver_type": "superlu_dist",
+            "pc_factor_mat_solver_type": "mumps",
             # "mat_mumps_icntl_14": 4000,
             # "mat_mumps_icntl_24": 1,
             "ksp_error_if_not_converged": True,
