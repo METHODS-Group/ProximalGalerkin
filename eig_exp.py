@@ -220,16 +220,14 @@ def solve_contact_problem(
     V = dolfinx.fem.functionspace(mesh, element_u)
     u = dolfinx.fem.Function(V, name="displacement")
 
-    v = ufl.TestFunction(V)
-
     element_p = basix.ufl.element("DG", mesh.topology.cell_name(), 0,
                                   shape=(mesh.geometry.dim, mesh.geometry.dim))
     W = dolfinx.fem.functionspace(mesh, element_p)
 
-    v = ufl.TestFunction(V)
+    Q = ufl.MixedFunctionSpace(V, W)
+    v, w = ufl.TestFunctions(Q)
     psi = dolfinx.fem.Function(W)
     psi_k = dolfinx.fem.Function(W)
-    w = ufl.TestFunction(W)
 
     alpha = dolfinx.fem.Constant(mesh, dst(alpha_0))
 
@@ -240,28 +238,18 @@ def solve_contact_problem(
 
     F01 = ufl.inner(psi - psi_k, sigma(v, mu, lmbda)) * dx
 
-    sigma_max = dolfinx.fem.Constant(mesh, dst(1.0))
+    sigma_max = dolfinx.fem.Constant(mesh, dst(0.3))
     F10 = ufl.inner(sigma(u,mu, lmbda), w) * ufl.dx(domain=mesh)
+    matrix = (expm(psi) - ufl.Identity(gdim)) * ufl.inv(expm(psi) + ufl.Identity(gdim))
+    F11 = -sigma_max*ufl.inner(matrix, w) * ufl.dx(domain=mesh)
+    F = F00 + F01 + F10 + F11
 
-    F11 = -ufl.inner(expm(psi), w) * ufl.dx(domain=mesh) + ufl.inner(sigma_max * ufl.Identity(gdim), w) * dx
-    F0 = F00 + F01
-    F1 = F10 + F11
+    du, dpsi = ufl.TrialFunctions(Q)
+    J = ufl.derivative(F, u, du) + ufl.derivative(F, psi, dpsi)
 
-    F0 = F00 + F01
-    F1 = F10 + F11
-    residual_0 = dolfinx.fem.form(F0)
-    residual_1 = dolfinx.fem.form(F1)
-    jac00 = ufl.derivative(F0, u)
-    jac01 = ufl.derivative(F0, psi)
-    jac10 = ufl.derivative(F1, u)
-    jac11 = ufl.derivative(F1, psi)
-    J00 = dolfinx.fem.form(jac00)
-    J01 = dolfinx.fem.form(jac01)
-    J10 = dolfinx.fem.form(jac10)
-    J11 = dolfinx.fem.form(jac11)
+    residual = dolfinx.fem.form(ufl.extract_blocks(F))
+    jacobian = dolfinx.fem.form(ufl.extract_blocks(J))
 
-    J = [[J00, J01], [J10, J11]]
-    F = [residual_0, residual_1]
     u_bc = dolfinx.fem.Function(V)
     def disp_func(x):
         values = np.zeros((gdim, x.shape[1]), dtype=dst)
@@ -288,8 +276,8 @@ def solve_contact_problem(
     bcs = [bc, bc_fixed]
 
     solver = NewtonSolver(
-        F,
-        J,
+        residual,
+        jacobian,
         [u, psi],
         bcs=bcs,
         max_iterations=newton_max_its,
@@ -319,7 +307,7 @@ def solve_contact_problem(
             alpha.value = alpha_0 + alpha_c * it
         elif alpha_scheme == AlphaScheme.doubling:
             alpha.value = alpha_0 * 2**it
-        print(alpha.value)
+        print(f"{float(alpha)=}")
         solver_tol = np.sqrt(newton_tol) if it < 2 else newton_tol
         converged = solver.solve(solver_tol, 1)
 
@@ -337,7 +325,7 @@ def solve_contact_problem(
         if not converged:
             print(f"Solver did not convert at {it=}, exiting with {converged=}")
             break
-
+        print(f"Norm of increment (primal): {normed_diff:.2e}")
     if it == max_iterations - 1:
         print(f"Did not converge within {max_iterations} iterations")
     bp.close()

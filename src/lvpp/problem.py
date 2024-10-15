@@ -216,7 +216,10 @@ class SNESProblem:
         with F.localForm() as f_local:
             f_local.set(0.0)
         dolfinx.fem.petsc.assemble_vector(F, self.L)
-        dolfinx.fem.petsc.apply_lifting(F, [self.a], bcs=[self.bcs], x0=[x], scale=-1.0)
+        try:
+            dolfinx.fem.petsc.apply_lifting(F, [self.a], bcs=[self.bcs], x0=[x], scale=-1.0)
+        except TypeError:
+            dolfinx.fem.petsc.apply_lifting(F, [self.a], bcs=[self.bcs], x0=[x], alpha=-1.0)
         F.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
         dolfinx.fem.petsc.set_bc(F, self.bcs, x, -1.0)
 
