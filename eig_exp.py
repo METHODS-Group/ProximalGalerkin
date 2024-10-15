@@ -43,7 +43,7 @@ class CustomParser(
 
 
 desc = (
-    "Signorini contact problem solver\n\n"
+    "Maximum eigenvalue stress constraints\n\n"
     + "Uses the Latent Variable Proximal Point algorithm combined with"
     + " a Newton solver at each step in the proximal point algorithm\n"
 )
@@ -64,7 +64,7 @@ physical_parameters.add_argument(
     "--nu", dest="nu", type=float, default=0.4, help="Poisson's ratio"
 )
 physical_parameters.add_argument(
-    "--disp", type=float, default=-0.1, help="Displacement in the y/z direction (2D/3D)"
+    "--disp", type=float, default=0.1, help="Displacement in the x direction (2D/3D)"
 )
 fem_parameters = parser.add_argument_group("FEM parameters")
 fem_parameters.add_argument(
@@ -233,16 +233,17 @@ def solve_contact_problem(
 
     f = dolfinx.fem.Constant(mesh, np.zeros(gdim, dtype=dst))
     dx = ufl.dx(domain=mesh)
-    F00 = alpha * ufl.inner(sigma(u, mu, lmbda), epsilon(v)) * dx
-    F00 -= alpha * ufl.inner(f, v) * dx
+    F = alpha * ufl.inner(sigma(u, mu, lmbda), epsilon(v)) * dx
+    F -= alpha * ufl.inner(f, v) * dx
 
-    F01 = ufl.inner(psi - psi_k, sigma(v, mu, lmbda)) * dx
 
-    sigma_max = dolfinx.fem.Constant(mesh, dst(0.3))
-    F10 = ufl.inner(sigma(u,mu, lmbda), w) * ufl.dx(domain=mesh)
+    F += ufl.inner(psi - psi_k, ufl.dev(sigma(v, mu, lmbda))) * dx
+
+    sigma_max = dolfinx.fem.Constant(mesh, dst(0.03))
+    F += ufl.inner(ufl.dev(sigma(u, mu, lmbda)), w) * ufl.dx(domain=mesh)
     matrix = (expm(psi) - ufl.Identity(gdim)) * ufl.inv(expm(psi) + ufl.Identity(gdim))
-    F11 = -sigma_max*ufl.inner(matrix, w) * ufl.dx(domain=mesh)
-    F = F00 + F01 + F10 + F11
+    F -= sigma_max*ufl.inner(matrix, w) * ufl.dx(domain=mesh)
+
 
     du, dpsi = ufl.TrialFunctions(Q)
     J = ufl.derivative(F, u, du) + ufl.derivative(F, psi, dpsi)
@@ -253,11 +254,11 @@ def solve_contact_problem(
     u_bc = dolfinx.fem.Function(V)
     def disp_func(x):
         values = np.zeros((gdim, x.shape[1]), dtype=dst)
-        values[gdim - 1, :] = disp
+        #values[0, :] = disp
+        values[1, :] = -disp
         return values
 
     u_bc.interpolate(disp_func)
-    _, V0_to_V = V.sub(gdim - 1).collapse()  # Used for partial loading in y/z direction
     disp_facets = [facet_tag.find(d) for d in boundary_conditions["displacement"]]
     bc_facets = np.unique(np.concatenate(disp_facets))
     bc = dolfinx.fem.dirichletbc(
@@ -285,7 +286,7 @@ def solve_contact_problem(
             "ksp_type": "preonly",
             "pc_type": "lu",
             "pc_factor_mat_solver_type": "mumps",
-            # "mat_mumps_icntl_14": 4000,
+            "mat_mumps_icntl_14": 500,
             # "mat_mumps_icntl_24": 1,
             "ksp_error_if_not_converged": True,
         },
@@ -293,13 +294,27 @@ def solve_contact_problem(
     )
     bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u])
 
+    stress_space = dolfinx.fem.functionspace(mesh, ("DG", degree-1))
+    stress = dolfinx.fem.Function(stress_space, name="stress")
+    # Compute eigenvalues of sigma
+    stress_tensor = ufl.dev(sigma(u, mu, lmbda))
+    #latent_stress_tensor = sigma_max*(expm(psi) - ufl.Identity(gdim))*ufl.inv(expm(psi) + ufl.Identity(gdim))
+    m = 1/2 * (stress_tensor[0,0]+stress_tensor[1,1])
+    p = ufl.det(stress_tensor)
+    eigenvalue_max = m + ufl.sqrt(m**2 - p)
+    eigenvalue_min = m - ufl.sqrt(m**2 - p)
+    
+
+
+    eigen_expr = dolfinx.fem.Expression(eigenvalue_max, stress_space.element.interpolation_points())
+    stress.interpolate(eigen_expr)
+    bp_stress = dolfinx.io.VTXWriter(mesh.comm, output / "stress.bp", [stress])
     diff = dolfinx.fem.Function(V)
     u_prev = dolfinx.fem.Function(V)
     for it in range(max_iterations):
         print(
             f"{it=}/{max_iterations}"
         )
-        u_bc.x.array[V0_to_V] = disp  # (it+1)/M * disp
 
         if alpha_scheme == AlphaScheme.constant:
             pass
@@ -322,6 +337,8 @@ def solve_contact_problem(
 
 
         bp.write(it)
+        stress.interpolate(eigen_expr)
+        bp_stress.write(it)
         if not converged:
             print(f"Solver did not convert at {it=}, exiting with {converged=}")
             break
@@ -329,7 +346,7 @@ def solve_contact_problem(
     if it == max_iterations - 1:
         print(f"Did not converge within {max_iterations} iterations")
     bp.close()
-
+    bp_stress.close()
 
 # python3 eig_exp.py native --nx 16 --ny 7 --output output_matrix
 if __name__ == "__main__":
