@@ -73,7 +73,7 @@ def solve_problem(N: int, M: int,
 
     dx = ufl.Measure("dx",  domain=mesh)
     alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(alpha_0))
-    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
+    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.1))
 
     w_old = dolfinx.fem.Function(V_trial)
     _, _, psi_old = ufl.split(w_old)
@@ -98,13 +98,14 @@ def solve_problem(N: int, M: int,
     # EQ 2
     tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.1))
     F += u[i] * v[i] * dx 
-    F += tau * \
+    F -= tau * \
         ufl.grad(z[i])[k]*ufl.grad(v[i])[k] * dx
     F -= u_prev[i]*v[i] * dx
 
     # EQ 3
+    eps = 0.001
     sum_psi = sum(ufl.exp(psi[m]) for m in range(num_species))
-    F += sum((u[m] - ufl.exp(psi[m]) / sum_psi) * w[m]
+    F += sum((u[m] - ufl.exp(psi[m]) / sum_psi - eps * psi[m] ) * w[m]
             for m in range(num_species))*dx
 
     # Random values between 0 and 1 that sum to 1
@@ -122,7 +123,7 @@ def solve_problem(N: int, M: int,
     solver.convergence_criterion = "residual"
     solver.rtol = 1e-8
     solver.atol = 1e-8
-    solver.max_it = 1
+    solver.max_it = 10
     solver.error_on_nonconvergence = False
 
     ksp = solver.krylov_solver
