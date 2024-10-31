@@ -141,9 +141,14 @@ class NewtonSolver:
             # Assemble F(u_{i-1}) - J(u_D - u_{i-1}) and set du|_bc= u_D - u_{i-1}
             with self.b.localForm() as b_loc:
                 b_loc.set(0)
-            dolfinx.fem.petsc.assemble_vector_block(
-                self.b, self.F, self.J, bcs=self.bcs, x0=self.x, scale=-1.0
-            )
+            try:
+                dolfinx.fem.petsc.assemble_vector_block(
+                    self.b, self.F, self.J, bcs=self.bcs, x0=self.x, scale=-1.0
+                )
+            except TypeError:
+                dolfinx.fem.petsc.assemble_vector_block(
+                    self.b, self.F, self.J, bcs=self.bcs, x0=self.x, alpha=-1.0
+                )
             self.b.ghostUpdate(PETSc.InsertMode.INSERT_VALUES, PETSc.ScatterMode.FORWARD)
 
             # Assemble Jacobian

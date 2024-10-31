@@ -223,36 +223,21 @@ def solve_contact_problem(
         all_contact_facets.append(facet_tag.find(contact_marker))
     contact_facets = np.unique(np.concatenate(all_contact_facets))
 
+    gdim = mesh.geometry.dim
     fdim = mesh.topology.dim - 1
+    # Create submesh for potential facets
     submesh, submesh_to_mesh = dolfinx.mesh.create_submesh(mesh, fdim, contact_facets)[
         0:2
     ]
-
-    mu = E / (2.0 * (1.0 + nu))
-    lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
-
-    # NOTE: If we get facet-bubble spaces in DOLFINx we could use an alternative pair here
-    gdim = mesh.geometry.dim
-    element_u = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), degree, shape=(gdim,)
-    )
-    V = dolfinx.fem.functionspace(mesh, element_u)
-    u = dolfinx.fem.Function(V, name="displacement")
-    v = ufl.TestFunction(V)
-
-    element_p = basix.ufl.element("Lagrange", submesh.topology.cell_name(), degree)
-    W = dolfinx.fem.functionspace(submesh, element_p)
-
-    v = ufl.TestFunction(V)
-    psi = dolfinx.fem.Function(W)
-    psi_k = dolfinx.fem.Function(W)
-    w = ufl.TestFunction(W)
-
+    
+    # Invert map to get mapping from parent facet to submesh cell
     facet_imap = mesh.topology.index_map(fdim)
     num_facets = facet_imap.size_local + facet_imap.num_ghosts
     mesh_to_submesh = np.full(num_facets, -1)
     mesh_to_submesh[submesh_to_mesh] = np.arange(len(submesh_to_mesh))
     entity_maps = {submesh: mesh_to_submesh}
+
+    # Define integration measure only on potential contact facets
     metadata = {"quadrature_degree": quadrature_degree}
     ds = ufl.Measure(
         "ds",
@@ -261,43 +246,47 @@ def solve_contact_problem(
         subdomain_id=boundary_conditions["contact"],
         metadata=metadata,
     )
+
+
+    # Create mixed finite element space
+    V = dolfinx.fem.functionspace(mesh, ("Lagrange", degree, (gdim, ))) 
+    W = dolfinx.fem.functionspace(submesh, ("Lagrange", degree))
+    Q = ufl.MixedFunctionSpace(V, W)
+
+    # Define primal and latent variable + test functions
+    v, w = ufl.TestFunctions(Q)
+    u = dolfinx.fem.Function(V, name="displacement")
+    psi = dolfinx.fem.Function(W)
+    psi_k = dolfinx.fem.Function(W)
+
+    # Define problem specific parameters
+    mu = E / (2.0 * (1.0 + nu))
+    lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
     n = ufl.FacetNormal(mesh)
     n_g = dolfinx.fem.Constant(mesh, np.zeros(gdim, dtype=dst))
     n_g.value[-1] = -1
-
     alpha = dolfinx.fem.Constant(mesh, dst(alpha_0))
-
     f = dolfinx.fem.Constant(mesh, np.zeros(gdim, dtype=dst))
     x = ufl.SpatialCoordinate(mesh)
-    # g = -0.2*x[0] + x[gdim-1] + dolfinx.fem.Constant(mesh, dst(-gap))
     g = x[gdim - 1] + dolfinx.fem.Constant(mesh, dst(-gap))
-    F00 = alpha * ufl.inner(sigma(u, mu, lmbda), epsilon(v)) * ufl.dx(
+
+    # Set up residual
+    residual = alpha * ufl.inner(sigma(u, mu, lmbda), epsilon(v)) * ufl.dx(
         domain=mesh
     ) - alpha * ufl.inner(f, v) * ufl.dx(domain=mesh)
-    F01 = -ufl.inner(psi - psi_k, ufl.dot(v, n)) * ds
-    # FIXME: Use alternative formulation (use residual form) delta psi du
-    # Scale update by a parameter (damped Newton) start with 1/2
-    F10 = ufl.inner(ufl.dot(u, n_g), w) * ds
-    F11 = ufl.inner(ufl.exp(psi), w) * ds - ufl.inner(g, w) * ds
+    residual += -ufl.inner(psi - psi_k, ufl.dot(v, n)) * ds
+    residual += ufl.inner(ufl.dot(u, n_g), w) * ds
+    residual += ufl.inner(ufl.exp(psi), w) * ds - ufl.inner(g, w) * ds
 
-    F0 = F00 + F01
-    F1 = F10 + F11
+    # Compile residual
+    F = dolfinx.fem.form(ufl.extract_blocks(residual), entity_maps=entity_maps)
 
-    F0 = F00 + F01
-    F1 = F10 + F11
-    residual_0 = dolfinx.fem.form(F0, entity_maps=entity_maps)
-    residual_1 = dolfinx.fem.form(F1, entity_maps=entity_maps)
-    jac00 = ufl.derivative(F0, u)
-    jac01 = ufl.derivative(F0, psi)
-    jac10 = ufl.derivative(F1, u)
-    jac11 = ufl.derivative(F1, psi)
-    J00 = dolfinx.fem.form(jac00, entity_maps=entity_maps)
-    J01 = dolfinx.fem.form(jac01, entity_maps=entity_maps)
-    J10 = dolfinx.fem.form(jac10, entity_maps=entity_maps)
-    J11 = dolfinx.fem.form(jac11, entity_maps=entity_maps)
+    # Set up Jacobian
+    du, dpsi = ufl.TrialFunctions(Q)
+    jac = ufl.derivative(residual, u, du) + ufl.derivative(residual, psi, dpsi)
 
-    J = [[J00, J01], [J10, J11]]
-    F = [residual_0, residual_1]
+    # Compile Jacobian
+    J = dolfinx.fem.form(ufl.extract_blocks(jac), entity_maps=entity_maps)
 
     u_bc = dolfinx.fem.Function(V)
 
@@ -306,6 +295,7 @@ def solve_contact_problem(
         values[gdim - 1, :] = disp
         return values
 
+    # Set up Dirichlet conditions
     u_bc.interpolate(disp_func)
     _, V0_to_V = V.sub(gdim - 1).collapse()  # Used for partial loading in y/z direction
     disp_facets = [facet_tag.find(d) for d in boundary_conditions["displacement"]]
@@ -315,6 +305,7 @@ def solve_contact_problem(
     )
     bcs = [bc]
 
+    # Set up solver
     solver = NewtonSolver(
         F,
         J,
@@ -330,6 +321,7 @@ def solve_contact_problem(
         },
         error_on_nonconvergence=True,
     )
+
     violation = dolfinx.fem.Function(V)
     bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u, violation])
     bp_psi = dolfinx.io.VTXWriter(mesh.comm, output / "psi.bp", [psi])
