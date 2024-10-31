@@ -13,6 +13,7 @@ dependencies = ["fenics-dolfinx>=0.9.0"]
 [project.optional-dependencies]
 dev = ["pdbpp", "ipython", "mypy", "ruff"]
 docs = []
+demos = ["pandas"]
 all = ["lvpp[dev]"]
 
 [tool.pytest.ini_options]

@@ -163,3 +163,5 @@ cython_debug/
 *.xdmf
 *.h5
 *.bp
+
+*.png
