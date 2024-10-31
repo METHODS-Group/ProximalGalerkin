@@ -5,7 +5,7 @@ import dolfinx
 import numpy as np
 from ipopt_galahad import ObstacleProblem, setup_problem
 from lvpp import ipopt_solver, galahad_solver
-from examples.obstacle.lvpp_example import solve_problem
+from lvpp_example import solve_problem
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -62,7 +62,8 @@ if __name__ == "__main__":
     x_g_out = dolfinx.fem.Function(V_out, name="ipopt")
     x_g_out.interpolate(x_g)
     with dolfinx.io.VTXWriter(
-        V.mesh.comm, args.result_dir / f"{args.infile.stem}_galahad.bp", [x_g_out]
+        V.mesh.comm, args.result_dir /
+            f"{args.infile.stem}_galahad.bp", [x_g_out]
     ) as bp:
         bp.write(0.0)
 
@@ -83,7 +84,8 @@ if __name__ == "__main__":
     u_out = dolfinx.fem.Function(V_out, name="llvp")
     u_out.interpolate(u_lvpp.sub(0))
     with dolfinx.io.VTXWriter(
-        mesh.comm, args.result_dir / f"{args.infile.stem}_llvp_first_order.bp", [u_out]
+        mesh.comm, args.result_dir /
+            f"{args.infile.stem}_llvp_first_order.bp", [u_out]
     ) as bp:
         bp.write(0.0)
 
@@ -106,7 +108,8 @@ if __name__ == "__main__":
         bp.write(0.0)
 
     with dolfinx.io.VTXWriter(
-        mesh.comm, args.result_dir / f"{args.infile.stem}_obstacle.bp", [bounds_[0]]
+        mesh.comm, args.result_dir /
+            f"{args.infile.stem}_obstacle.bp", [bounds_[0]]
     ) as bp:
         bp.write(0.0)
 
@@ -131,7 +134,8 @@ if __name__ == "__main__":
         x_i_out.interpolate(x_i)
         with dolfinx.io.VTXWriter(
             mesh.comm,
-            args.result_dir / f"{args.infile.stem}_ipopt_hessian_{with_hessian}.bp",
+            args.result_dir /
+                f"{args.infile.stem}_ipopt_hessian_{with_hessian}.bp",
             [x_i_out],
         ) as bp:
             bp.write(0.0)
@@ -139,7 +143,8 @@ if __name__ == "__main__":
     print(
         np.min(
             mesh.h(
-                mesh.topology.dim, np.arange(mesh.topology.index_map(mesh.topology.dim).size_local)
+                mesh.topology.dim, np.arange(
+                    mesh.topology.index_map(mesh.topology.dim).size_local)
             )
         )
     )
