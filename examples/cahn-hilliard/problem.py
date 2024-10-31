@@ -52,19 +52,19 @@ def solve_problem(
         MPI.COMM_WORLD, N, M, cell_type=_cell_type, diagonal=dolfinx.mesh.DiagonalType.crossed
     )
 
-    # el_0 = basix.ufl.element(
-    #     "P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
-    # el_1 = basix.ufl.element(
-    #     "P", mesh.topology.cell_name(), 0, shape=(num_species,), discontinuous=True)
-
-    el_s = basix.ufl.element("P", mesh.topology.cell_name(), primal_degree)
-    el_b = basix.ufl.element(
-        "Bubble", mesh.topology.cell_name(), primal_degree + 2)
-    el_0 = basix.ufl.blocked_element(
-        basix.ufl.enriched_element([el_s, el_b]), shape=(num_species,))
+    el_0 = basix.ufl.element(
+        "P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
     el_1 = basix.ufl.element(
-        "DG", mesh.topology.cell_name(), primal_degree - 1, shape=(num_species,)
-    )
+        "P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
+
+    # el_s = basix.ufl.element("P", mesh.topology.cell_name(), primal_degree)
+    # el_b = basix.ufl.element(
+    #     "Bubble", mesh.topology.cell_name(), primal_degree + 2)
+    # el_0 = basix.ufl.blocked_element(
+    #     basix.ufl.enriched_element([el_s, el_b]), shape=(num_species,))
+    # el_1 = basix.ufl.element(
+    #     "DG", mesh.topology.cell_name(), primal_degree - 1, shape=(num_species,)
+    # )
 
     # Trial space is (u, z, psi)
     trial_el = basix.ufl.mixed_element([el_0, el_0, el_1])
@@ -78,7 +78,7 @@ def solve_problem(
 
     dx = ufl.Measure("dx", domain=mesh)
     alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(alpha_0))
-    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.1))
+    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.05))
 
     w_old = dolfinx.fem.Function(V_trial)
     _, _, psi_old = ufl.split(w_old)
@@ -100,16 +100,17 @@ def solve_problem(
     F -= alpha * sum(y[m] * dx for m in range(num_species))
 
     # EQ 2
-    tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.1))
+    tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.00001))
     F += u[i] * v[i] * dx
     F -= tau * ufl.grad(z[i])[k] * ufl.grad(v[i])[k] * dx
     F -= u_prev[i] * v[i] * dx
 
     # EQ 3
-    eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e-3))
+    # eps_0 = 0
+    # eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(eps_0))
     sum_psi = sum(ufl.exp(psi[m]) for m in range(num_species))
     F += (
-        sum((u[m] - ufl.exp(psi[m]) / sum_psi - eps * psi[m]) * w[m]
+        sum((u[m] - ufl.exp(psi[m]) / sum_psi) * w[m]  # - eps * psi[m]
             for m in range(num_species))
         * dx
     )
@@ -123,9 +124,8 @@ def solve_problem(
         num_dofs = len(w_prev.sub(0).sub(0).collapse().x.array[:])
     np.random.seed(12)
     rands = np.random.rand(num_dofs, num_species)
-    norm_rand = np.linalg.norm(rands, axis=1)
+    norm_rand = np.linalg.norm(rands, axis=1, ord=1)
     w_prev.x.array[c_to_V] = (rands / norm_rand.reshape(-1, 1)).reshape(-1)
-
     bcs = []
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
@@ -153,23 +153,31 @@ def solve_problem(
     c_out = dolfinx.fem.Function(V_out)
     bp_c = dolfinx.io.VTXWriter(
         mesh.comm, result_dir / "u.bp", [c_out], engine="BP4")
-
     c_out.interpolate(w_prev.sub(0).collapse())
     bp_c.write(0)
+
+    psi_space, psi_to_V = V_trial.sub(2).collapse()
+    psi_out = dolfinx.fem.Function(psi_space)
+    bp_psi = dolfinx.io.VTXWriter(
+        mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP4")
+    bp_psi.write(0)
 
     diff = sol.sub(0) - w_old.sub(0)
 
     L2_squared = ufl.dot(diff, diff) * dx
     compiled_diff = dolfinx.fem.form(L2_squared)
 
-    T = 1
-    num_steps = int(T / float(tau))
+    num_steps = 100
+    newton_iterations = np.zeros(num_steps, dtype=np.int32)
+    T = num_steps * float(tau)
+    t = 0
     for j in range(num_steps):
+        t += float(tau)
+        # eps.value = eps_0
         sol.x.array[c_to_V] = 1.0 / num_species
         sol.x.array[psi_to_V] = 0
         w_old.x.array[psi_to_V] = 0
         for i in range(1, max_iterations + 1):
-            newton_iterations = np.zeros(max_iterations, dtype=np.int32)
             L2_diff = np.zeros(max_iterations, dtype=np.float64)
 
             if alpha_scheme == AlphaScheme.constant:
@@ -195,17 +203,18 @@ def solve_problem(
             # print(ksp.getConvergedReason())
             # Update solution
             w_old.x.array[:] = sol.x.array[:]
-            print(sol.x.array)
             # bp_grad_u.write(i)
             if global_diff < stopping_tol:
                 break
 
         w_prev.x.array[:] = sol.x.array[:]
-        print(c_out.x.array)
         c_out.interpolate(sol.sub(0).collapse())
-        bp_c.write(j+1)
-
+        psi_out.x.array[:] = sol.x.array[psi_to_V]
+        bp_c.write(t)
+        bp_psi.write(t)
+        # eps.value *= 0.5
     bp_c.close()
+    bp_psi.close()
     return newton_iterations, L2_diff
 
 
