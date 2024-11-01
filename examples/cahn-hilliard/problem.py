@@ -56,15 +56,6 @@ def solve_problem(
     el_1 = basix.ufl.element(
         "P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
 
-    # el_s = basix.ufl.element("P", mesh.topology.cell_name(), primal_degree)
-    # el_b = basix.ufl.element(
-    #     "Bubble", mesh.topology.cell_name(), primal_degree + 2)
-    # el_0 = basix.ufl.blocked_element(
-    #     basix.ufl.enriched_element([el_s, el_b]), shape=(num_species,))
-    # el_1 = basix.ufl.element(
-    #     "DG", mesh.topology.cell_name(), primal_degree - 1, shape=(num_species,)
-    # )
-
     # Trial space is (u, z, psi)
     trial_el = basix.ufl.mixed_element([el_0, el_0, el_1])
     V_trial = dolfinx.fem.functionspace(mesh, trial_el)
@@ -78,16 +69,14 @@ def solve_problem(
     dx = ufl.Measure("dx", domain=mesh)
     alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(alpha_0))
     h = 2*ufl.Circumradius(mesh)
-    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(4))*h
-
-    w_old = dolfinx.fem.Function(V_trial)
-    _, _, psi_old = ufl.split(w_old)
-
-    w_prev = dolfinx.fem.Function(V_trial)
-    u_prev, _, _ = ufl.split(w_prev)
+    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(2))*h
 
     C, c_to_V = V_trial.sub(0).collapse()
-    _, psi_to_V = V_trial.sub(2).collapse()
+    Psi, psi_to_V = V_trial.sub(2).collapse()
+
+    u_prev = dolfinx.fem.Function(C)  # u from previous time step
+    psi_old = dolfinx.fem.Function(Psi)  # psi from previous LVPP iteration
+    u_old = dolfinx.fem.Function(C)  # u from previous LVPP iteration
 
     i, k = ufl.indices(2)
     # EQ 1
@@ -100,74 +89,61 @@ def solve_problem(
     F -= alpha * sum(y[m] * dx for m in range(num_species))
 
     # EQ 2
-    tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(5e-5))
+    tau0 = 1e-3
+    tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(tau0))
     F += u[i] * v[i] * dx
     F -= tau * ufl.grad(z[i])[k] * ufl.grad(v[i])[k] * dx
     F -= u_prev[i] * v[i] * dx
 
     # EQ 3
-    # eps_0 = 0
-    # eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(eps_0))
+    eps_0 = 1e-6
+    eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(eps_0))
     sum_psi = sum(ufl.exp(psi[m]) for m in range(num_species))
     F += (
-        sum((u[m] - ufl.exp(psi[m]) / sum_psi) * w[m]  # - eps * psi[m]
+        sum((u[m] - ufl.exp(psi[m]) / sum_psi) * w[m] - eps * psi[m] * w[m]
             for m in range(num_species))
         * dx
     )
 
-    # Random values between 0 and 1 that sum to 1
-    if num_species == 1:
-        num_dofs = len(w_prev.sub(0).collapse().x.array[:])
-    else:
-        num_dofs = len(w_prev.sub(0).sub(0).collapse().x.array[:])
+    def rectangle(x, tol=1e-14):
+        return (0.2-tol <= x[1]) & (x[1] <= 0.75+tol) & (0.2-tol <= x[0]) & (x[0] <= 0.8+tol)
 
-    np.random.seed(12)
-    rands = np.random.rand(num_dofs, num_species)
-    norm_rand = np.linalg.norm(rands, axis=1, ord=1)
-    w_prev.x.array[c_to_V] = (rands / norm_rand.reshape(-1, 1)).reshape(-1)
+    def lower_left(x, tol=1e-14):
+        return (x[1] <= 0.5+tol) & (0.2 - tol <= x[1]) & (0.2 - tol <= x[0]) & (x[0] <= 0.5+tol)
 
-    # c_init = dolfinx.fem.Function(C)
-    # c_init.x.array[::4] = 1.0
+    def lower_right(x, tol=1e-14):
+        return (x[1] <= 0.5+tol) & (0.2 <= x[1] + tol) & (0.5-tol <= x[0]) & (x[0] <= 0.8+tol)
 
-    # def rectangle(x):
-    #     return (x[1] > 0.5) & (x[1] < 0.75) & (x[0] > 0.2) & (x[0] < 0.8)
+    def field1(x):
+        values = np.zeros((num_species, x.shape[1]))
+        values[1] = 1.0
+        return values
 
-    # def lower_left(x):
-    #     return (x[1] < 0.5) & (x[1] > 0.2) & (x[0] > 0.2) & (x[0] < 0.5)
+    def field2(x):
+        values = np.zeros((num_species, x.shape[1]))
+        values[2] = 1.0
+        return values
 
-    # def lower_right(x):
-    #     return (x[1] < 0.5) & (x[1] > 0.2) & (x[0] > 0.5) & (x[0] < 0.8)
+    def field3(x):
+        values = np.zeros((num_species, x.shape[1]))
+        values[3] = 1.0
+        return values
 
-    # def field1(x):
-    #     values = np.zeros((num_species, x.shape[1]))
-    #     values[1] = 1.0
-    #     return values
-
-    # def field2(x):
-    #     values = np.zeros((num_species, x.shape[1]))
-    #     values[2] = 1.0
-    #     return values
-
-    # def field3(x):
-    #     values = np.zeros((num_species, x.shape[1]))
-    #     values[3] = 1.0
-    #     return values
-
-    # cells1 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, rectangle)
-    # cells2 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, lower_left)
-    # cells3 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, lower_right)
-    # c_init.interpolate(field1, cells0=cells1)
-    # c_init.interpolate(field2, cells0=cells2)
-    # c_init.interpolate(field3, cells0=cells3)
-    # c_init.x.scatter_forward()
-    # w_prev.x.array[c_to_V] = c_init.x.array
+    cells1 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, rectangle)
+    cells2 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, lower_left)
+    cells3 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, lower_right)
+    u_prev.x.array[::4] = 1.0
+    u_prev.interpolate(field1, cells0=cells1)
+    u_prev.interpolate(field2, cells0=cells2)
+    u_prev.interpolate(field3, cells0=cells3)
+    u_prev.x.scatter_forward()
 
     bcs = []
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
-    solver.rtol = 1e-7
-    solver.atol = 1e-7
+    solver.rtol = 1e-9
+    solver.atol = 1e-9
     solver.max_it = 15
     solver.error_on_nonconvergence = True
 
@@ -184,12 +160,8 @@ def solve_problem(
     ksp.setFromOptions()
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
-    V_out = dolfinx.fem.functionspace(
-        mesh, ("Lagrange", primal_degree + 2, (num_species,)))
-    c_out = dolfinx.fem.Function(V_out, name="c")
     bp_c = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "u.bp", [c_out], engine="BP4")
-    c_out.interpolate(w_prev.sub(0).collapse())
+        mesh.comm, result_dir / "u.bp", [u_prev], engine="BP4")
     bp_c.write(0)
 
     psi_space, psi_to_V = V_trial.sub(2).collapse()
@@ -198,7 +170,7 @@ def solve_problem(
         mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP4")
     bp_psi.write(0)
 
-    diff = sol.sub(0) - w_old.sub(0)
+    diff = sol.sub(0) - u_old
 
     L2_squared = ufl.dot(diff, diff) * dx
     compiled_diff = dolfinx.fem.form(L2_squared)
@@ -208,15 +180,11 @@ def solve_problem(
     lvpp_iterations = np.zeros(num_steps, dtype=np.int32)
     t = 0
     for j in range(num_steps):
-        if j / num_steps < 0.2:
-            tau.value = 1e-6
-        else:
-            tau.value = 1e-4
         t += float(tau)
-        # eps.value = eps_0
 
         sol.x.array[psi_to_V] = 0
-        w_old.x.array[psi_to_V] = 0
+        u_old.x.array[:] = 0
+        psi_old.x.array[:] = 0
         for i in range(1, max_iterations + 1):
             L2_diff = np.zeros(max_iterations, dtype=np.float64)
 
@@ -226,8 +194,9 @@ def solve_problem(
                 alpha.value = alpha_0 + alpha_c * i
             elif alpha_scheme == AlphaScheme.doubling:
                 alpha.value = alpha_0 * 2**i
-
+            # dolfinx.log.set_log_level(dolfinx.log.LogLevel.ERROR)
             num_newton_iterations, converged = solver.solve(sol)
+
             newton_iterations[j] += num_newton_iterations
             local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
             global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
@@ -242,17 +211,15 @@ def solve_problem(
             # ksp.view()
             # print(ksp.getConvergedReason())
             # Update solution
-            w_old.x.array[:] = sol.x.array[:]
-            # bp_grad_u.write(i)
+            u_old.x.array[:] = sol.x.array[c_to_V]
+            psi_old.x.array[:] = sol.x.array[psi_to_V]
             if global_diff < stopping_tol:
                 break
 
-        w_prev.x.array[:] = sol.x.array[:]
-        c_out.interpolate(sol.sub(0).collapse())
-        psi_out.x.array[:] = sol.x.array[psi_to_V]
+        u_prev.x.array[:] = sol.x.array[c_to_V]
         bp_c.write(t)
-        bp_psi.write(t)
-        # eps.value *= 0.5
+        # psi_out.x.array[:] = sol.x.array[psi_to_V]
+        # bp_psi.write(t)
         lvpp_iterations[j] += i
     bp_c.close()
     bp_psi.close()
