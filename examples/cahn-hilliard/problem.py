@@ -36,7 +36,6 @@ class AlphaScheme(Enum):
 def solve_problem(
     N: int,
     M: int,
-    num_species: int,
     primal_degree: int,
     cell_type: str,
     alpha_scheme: AlphaScheme,
@@ -51,7 +50,7 @@ def solve_problem(
     mesh = dolfinx.mesh.create_unit_square(
         MPI.COMM_WORLD, N, M, cell_type=_cell_type, diagonal=dolfinx.mesh.DiagonalType.crossed
     )
-
+    num_species = 4
     el_0 = basix.ufl.element(
         "P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
     el_1 = basix.ufl.element(
@@ -78,7 +77,8 @@ def solve_problem(
 
     dx = ufl.Measure("dx", domain=mesh)
     alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(alpha_0))
-    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.05))
+    h = 2*ufl.Circumradius(mesh)
+    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(4))*h
 
     w_old = dolfinx.fem.Function(V_trial)
     _, _, psi_old = ufl.split(w_old)
@@ -86,7 +86,7 @@ def solve_problem(
     w_prev = dolfinx.fem.Function(V_trial)
     u_prev, _, _ = ufl.split(w_prev)
 
-    _, c_to_V = V_trial.sub(0).collapse()
+    C, c_to_V = V_trial.sub(0).collapse()
     _, psi_to_V = V_trial.sub(2).collapse()
 
     i, k = ufl.indices(2)
@@ -100,7 +100,7 @@ def solve_problem(
     F -= alpha * sum(y[m] * dx for m in range(num_species))
 
     # EQ 2
-    tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.00001))
+    tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(5e-5))
     F += u[i] * v[i] * dx
     F -= tau * ufl.grad(z[i])[k] * ufl.grad(v[i])[k] * dx
     F -= u_prev[i] * v[i] * dx
@@ -116,24 +116,60 @@ def solve_problem(
     )
 
     # Random values between 0 and 1 that sum to 1
-    # NOTE: We could use a e_i species distribution in squares, which should evolve
-    # into "hexagonal" patterns
     if num_species == 1:
         num_dofs = len(w_prev.sub(0).collapse().x.array[:])
     else:
         num_dofs = len(w_prev.sub(0).sub(0).collapse().x.array[:])
+
     np.random.seed(12)
     rands = np.random.rand(num_dofs, num_species)
     norm_rand = np.linalg.norm(rands, axis=1, ord=1)
     w_prev.x.array[c_to_V] = (rands / norm_rand.reshape(-1, 1)).reshape(-1)
+
+    # c_init = dolfinx.fem.Function(C)
+    # c_init.x.array[::4] = 1.0
+
+    # def rectangle(x):
+    #     return (x[1] > 0.5) & (x[1] < 0.75) & (x[0] > 0.2) & (x[0] < 0.8)
+
+    # def lower_left(x):
+    #     return (x[1] < 0.5) & (x[1] > 0.2) & (x[0] > 0.2) & (x[0] < 0.5)
+
+    # def lower_right(x):
+    #     return (x[1] < 0.5) & (x[1] > 0.2) & (x[0] > 0.5) & (x[0] < 0.8)
+
+    # def field1(x):
+    #     values = np.zeros((num_species, x.shape[1]))
+    #     values[1] = 1.0
+    #     return values
+
+    # def field2(x):
+    #     values = np.zeros((num_species, x.shape[1]))
+    #     values[2] = 1.0
+    #     return values
+
+    # def field3(x):
+    #     values = np.zeros((num_species, x.shape[1]))
+    #     values[3] = 1.0
+    #     return values
+
+    # cells1 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, rectangle)
+    # cells2 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, lower_left)
+    # cells3 = dolfinx.mesh.locate_entities(mesh, mesh.topology.dim, lower_right)
+    # c_init.interpolate(field1, cells0=cells1)
+    # c_init.interpolate(field2, cells0=cells2)
+    # c_init.interpolate(field3, cells0=cells3)
+    # c_init.x.scatter_forward()
+    # w_prev.x.array[c_to_V] = c_init.x.array
+
     bcs = []
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
-    solver.rtol = 1e-8
-    solver.atol = 1e-8
-    solver.max_it = 10
-    solver.error_on_nonconvergence = False
+    solver.rtol = 1e-7
+    solver.atol = 1e-7
+    solver.max_it = 15
+    solver.error_on_nonconvergence = True
 
     ksp = solver.krylov_solver
     opts = PETSc.Options()  # type: ignore
@@ -150,7 +186,7 @@ def solve_problem(
 
     V_out = dolfinx.fem.functionspace(
         mesh, ("Lagrange", primal_degree + 2, (num_species,)))
-    c_out = dolfinx.fem.Function(V_out)
+    c_out = dolfinx.fem.Function(V_out, name="c")
     bp_c = dolfinx.io.VTXWriter(
         mesh.comm, result_dir / "u.bp", [c_out], engine="BP4")
     c_out.interpolate(w_prev.sub(0).collapse())
@@ -167,14 +203,18 @@ def solve_problem(
     L2_squared = ufl.dot(diff, diff) * dx
     compiled_diff = dolfinx.fem.form(L2_squared)
 
-    num_steps = 100
+    num_steps = 1000
     newton_iterations = np.zeros(num_steps, dtype=np.int32)
-    T = num_steps * float(tau)
+    lvpp_iterations = np.zeros(num_steps, dtype=np.int32)
     t = 0
     for j in range(num_steps):
+        if j / num_steps < 0.2:
+            tau.value = 1e-6
+        else:
+            tau.value = 1e-4
         t += float(tau)
         # eps.value = eps_0
-        sol.x.array[c_to_V] = 1.0 / num_species
+
         sol.x.array[psi_to_V] = 0
         w_old.x.array[psi_to_V] = 0
         for i in range(1, max_iterations + 1):
@@ -188,7 +228,7 @@ def solve_problem(
                 alpha.value = alpha_0 * 2**i
 
             num_newton_iterations, converged = solver.solve(sol)
-
+            newton_iterations[j] += num_newton_iterations
             local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
             global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
             L2_diff[i - 1] = global_diff
@@ -213,8 +253,11 @@ def solve_problem(
         bp_c.write(t)
         bp_psi.write(t)
         # eps.value *= 0.5
+        lvpp_iterations[j] += i
     bp_c.close()
     bp_psi.close()
+    print("Newton iterations:", newton_iterations)
+    print("LVPP iterations:", lvpp_iterations)
     return newton_iterations, L2_diff
 
 
@@ -224,8 +267,6 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHe
 
 def main(argv: Optional[list[str]] = None):
     parser = argparse.ArgumentParser(formatter_class=CustomFormatter)
-    parser.add_argument("--num_species", type=int,
-                        default=3, help="Number of species")
     mesh_options = parser.add_argument_group("Mesh options")
     mesh_options.add_argument(
         "-N", type=int, default=40, help="Number of elements in x-direction")
@@ -271,7 +312,7 @@ def main(argv: Optional[list[str]] = None):
         "-s",
         "--stopping_tol",
         type=float,
-        default=1e-9,
+        default=1e-5,
         help="Stopping tolerance between two successive PG iterations (L2-difference)",
     )
     result_options = parser.add_argument_group("Output options")
@@ -283,7 +324,6 @@ def main(argv: Optional[list[str]] = None):
     iteration_counts, L2_diffs = solve_problem(
         N=parsed_args.N,
         M=parsed_args.M,
-        num_species=parsed_args.num_species,
         primal_degree=parsed_args.primal_degree,
         cell_type=parsed_args.cell_type,
         alpha_scheme=AlphaScheme.from_string(parsed_args.alpha_scheme),
