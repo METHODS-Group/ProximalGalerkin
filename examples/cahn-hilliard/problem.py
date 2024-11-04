@@ -38,6 +38,7 @@ def solve_problem(
     M: int,
     primal_degree: int,
     cell_type: str,
+    alpha_max: float,
     alpha_scheme: AlphaScheme,
     alpha_0: float,
     alpha_c: float,
@@ -59,12 +60,11 @@ def solve_problem(
     # Trial space is (u, z, psi)
     trial_el = basix.ufl.mixed_element([el_0, el_0, el_1])
     V_trial = dolfinx.fem.functionspace(mesh, trial_el)
-    V_test = V_trial
 
     sol = dolfinx.fem.Function(V_trial)
     u, z, psi = ufl.split(sol)
 
-    v, y, w = ufl.TestFunctions(V_test)
+    v, y, w = ufl.TestFunctions(V_trial)
 
     dx = ufl.Measure("dx", domain=mesh)
     alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(alpha_0))
@@ -72,10 +72,12 @@ def solve_problem(
     epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(2))*h
 
     C, c_to_V = V_trial.sub(0).collapse()
-    Psi, psi_to_V = V_trial.sub(2).collapse()
 
     u_prev = dolfinx.fem.Function(C)  # u from previous time step
-    psi_old = dolfinx.fem.Function(Psi)  # psi from previous LVPP iteration
+
+    # psi from previous LVPP iteration
+    lvpp_old = dolfinx.fem.Function(V_trial)
+    psi_old = lvpp_old.sub(2)
     u_old = dolfinx.fem.Function(C)  # u from previous LVPP iteration
 
     i, k = ufl.indices(2)
@@ -89,14 +91,14 @@ def solve_problem(
     F -= alpha * sum(y[m] * dx for m in range(num_species))
 
     # EQ 2
-    tau0 = 1e-3
+    tau0 = 2.5e-4
     tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(tau0))
     F += u[i] * v[i] * dx
     F -= tau * ufl.grad(z[i])[k] * ufl.grad(v[i])[k] * dx
     F -= u_prev[i] * v[i] * dx
 
     # EQ 3
-    eps_0 = 1e-6
+    eps_0 = 1e-9
     eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(eps_0))
     sum_psi = sum(ufl.exp(psi[m]) for m in range(num_species))
     F += (
@@ -142,20 +144,25 @@ def solve_problem(
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
-    solver.rtol = 1e-9
-    solver.atol = 1e-9
-    solver.max_it = 15
+    solver.rtol = 1e-8
+    solver.atol = 1e-8
+    solver.max_it = 25
     solver.error_on_nonconvergence = True
 
     ksp = solver.krylov_solver
     opts = PETSc.Options()  # type: ignore
-    option_prefix = ksp.getOptionsPrefix()
-    opts[f"{option_prefix}ksp_type"] = "preonly"
-    opts[f"{option_prefix}pc_type"] = "lu"
-    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
-    opts[f"{option_prefix}ksp_error_if_not_converged"] = True
+    prefix = ""
+    ksp.setOptionsPrefix(prefix)
+    opts[f"{prefix}ksp_type"] = "preonly"
+    opts[f"{prefix}pc_type"] = "lu"
+
+    opts[f"{prefix}pc_factor_mat_solver_type"] = "mumps"
+    opts[f"{prefix}ksp_error_if_not_converged"] = True
     # Increase MUMPS working memory
-    opts[f"{option_prefix}mat_mumps_icntl_14"] = 500
+    opts[f"{prefix}mat_mumps_icntl_14"] = 500
+    # opts[f"{prefix}mat_mumps_icntl_4"] = 3
+    opts[f"{prefix}mat_mumps_icntl_24"] = 1
+    opts[f"{prefix}ksp_monitor"] = None
     # opts[f"{option_prefix}ksp_view"] = None
     ksp.setFromOptions()
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
@@ -175,25 +182,35 @@ def solve_problem(
     L2_squared = ufl.dot(diff, diff) * dx
     compiled_diff = dolfinx.fem.form(L2_squared)
 
-    num_steps = 1000
+    num_steps = 3000
     newton_iterations = np.zeros(num_steps, dtype=np.int32)
     lvpp_iterations = np.zeros(num_steps, dtype=np.int32)
     t = 0
+
+    # psi_init = dolfinx.fem.Expression()
+    psi_scalar = [V_trial.sub(2).sub(i).collapse() for i in range(num_species)]
+    psi_init = [dolfinx.fem.Expression(ufl.ln(
+        abs(u[i])+1e-7) + 1, psi_scalar[i][0].element.interpolation_points()) for i in range(num_species)]
+    psi_sub = [dolfinx.fem.Function(psi_scalar[i][0])
+               for i in range(num_species)]
     for j in range(num_steps):
         t += float(tau)
+        # Set psi_i = ln(u_i) + 1
+        for i in range(num_species):
+            psi_sub[i].interpolate(psi_init[i])
+            sol.x.array[psi_scalar[i][1]] = psi_sub[i].x.array
+            psi_old.x.array[psi_scalar[i][1]] = psi_sub[i].x.array
 
-        sol.x.array[psi_to_V] = 0
         u_old.x.array[:] = 0
-        psi_old.x.array[:] = 0
         for i in range(1, max_iterations + 1):
             L2_diff = np.zeros(max_iterations, dtype=np.float64)
 
             if alpha_scheme == AlphaScheme.constant:
                 pass
             elif alpha_scheme == AlphaScheme.linear:
-                alpha.value = alpha_0 + alpha_c * i
+                alpha.value = min(alpha_0 + alpha_c * i, alpha_max)
             elif alpha_scheme == AlphaScheme.doubling:
-                alpha.value = alpha_0 * 2**i
+                alpha.value = min(alpha_0 * 2**i, alpha_max)
             # dolfinx.log.set_log_level(dolfinx.log.LogLevel.ERROR)
             num_newton_iterations, converged = solver.solve(sol)
 
@@ -203,7 +220,8 @@ def solve_problem(
             L2_diff[i - 1] = global_diff
             if mesh.comm.rank == 0:
                 print(
-                    f"Iteration {i}: {converged=} {num_newton_iterations=}",
+                    f"Iteration {i}: {converged=} alpha={
+                        float(alpha):.2e} {num_newton_iterations=}",
                     f"|delta u |= {global_diff}",
                     f"{ksp.getConvergedReason()=}",
                 )
@@ -212,7 +230,7 @@ def solve_problem(
             # print(ksp.getConvergedReason())
             # Update solution
             u_old.x.array[:] = sol.x.array[c_to_V]
-            psi_old.x.array[:] = sol.x.array[psi_to_V]
+            psi_old.x.array[:] = sol.x.array
             if global_diff < stopping_tol:
                 break
 
@@ -271,6 +289,9 @@ def main(argv: Optional[list[str]] = None):
     alpha_options.add_argument(
         "--alpha_c", type=float, default=1.0, help="Increment of alpha in linear scheme"
     )
+    alpha_options.add_argument(
+        "--alpha_max", type=float, default=50.0, help="Maximum value of alpha"
+    )
     pg_options = parser.add_argument_group("Proximal Galerkin options")
     pg_options.add_argument(
         "--max_iterations", type=int, default=20, help="Maximum number of iterations"
@@ -293,6 +314,7 @@ def main(argv: Optional[list[str]] = None):
         M=parsed_args.M,
         primal_degree=parsed_args.primal_degree,
         cell_type=parsed_args.cell_type,
+        alpha_max=parsed_args.alpha_max,
         alpha_scheme=AlphaScheme.from_string(parsed_args.alpha_scheme),
         alpha_0=parsed_args.alpha_0,
         alpha_c=parsed_args.alpha_c,
