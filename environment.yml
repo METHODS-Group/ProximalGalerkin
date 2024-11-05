@@ -1,0 +1,23 @@
+name: pg-env
+channels:
+  - conda-forge
+dependencies:
+  - fenics-dolfinx=0.9.0=*_104
+  - pyvista
+  - pip
+  - git
+  - tqdm
+  - scipy
+  - trame-client
+  - trame-vtk
+  - trame-server
+  - trame-vuetify
+  - trame
+  - ipywidgets
+  - python-gmsh
+variables:
+  PYVISTA_TRAME_SERVER_PROXY_PREFIX: "/proxy/"
+  PYVISTA_TRAME_SERVER_PROXY_ENABLED: "True"
+  PYVISTA_OFF_SCREEN: false
+  PYVISTA_JUPYTER_BACKEND: "html"
+  LIBGL_ALWAYS_SOFTWARE: 1
