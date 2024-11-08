@@ -155,10 +155,10 @@ def solve_problem(N: int,
             alpha.value = alpha_0 * 2**i
 
         num_newton_iterations, converged = solver.solve(sol)
-        newton_iterations[i] = num_newton_iterations
+        newton_iterations[i-1] = num_newton_iterations
         local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
         global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
-        L2_diff[i] = global_diff
+        L2_diff[i-1] = global_diff
         if mesh.comm.rank == 0:
             print(
                 f"Iteration {i}: {converged=} {num_newton_iterations=} {
