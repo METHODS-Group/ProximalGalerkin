@@ -48,10 +48,10 @@ def solve_problem(N: int,
 
     el_0 = basix.ufl.element(
         "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(3, ))
-    el_1 = basix.ufl.element(
-        "DG", mesh.topology.cell_name(), primal_degree-1, shape=(3,))
+    # el_1 = basix.ufl.element(
+    #     "Lagrange", mesh.topology.cell_name(), primal_degree-1, shape=(3,))
 
-    trial_el = basix.ufl.mixed_element([el_0, el_1])
+    trial_el = basix.ufl.mixed_element([el_0, el_0])
     V = dolfinx.fem.functionspace(mesh, trial_el)
 
     sol = dolfinx.fem.Function(V)
@@ -84,40 +84,54 @@ def solve_problem(N: int,
 
     phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
+    # F += 0.0001*ufl.inner(ufl.grad(psi), ufl.grad(w))*dx
+
+    def left_point(x):
+        return (np.full(x.shape[1], np.sin(0.1)), np.full(x.shape[1], np.cos(0.1)), np.zeros(x.shape[1]))
+
+    def right_point(x):
+        return (-left_point(x)[0], -left_point(x)[1], -left_point(x)[2])
 
     # Create boundary conditions
     u_left = dolfinx.fem.Function(U)
-    u_left.interpolate(lambda x: (
-        np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
+    u_left.interpolate(left_point)
     left_facets = dolfinx.mesh.locate_entities_boundary(
         mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 0.0))
     left_dofs = dolfinx.fem.locate_dofs_topological(
         (V.sub(0), U), mesh.topology.dim-1, left_facets)
     u_right = dolfinx.fem.Function(U)
-    u_right.interpolate(lambda x: (
-        -np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
+    u_right.interpolate(right_point)
 
     right_facets = dolfinx.mesh.locate_entities_boundary(
         mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 1.0))
     right_dofs = dolfinx.fem.locate_dofs_topological(
         (V.sub(0), U), mesh.topology.dim-1, right_facets)
 
-    sol.sub(0).interpolate(lambda x: (
-        np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
+    psi_left = dolfinx.fem.Function(Q)
+    psi_left.interpolate(left_point)
+    left_dofs_psi = dolfinx.fem.locate_dofs_topological(
+        (V.sub(1), Q), mesh.topology.dim-1, left_facets)
+    psi_right = dolfinx.fem.Function(Q)
+    psi_right.interpolate(right_point)
+    right_dofs_psi = dolfinx.fem.locate_dofs_topological(
+        (V.sub(1), Q), mesh.topology.dim-1, right_facets)
 
     bcs = [dolfinx.fem.dirichletbc(u_left, left_dofs, V.sub(0)),
-           dolfinx.fem.dirichletbc(u_right, right_dofs, V.sub(0))]
-    # sol.sub(0).interpolate(lambda x: (
-    #    np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
-    # [bc.set(sol.x.array) for bc in bcs]
+           dolfinx.fem.dirichletbc(u_right, right_dofs, V.sub(0)),
+           dolfinx.fem.dirichletbc(psi_left, left_dofs_psi, V.sub(1)),
+           dolfinx.fem.dirichletbc(psi_right, right_dofs_psi, V.sub(1))
+           ]
+
     sol.sub(0).interpolate(lambda x: (
         np.cos(3*np.pi*x[0]), np.zeros(x.shape[1]), np.sin(3*np.pi*x[0])))
+    sol.sub(1).interpolate(sol.sub(0))
+    [bc.set(sol.x.array) for bc in bcs]
 
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
-    solver.rtol = 1e-9
-    solver.atol = 1e-9
+    solver.rtol = 1e-4
+    solver.atol = 1e-4
     solver.max_it = 20
     solver.error_on_nonconvergence = True
 
