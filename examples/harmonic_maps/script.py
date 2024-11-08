@@ -88,14 +88,14 @@ def solve_problem(N: int,
     # Create boundary conditions
     u_left = dolfinx.fem.Function(U)
     u_left.interpolate(lambda x: (
-        np.full(x.shape[1], np.sin(0.2*np.pi)), np.full(x.shape[1], np.cos(0.2*np.pi)), np.zeros(x.shape[1])))
+        np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
     left_facets = dolfinx.mesh.locate_entities_boundary(
         mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 0.0))
     left_dofs = dolfinx.fem.locate_dofs_topological(
         (V.sub(0), U), mesh.topology.dim-1, left_facets)
     u_right = dolfinx.fem.Function(U)
     u_right.interpolate(lambda x: (
-        -np.full(x.shape[1], np.sin(0.2*np.pi)), -np.full(x.shape[1], np.cos(0.2*np.pi)), np.zeros(x.shape[1])))
+        -np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
 
     right_facets = dolfinx.mesh.locate_entities_boundary(
         mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 1.0))
@@ -138,6 +138,9 @@ def solve_problem(N: int,
     u_out.x.array[:] = sol.sub(0).x.array[U_to_W]
     bp_u.write(0)
 
+    psi_out = sol.sub(1).collapse()
+    bp_psi = dolfinx.io.VTXWriter(
+        mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP4")
     diff = sol.sub(0)-w0.sub(0)
     L2_squared = ufl.dot(diff, diff)*dx
     compiled_diff = dolfinx.fem.form(L2_squared)
@@ -163,14 +166,16 @@ def solve_problem(N: int,
                 f"|delta u |= {global_diff}")
 
         u_out.x.array[:] = sol.sub(0).x.array[U_to_W]
-
+        psi_out.x.array[:] = sol.sub(1).x.array[Q_to_W]
         bp_u.write(i)
+        bp_psi.write(i)
 
         if global_diff < stopping_tol:
             break
 
         w0.x.array[:] = sol.x.array
     bp_u.close()
+    bp_psi.close()
 
     return newton_iterations[:i+1], L2_diff[:i+1]
 
