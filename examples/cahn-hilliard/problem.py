@@ -168,13 +168,15 @@ def solve_problem(
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
     bp_c = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "u.bp", [u_prev], engine="BP4")
+        mesh.comm, result_dir / "u.bp", [u_prev], engine="BP5",
+        mesh_policy=dolfinx.io.VTXMeshPolicy.reuse)
     bp_c.write(0)
 
     psi_space, psi_to_V = V_trial.sub(2).collapse()
     psi_out = dolfinx.fem.Function(psi_space)
     bp_psi = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP4")
+        mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP5",
+        mesh_policy=dolfinx.io.VTXMeshPolicy.reuse)
     bp_psi.write(0)
 
     diff = sol.sub(0) - u_old
@@ -182,12 +184,11 @@ def solve_problem(
     L2_squared = ufl.dot(diff, diff) * dx
     compiled_diff = dolfinx.fem.form(L2_squared)
 
-    num_steps = 3000
+    num_steps = 700
     newton_iterations = np.zeros(num_steps, dtype=np.int32)
     lvpp_iterations = np.zeros(num_steps, dtype=np.int32)
     t = 0
 
-    # psi_init = dolfinx.fem.Expression()
     psi_scalar = [V_trial.sub(2).sub(i).collapse() for i in range(num_species)]
     psi_init = [dolfinx.fem.Expression(ufl.ln(
         abs(u[i])+1e-7) + 1, psi_scalar[i][0].element.interpolation_points()) for i in range(num_species)]
@@ -217,7 +218,6 @@ def solve_problem(
             newton_iterations[j] += num_newton_iterations
             local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
             global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
-            L2_diff[i - 1] = global_diff
             if mesh.comm.rank == 0:
                 print(
                     f"Iteration {i}: {converged=} alpha={
@@ -236,14 +236,14 @@ def solve_problem(
 
         u_prev.x.array[:] = sol.x.array[c_to_V]
         bp_c.write(t)
-        # psi_out.x.array[:] = sol.x.array[psi_to_V]
-        # bp_psi.write(t)
+        psi_out.x.array[:] = sol.x.array[psi_to_V]
+        bp_psi.write(t)
         lvpp_iterations[j] += i
     bp_c.close()
     bp_psi.close()
     print("Newton iterations:", newton_iterations)
     print("LVPP iterations:", lvpp_iterations)
-    return newton_iterations, L2_diff
+    return newton_iterations, lvpp_iterations
 
 
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
@@ -309,7 +309,7 @@ def main(argv: Optional[list[str]] = None):
     )
     parsed_args = parser.parse_args(argv)
 
-    iteration_counts, L2_diffs = solve_problem(
+    newton_its, lvpp_its = solve_problem(
         N=parsed_args.N,
         M=parsed_args.M,
         primal_degree=parsed_args.primal_degree,
@@ -322,8 +322,15 @@ def main(argv: Optional[list[str]] = None):
         result_dir=parsed_args.result_dir,
         stopping_tol=parsed_args.stopping_tol,
     )
-    print(iteration_counts)
-    print(L2_diffs)
+    newton_its = 0
+    lvpp_its = 1
+    if MPI.COMM_WORLD.rank == 0:
+        Path(parsed_args.result_dir).mkdir(parents=True, exist_ok=True)
+        np.savez(parsed_args.result_dir/"iteration_count.npz", newton_its=newton_its, lvpp_its=lvpp_its,
+                 N=parsed_args.N, M=parsed_args.M, primal_degree=parsed_args.primal_degree, cell_type=parsed_args.cell_type,
+                 a_scheme=parsed_args.alpha_scheme, alpha_0=parsed_args.alpha_0, alpha_c=parsed_args.alpha_c,
+                 alpha_max=parsed_args.alpha_max, max_iterations=parsed_args.max_iterations, stopping_tol=parsed_args.stopping_tol)
+
 
 
 if __name__ == "__main__":
