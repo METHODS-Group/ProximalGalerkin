@@ -42,14 +42,13 @@ def solve_problem(N: int,
                   result_dir: Path,
                   ):
 
-    mesh = dolfinx.mesh.create_unit_interval(
-        MPI.COMM_WORLD, N)
-    print(N)
+    N = 10
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, N)
 
     el_0 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(3, ))
+        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2, ))
     el_1 = basix.ufl.element(
-        "DG", mesh.topology.cell_name(), primal_degree-1, shape=(3,))
+        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2,))
 
     trial_el = basix.ufl.mixed_element([el_0, el_1])
     V = dolfinx.fem.functionspace(mesh, trial_el)
@@ -86,33 +85,25 @@ def solve_problem(N: int,
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
     # Create boundary conditions
-    u_left = dolfinx.fem.Function(U)
-    u_left.interpolate(lambda x: (
-        np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
-    left_facets = dolfinx.mesh.locate_entities_boundary(
-        mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 0.0))
-    left_dofs = dolfinx.fem.locate_dofs_topological(
-        (V.sub(0), U), mesh.topology.dim-1, left_facets)
-    u_right = dolfinx.fem.Function(U)
-    u_right.interpolate(lambda x: (
-        -np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
+    u_bc = dolfinx.fem.Function(U)
+    u_bc.interpolate(lambda x: (np.ones(x.shape[1]), np.zeros(x.shape[1])))
+    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
+    bndry_dofs = dolfinx.fem.locate_dofs_topological(
+        (V.sub(0), U), mesh.topology.dim-1, bndry_facets)
 
-    right_facets = dolfinx.mesh.locate_entities_boundary(
-        mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 1.0))
-    right_dofs = dolfinx.fem.locate_dofs_topological(
-        (V.sub(0), U), mesh.topology.dim-1, right_facets)
+    psi_bc = dolfinx.fem.Function(Q)
+    psi_bc.interpolate(lambda x: (np.ones(x.shape[1]), np.zeros(x.shape[1])))
+    bndry_dofs_psi = dolfinx.fem.locate_dofs_topological(
+        (V.sub(1), Q), mesh.topology.dim-1, bndry_facets)
 
-    sol.sub(0).interpolate(lambda x: (
-        np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
+    bcs = [
+        dolfinx.fem.dirichletbc(u_bc, bndry_dofs, V.sub(0)),
+        dolfinx.fem.dirichletbc(psi_bc, bndry_dofs_psi, V.sub(1))]
 
-    bcs = [dolfinx.fem.dirichletbc(u_left, left_dofs, V.sub(0)),
-           dolfinx.fem.dirichletbc(u_right, right_dofs, V.sub(0))]
-    # sol.sub(0).interpolate(lambda x: (
-    #    np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
-    # [bc.set(sol.x.array) for bc in bcs]
-    sol.sub(0).interpolate(lambda x: (
-        np.cos(3*np.pi*x[0]), np.zeros(x.shape[1]), np.sin(3*np.pi*x[0])))
-
+    sol.sub(0).interpolate(u_bc)
+    sol.x.array[:] += np.random.rand(len(sol.x.array))
+    sol.sub(1).interpolate(u_bc)
+    w0.sub(1).interpolate(u_bc)
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
@@ -137,7 +128,6 @@ def solve_problem(N: int,
         mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
     u_out.x.array[:] = sol.sub(0).x.array[U_to_W]
     bp_u.write(0)
-
     psi_out = sol.sub(1).collapse()
     bp_psi = dolfinx.io.VTXWriter(
         mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP4")
