@@ -85,9 +85,11 @@ def solve_problem(N: int,
     phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
-    def bc_func(x):
-        # return (np.cos(2.11*x[0]), np.sin(2.11*x[0]))
-        return (np.ones(x.shape[1]), np.zeros(x.shape[1]))
+    def bc_func(x, epsilon=0.25, theta=3*np.pi/6):
+        return (1 + epsilon * np.sin(theta*x[0]), epsilon * np.cos(theta*x[0])) / \
+            np.sqrt((1 + epsilon * np.sin(theta*x[0])) **
+                    2 + (epsilon * np.cos(theta*x[0])) ** 2)
+        # return (np.ones(x.shape[1]), np.zeros(x.shape[1]))
 
     # Create boundary conditions
     u_bc = dolfinx.fem.Function(U)
