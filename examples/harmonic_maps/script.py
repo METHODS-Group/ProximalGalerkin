@@ -43,7 +43,8 @@ def solve_problem(N: int,
                   ):
 
     N = 10
-    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, N)
+    mesh = dolfinx.mesh.create_rectangle(
+        MPI.COMM_WORLD, [[-0.3, 0.4], [0.1, 1]], [N, N])
 
     el_0 = basix.ufl.element(
         "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2, ))
@@ -84,15 +85,19 @@ def solve_problem(N: int,
     phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
+    def bc_func(x):
+        # return (np.cos(2.11*x[0]), np.sin(2.11*x[0]))
+        return (np.ones(x.shape[1]), np.zeros(x.shape[1]))
+
     # Create boundary conditions
     u_bc = dolfinx.fem.Function(U)
-    u_bc.interpolate(lambda x: (np.ones(x.shape[1]), np.zeros(x.shape[1])))
+    u_bc.interpolate(bc_func)
     bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
     bndry_dofs = dolfinx.fem.locate_dofs_topological(
         (V.sub(0), U), mesh.topology.dim-1, bndry_facets)
 
     psi_bc = dolfinx.fem.Function(Q)
-    psi_bc.interpolate(lambda x: (np.ones(x.shape[1]), np.zeros(x.shape[1])))
+    psi_bc.interpolate(bc_func)
     bndry_dofs_psi = dolfinx.fem.locate_dofs_topological(
         (V.sub(1), Q), mesh.topology.dim-1, bndry_facets)
 
@@ -101,7 +106,8 @@ def solve_problem(N: int,
         dolfinx.fem.dirichletbc(psi_bc, bndry_dofs_psi, V.sub(1))]
 
     sol.sub(0).interpolate(u_bc)
-    sol.x.array[:] += np.random.rand(len(sol.x.array))
+    noise = 1e-4
+    sol.x.array[:] += noise * np.random.rand(len(sol.x.array))
     sol.sub(1).interpolate(u_bc)
     w0.sub(1).interpolate(u_bc)
     problem = NonlinearProblem(F, sol, bcs=bcs)
