@@ -185,7 +185,7 @@ if __name__ == "__main__":
 
 
     tensors = (
-               [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+               [[1, 2, 3], [4, 2, 5], [6, 7, 8]],
                #[[1, 1, 0], [0, 1, 1], [0, 0, 1]],
                #[[1, 0, 0], [0, 2, 0], [0, 0, 3]],
                #[[1, 0, 0], [0, 2, 0], [0, 0, 2]],
@@ -205,4 +205,4 @@ if __name__ == "__main__":
         print("Input matrix:           ", repr(A.x.array))
         print("Computed with our expm: ", repr(expA.x.array))
         print("Computed with scipy:    ", repr(scipy.linalg.expm(A.x.array.reshape(3,3))))
-        numpy.testing.assert_allclose(scipy.linalg.expm(A.x.array), expA.x.array)
+        numpy.testing.assert_allclose(scipy.linalg.expm(A.x.array.reshape(3,3)), expA.x.array.reshape(3,3))
