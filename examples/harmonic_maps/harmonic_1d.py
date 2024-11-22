@@ -47,9 +47,9 @@ def solve_problem(N: int,
     print(N)
 
     el_0 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(3, ))
+        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2, ))
     el_1 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(3,))
+        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2,))
 
     trial_el = basix.ufl.mixed_element([el_0, el_1])
     V = dolfinx.fem.functionspace(mesh, trial_el)
@@ -71,45 +71,36 @@ def solve_problem(N: int,
     w0 = dolfinx.fem.Function(V)
     _, psi0 = ufl.split(w0)
 
+    one = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
+    gamma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1000))
+
     # Variational form
     F = alpha * ufl.inner(ufl.grad(u), ufl.grad(v))*dx
-    F -= ufl.inner(psi, v)*dx
+    F += gamma*(ufl.dot(psi, psi) - one)*ufl.inner(u, v)*dx
+    F += ufl.inner(psi, v)*dx
     # f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type((0, 0)))
     # F -= alpha * ufl.inner(f, v) * dx
     F -= ufl.inner(psi0, v)*dx
 
-    eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
-    non_lin_term = (ufl.sqrt(ufl.conditional(
-        ufl.gt(ufl.dot(psi, psi), eps), ufl.dot(psi, psi), eps)))
-    # non_lin_term = 1 / \
-    #     (ufl.ln(eps + ufl.exp(ufl.dot(psi, psi))))
-    eps2 = 0.01   # 4 / (2.0*ufl.Circumradius(mesh))**2
-    # J_ = eps2**(-2)/4 * (ufl.dot(u, u)-1)**2 * ufl.dx
-    # F += ufl.derivative(J_, u, v)
-
-    phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F += ufl.inner(u, w)*dx
-    F += phi * 1 / non_lin_term * ufl.dot(psi, w)*dx
 
-    # F += ufl.inner(u*non_lin_term, w)*dx
-    # F -= phi * ufl.dot(psi, w)*dx
+    non_lin_term = 1/(ufl.sqrt(ufl.dot(psi, psi)))
+    phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
+    F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
-    def e(x):
-        return (np.ones(x.shape[1]), np.zeros(x.shape[1]),  np.zeros(x.shape[1]))
-
-    def min_e(x):
-        e_tmp = e(x)
-        return tuple((-ei for ei in e_tmp))
-
+    def bc_func(x, epsilon=0.5, theta=0.2*np.pi):
+        return (epsilon * np.cos(theta*x[0]), epsilon * np.sin(theta*x[0])) / \
+            np.sqrt((epsilon * np.cos(theta*x[0])) **
+                    2 + (epsilon * np.sin(theta*x[0])) ** 2)
     # Create boundary conditions
     u_left = dolfinx.fem.Function(U)
-    u_left.interpolate(min_e)
+    u_left.interpolate(bc_func)
     left_facets = dolfinx.mesh.locate_entities_boundary(
         mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 0.0))
     left_dofs = dolfinx.fem.locate_dofs_topological(
         (V.sub(0), U), mesh.topology.dim-1, left_facets)
     u_right = dolfinx.fem.Function(U)
-    u_right.interpolate(e)
+    u_right.interpolate(bc_func)
 
     right_facets = dolfinx.mesh.locate_entities_boundary(
         mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 1.0))
@@ -121,30 +112,22 @@ def solve_problem(N: int,
     # sol.sub(0).interpolate(lambda x: (
     #    np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
     # [bc.set(sol.x.array) for bc in bcs]
-    sol.sub(0).interpolate(lambda x: (
-        np.cos(np.pi*x[0]), np.zeros(x.shape[1]), np.sin(np.pi*x[0])))
-    sol.sub(1).interpolate(lambda x: (
-        np.cos(np.pi*x[0])*np.pi**2, np.zeros(x.shape[1]), np.pi**2*np.sin(np.pi*x[0])))
-    print(U_to_W, Q_to_W)
-
-    f_compiled = dolfinx.fem.form(F)
-    vec = dolfinx.fem.petsc.assemble_vector(f_compiled)
-
-    breakpoint()
+    sol.sub(0).interpolate(bc_func)
+    sol.sub(1).interpolate(bc_func)
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
     solver.rtol = 1e-9
     solver.atol = 1e-9
-    solver.max_it = 20
-    solver.error_on_nonconvergence = True
+    solver.max_it = 25
+    solver.error_on_nonconvergence = False
 
     ksp = solver.krylov_solver
     opts = PETSc.Options()  # type: ignore
     option_prefix = ksp.getOptionsPrefix()
     opts[f"{option_prefix}ksp_type"] = "preonly"
     opts[f"{option_prefix}pc_type"] = "lu"
-    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "superlu"
+    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
     ksp.setFromOptions()
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
@@ -183,8 +166,8 @@ def solve_problem(N: int,
         L2_diff[i-1] = global_diff
         if mesh.comm.rank == 0:
             print(
-                f"Iteration {i}: {converged = } {num_newton_iterations = } {
-                    ksp.getConvergedReason() = }",
+                f"Iteration {i}: {converged =} {num_newton_iterations = } {
+                    ksp.getConvergedReason() =}",
                 f"|delta u |= {global_diff}")
 
         u_out.x.array[:] = sol.x.array[U_to_W]
@@ -197,14 +180,14 @@ def solve_problem(N: int,
         w0.x.array[:] = sol.x.array
     bp_u.close()
     bp_psi.close()
-    import scipy
-    import matplotlib.pyplot as plt
-    ai, aj, av = solver.A.getValuesCSR()
-    A_csr = scipy.sparse.csr_matrix((av, aj, ai))
-    plt.spy(A_csr)
-    plt.grid()
-    plt.savefig(f"local_sparsity.png")
-    breakpoint()
+    # import scipy
+    # import matplotlib.pyplot as plt
+    # ai, aj, av = solver.A.getValuesCSR()
+    # A_csr = scipy.sparse.csr_matrix((av, aj, ai))
+    # plt.spy(A_csr)
+    # plt.grid()
+    # plt.savefig(f"local_sparsity.png")
+    # breakpoint()
     return newton_iterations[:i+1], L2_diff[:i+1]
 
 
