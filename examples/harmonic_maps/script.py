@@ -42,7 +42,7 @@ def solve_problem(N: int,
                   result_dir: Path,
                   ):
 
-    N = 10
+    N = 20
     mesh = dolfinx.mesh.create_rectangle(
         MPI.COMM_WORLD, [[-0.3, 0.4], [0.1, 1]], [N, N])
 
@@ -71,8 +71,12 @@ def solve_problem(N: int,
     w0 = dolfinx.fem.Function(V)
     _, psi0 = ufl.split(w0)
 
+    one = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
+    gamma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e4))
+
     # Variational form
     F = alpha * ufl.inner(ufl.grad(u), ufl.grad(v))*dx
+    F += gamma*(ufl.dot(psi, psi) - one)*ufl.inner(u, v)*dx
     F += ufl.inner(psi, v)*dx
     # f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type((0, 0)))
     # F -= alpha * ufl.inner(f, v) * dx
@@ -80,12 +84,14 @@ def solve_problem(N: int,
 
     F += ufl.inner(u, w)*dx
     eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e-9))
-    non_lin_term = 1/(ufl.sqrt(eps + ufl.dot(psi, psi)))
 
+    non_lin_term = 1/(ufl.sqrt(ufl.dot(psi, psi)))
     phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
-    def bc_func(x, epsilon=0.25, theta=3*np.pi/6):
+    # F -= one*ufl.inner(ufl.grad(psi), ufl.grad(w))*dx
+
+    def bc_func(x, epsilon=0.5, theta=12*np.pi):
         return (1 + epsilon * np.sin(theta*x[0]), epsilon * np.cos(theta*x[0])) / \
             np.sqrt((1 + epsilon * np.sin(theta*x[0])) **
                     2 + (epsilon * np.cos(theta*x[0])) ** 2)
