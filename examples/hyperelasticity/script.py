@@ -9,7 +9,7 @@ import numpy
 L = 1  # diameter of domain
 h = 0.1  # height
 
-basen = 20  # resolution of base mesh
+basen = 10  # resolution of base mesh
 mesh = dolfinx.mesh.create_box(
     MPI.COMM_WORLD,  [[0, 0, 0], [L, h, h]], [basen, basen, basen])
 
@@ -193,6 +193,8 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 501)):
             print(
                 f"  Attempting eps = {eps_} k = {k} α = {float(alpha)}", flush=True)
             snes.solve(None, x)
+            z.x.petsc_vec.copy(x)
+            z.x.scatter_forward()
             if snes.getIterationNumber() == 0:
                 # solver didn't actually get to do any work,
                 # we've just reduced alpha so much that the initial guess
@@ -202,7 +204,7 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 501)):
             nfail += 1
             print(
                 f"  Failed eps = {eps_} k = {k} α = {float(alpha)}.", flush=True)
-            alpha.assign(alpha/2)
+            alpha.value *= 0.5
 
             if k == 1:
                 z.x.array[:] = z_prev.x.array
@@ -214,7 +216,7 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 501)):
                 break
             else:
                 continue
-
+        v_out.x.array[:] = z.x.array[V_to_Z]
         # Termination
         nrm = mesh.comm.allreduce(
             dolfinx.fem.assemble_scalar(diff), op=MPI.SUM)
@@ -225,12 +227,12 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 501)):
 
         # Update alpha
         if snes.getIterationNumber() <= 4:
-            alpha.assign(alpha*r)
+            alpha.value *= r
         elif snes.getIterationNumber() >= 10:
-            alpha.assign(alpha/r)
+            alpha.value /= r
 
         # Update z_iter
-        z_iter.assign(z)
+        z_iter.x.array[:] = z.x.array
 
         k += 1
 
