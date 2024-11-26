@@ -174,7 +174,7 @@ diff_z = dolfinx.fem.form(ufl.inner(z-z_prev, z-z_prev)*dx)
 # u.x.petsc_vec in the Jacobian and residual is *not* passed to
 # snes.solve.
 x = z.x.petsc_vec.copy()
-for i, eps_ in enumerate(numpy.linspace(0, 0.5, 501)):
+for i, eps_ in enumerate(numpy.linspace(0, 0.5, 100)):
     eps.value = -eps_
     epsilon.sub(0).interpolate(eps_func)
 
@@ -183,7 +183,7 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 501)):
 
     alpha.value = 1
     z_iter.x.array[:] = z.x.array
-    print(f"Solving for eps = {eps_}", flush=True)
+    print(f"Solving for eps = {eps_:.3e}", flush=True)
 
     k = 1
     r = 2
@@ -191,7 +191,7 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 501)):
     while True:
         try:
             print(
-                f"  Attempting eps = {eps_} k = {k} α = {float(alpha)}", flush=True)
+                f"  Attempting eps = {eps_:.3e} k = {k} α = {float(alpha)}", flush=True)
             snes.solve(None, x)
             z.x.petsc_vec.copy(x)
             z.x.scatter_forward()
@@ -221,7 +221,7 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 501)):
         nrm = mesh.comm.allreduce(
             dolfinx.fem.assemble_scalar(diff), op=MPI.SUM)
         print(
-            f"  Solved eps = {eps_} k = {k} α = {float(alpha)}. ||u_{k} - u_{k-1}|| = {nrm}", flush=True)
+            f"  Solved eps = {eps_:.3e} k = {k} α = {float(alpha)}. ||u_{k} - u_{k-1}|| = {nrm}", flush=True)
         if nrm < 1.0e-8:
             break
 
