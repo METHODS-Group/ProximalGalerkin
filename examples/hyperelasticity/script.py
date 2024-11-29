@@ -9,13 +9,13 @@ import numpy
 L = 1  # diameter of domain
 h = 0.1  # height
 
-basen = 10  # resolution of base mesh
+basen = 8  # resolution of base mesh
 mesh = dolfinx.mesh.create_box(
     MPI.COMM_WORLD,  [[0, 0, 0], [L, h, h]], [basen, basen, basen])
 
 v_el = basix.ufl.element("Lagrange", mesh.basix_cell(),
-                         1, shape=(mesh.geometry.dim, ))
-t_el = basix.ufl.element("Lagrange", mesh.basix_cell(), 1,
+                         2, shape=(mesh.geometry.dim, ))
+t_el = basix.ufl.element("DG", mesh.basix_cell(), 0,
                          shape=(mesh.geometry.dim, mesh.geometry.dim))
 m_el = basix.ufl.mixed_element([v_el, t_el])
 Z = dolfinx.fem.functionspace(mesh, m_el)
@@ -28,6 +28,8 @@ z_prev = dolfinx.fem.Function(Z, name="PreviousContinuationSolution")
 (_, psi_prev) = ufl.split(z_prev)
 z_iter = dolfinx.fem.Function(Z, name="PreviousLVPPSolution")
 (u_iter, psi_iter) = ufl.split(z_iter)
+
+alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
 
 # Define strain measures
 I = ufl.Identity(mesh.geometry.dim)  # the identity matrix
@@ -45,7 +47,8 @@ W = lmbda/2*(ufl.tr(E)**2) + mu*ufl.tr(E*E)
 
 # Define Piola-Kirchoff stress tensors
 S = ufl.diff(W, E)  # the second Piola-Kirchoff stress tensor
-P = F*S        # the first Piola-Kirchoff stress tensor
+P = expm(alpha*psi)*S  # the first Piola-Kirchoff stress tensor
+# P = F*S        # the first Piola-Kirchoff stress tensor
 
 B = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(
     (0, 0, -1000)))  # Body force per unit volume
@@ -58,7 +61,6 @@ right_facets = dolfinx.mesh.locate_entities_boundary(
 
 V, V_to_Z = Z.sub(0).collapse()
 eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
-
 
 def eps_func(x):
     return numpy.full(x.shape[1], float(eps))
@@ -75,9 +77,9 @@ bcr = dolfinx.fem.dirichletbc(epsilon, dolfinx.fem.locate_dofs_topological(
     (Z.sub(0), V), mesh.topology.dim-1, right_facets), Z.sub(0))
 bcs = [bcl, bcr]
 
-alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
-
 dx = ufl.Measure("dx", domain=mesh, metadata={"quadrature_degree": 10})
+
+three = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(3.0))
 
 G = (
     + ufl.inner(P, ufl.grad(v))*dx
@@ -86,6 +88,7 @@ G = (
     - ufl.inner(psi_prev, ufl.grad(v))*dx
     + ufl.inner(ufl.grad(u), phi)*dx
     + ufl.inner(I, phi)*ufl.dx
+    # - ufl.inner(expm(alpha*ufl.dev(psi)), phi)*dx
     - ufl.inner(expm(alpha*psi), phi)*dx
 )
 
