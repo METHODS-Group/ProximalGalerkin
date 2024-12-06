@@ -47,7 +47,7 @@ def solve_problem(N: int,
     print(N)
 
     el_0 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2, ))
+        "Lagrange", mesh.topology.cell_name(), primal_degree+1, shape=(2, ))
     el_1 = basix.ufl.element(
         "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2,))
 
@@ -72,7 +72,7 @@ def solve_problem(N: int,
     _, psi0 = ufl.split(w0)
 
     one = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-    gamma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1000))
+    gamma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100000))
 
     # Variational form
     F = alpha * ufl.inner(ufl.grad(u), ufl.grad(v))*dx
@@ -88,7 +88,7 @@ def solve_problem(N: int,
     phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
-    def bc_func(x, epsilon=0.5, theta=0.2*np.pi):
+    def bc_func(x, epsilon=1.0, theta=25*np.pi):
         return (epsilon * np.cos(theta*x[0]), epsilon * np.sin(theta*x[0])) / \
             np.sqrt((epsilon * np.cos(theta*x[0])) **
                     2 + (epsilon * np.sin(theta*x[0])) ** 2)
