@@ -88,10 +88,10 @@ def solve_problem(N: int,
     phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
-    def bc_func(x, theta=25*np.pi):
+    def bc_func(x, theta=5.7*np.pi):
         u_x = np.cos(theta*x[0])
-        u_y = x[0]
-        u_z = np.sin(theta*x[0])
+        u_z = 1 - 2 * x[0] - np.sin(0.8*np.pi*x[0])
+        u_y = np.sin(theta*x[0])
         return (u_x, u_y, u_z) / \
             np.sqrt(u_x ** 2+u_y**2+u_z**2)
     # Create boundary conditions
