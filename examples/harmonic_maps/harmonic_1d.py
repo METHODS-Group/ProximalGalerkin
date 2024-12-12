@@ -47,9 +47,9 @@ def solve_problem(N: int,
     print(N)
 
     el_0 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree+1, shape=(2, ))
+        "Lagrange", mesh.topology.cell_name(), primal_degree+1, shape=(3, ))
     el_1 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2,))
+        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(3,))
 
     trial_el = basix.ufl.mixed_element([el_0, el_1])
     V = dolfinx.fem.functionspace(mesh, trial_el)
@@ -89,7 +89,7 @@ def solve_problem(N: int,
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
     def bc_func(x, epsilon=1.0, theta=25*np.pi):
-        return (epsilon * np.cos(theta*x[0]), epsilon * np.sin(theta*x[0])) / \
+        return (epsilon * np.cos(theta*x[0]), np.zeros(x.shape[1]), epsilon * np.sin(theta*x[0])) / \
             np.sqrt((epsilon * np.cos(theta*x[0])) **
                     2 + (epsilon * np.sin(theta*x[0])) ** 2)
     # Create boundary conditions
