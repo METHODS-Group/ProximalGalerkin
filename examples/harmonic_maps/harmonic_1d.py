@@ -42,14 +42,14 @@ def solve_problem(N: int,
                   result_dir: Path,
                   ):
 
-    N = 20
-    mesh = dolfinx.mesh.create_rectangle(
-        MPI.COMM_WORLD, [[-0.3, 0.4], [0.1, 1]], [N, N])
+    mesh = dolfinx.mesh.create_unit_interval(
+        MPI.COMM_WORLD, N)
+    print(N)
 
     el_0 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2, ))
+        "Lagrange", mesh.topology.cell_name(), primal_degree+1, shape=(3, ))
     el_1 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(2,))
+        "Lagrange", mesh.topology.cell_name(), primal_degree, shape=(3,))
 
     trial_el = basix.ufl.mixed_element([el_0, el_1])
     V = dolfinx.fem.functionspace(mesh, trial_el)
@@ -72,7 +72,7 @@ def solve_problem(N: int,
     _, psi0 = ufl.split(w0)
 
     one = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-    gamma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e4))
+    gamma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100000))
 
     # Variational form
     F = alpha * ufl.inner(ufl.grad(u), ufl.grad(v))*dx
@@ -83,68 +83,71 @@ def solve_problem(N: int,
     F -= ufl.inner(psi0, v)*dx
 
     F += ufl.inner(u, w)*dx
-    eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e-9))
 
     non_lin_term = 1/(ufl.sqrt(ufl.dot(psi, psi)))
     phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w)*dx
 
-    # F -= one*ufl.inner(ufl.grad(psi), ufl.grad(w))*dx
-
-    def bc_func(x, epsilon=0.5, theta=12*np.pi):
-        return (1 + epsilon * np.sin(theta*x[0]), epsilon * np.cos(theta*x[0])) / \
-            np.sqrt((1 + epsilon * np.sin(theta*x[0])) **
-                    2 + (epsilon * np.cos(theta*x[0])) ** 2)
-        # return (np.ones(x.shape[1]), np.zeros(x.shape[1]))
-
+    def bc_func(x, theta=5.7*np.pi):
+        u_x = np.cos(theta*x[0])
+        u_z = 1 - 2 * x[0] - np.sin(0.8*np.pi*x[0])
+        u_y = np.sin(theta*x[0])
+        return (u_x, u_y, u_z) / \
+            np.sqrt(u_x ** 2+u_y**2+u_z**2)
     # Create boundary conditions
-    u_bc = dolfinx.fem.Function(U)
-    u_bc.interpolate(bc_func)
-    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-    bndry_dofs = dolfinx.fem.locate_dofs_topological(
-        (V.sub(0), U), mesh.topology.dim-1, bndry_facets)
+    u_left = dolfinx.fem.Function(U)
+    u_left.interpolate(bc_func)
+    left_facets = dolfinx.mesh.locate_entities_boundary(
+        mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 0.0))
+    left_dofs = dolfinx.fem.locate_dofs_topological(
+        (V.sub(0), U), mesh.topology.dim-1, left_facets)
+    u_right = dolfinx.fem.Function(U)
+    u_right.interpolate(bc_func)
 
-    psi_bc = dolfinx.fem.Function(Q)
-    psi_bc.interpolate(bc_func)
-    bndry_dofs_psi = dolfinx.fem.locate_dofs_topological(
-        (V.sub(1), Q), mesh.topology.dim-1, bndry_facets)
+    right_facets = dolfinx.mesh.locate_entities_boundary(
+        mesh, mesh.topology.dim-1, lambda x: np.isclose(x[0], 1.0))
+    right_dofs = dolfinx.fem.locate_dofs_topological(
+        (V.sub(0), U), mesh.topology.dim-1, right_facets)
 
-    bcs = [
-        dolfinx.fem.dirichletbc(u_bc, bndry_dofs, V.sub(0)),
-        dolfinx.fem.dirichletbc(psi_bc, bndry_dofs_psi, V.sub(1))]
-
-    sol.sub(0).interpolate(u_bc)
-    noise = 1e-4
-    sol.x.array[:] += noise * np.random.rand(len(sol.x.array))
-    sol.sub(1).interpolate(u_bc)
-    w0.sub(1).interpolate(u_bc)
+    bcs = [dolfinx.fem.dirichletbc(u_left, left_dofs, V.sub(0)),
+           dolfinx.fem.dirichletbc(u_right, right_dofs, V.sub(0))]
+    # sol.sub(0).interpolate(lambda x: (
+    #    np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
+    # [bc.set(sol.x.array) for bc in bcs]
+    sol.sub(0).interpolate(bc_func)
+    sol.sub(1).interpolate(bc_func)
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
     solver.rtol = 1e-9
     solver.atol = 1e-9
-    solver.max_it = 20
-    solver.error_on_nonconvergence = True
+    solver.max_it = 25
+    solver.error_on_nonconvergence = False
 
     ksp = solver.krylov_solver
     opts = PETSc.Options()  # type: ignore
     option_prefix = ksp.getOptionsPrefix()
     opts[f"{option_prefix}ksp_type"] = "preonly"
     opts[f"{option_prefix}pc_type"] = "lu"
-    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "superlu"
+    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
     ksp.setFromOptions()
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
-    u_out = sol.sub(0).collapse()
+    u_out = dolfinx.fem.Function(U)
     u_out.name = "u"
     bp_u = dolfinx.io.VTXWriter(
         mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
-    u_out.x.array[:] = sol.sub(0).x.array[U_to_W]
+    u_out.x.array[:] = sol.x.array[U_to_W]
     bp_u.write(0)
-    psi_out = sol.sub(1).collapse()
+
+    psi_out = dolfinx.fem.Function(Q)
+    psi_out.name = "psi"
     bp_psi = dolfinx.io.VTXWriter(
         mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP4")
+    psi_out.x.array[:] = sol.x.array[Q_to_W]
+    bp_psi.write(0)
+
     diff = sol.sub(0)-w0.sub(0)
     L2_squared = ufl.dot(diff, diff)*dx
     compiled_diff = dolfinx.fem.form(L2_squared)
@@ -165,22 +168,28 @@ def solve_problem(N: int,
         L2_diff[i-1] = global_diff
         if mesh.comm.rank == 0:
             print(
-                f"Iteration {i}: {converged=} {num_newton_iterations=} {
-                    ksp.getConvergedReason()=}",
+                f"Iteration {i}: {converged =} {num_newton_iterations = } {
+                    ksp.getConvergedReason() =}",
                 f"|delta u |= {global_diff}")
 
-        u_out.x.array[:] = sol.sub(0).x.array[U_to_W]
-        psi_out.x.array[:] = sol.sub(1).x.array[Q_to_W]
+        u_out.x.array[:] = sol.x.array[U_to_W]
+        psi_out.x.array[:] = sol.x.array[Q_to_W]
+
         bp_u.write(i)
         bp_psi.write(i)
-
         if global_diff < stopping_tol:
             break
-
         w0.x.array[:] = sol.x.array
     bp_u.close()
     bp_psi.close()
-
+    # import scipy
+    # import matplotlib.pyplot as plt
+    # ai, aj, av = solver.A.getValuesCSR()
+    # A_csr = scipy.sparse.csr_matrix((av, aj, ai))
+    # plt.spy(A_csr)
+    # plt.grid()
+    # plt.savefig(f"local_sparsity.png")
+    # breakpoint()
     return newton_iterations[:i+1], L2_diff[:i+1]
 
 
@@ -195,8 +204,8 @@ def main(argv: Optional[list[str]] = None, phi_func: Callable[[np.ndarray], np.n
         "-N", type=int, default=40, help="Number of elements in x-direction")
     element_options = parser.add_argument_group(
         "Finite element discretization options")
-    element_options.add_argument("--primal_degree", type=int, default=2, choices=[
-                                 2, 3, 4, 5, 6, 7, 8], help="Polynomial degree for primal variable")
+    element_options.add_argument("--primal_degree", type=int, default=1, choices=[
+                                 1, 2, 3, 4, 5, 6, 7, 8], help="Polynomial degree for primal variable")
     alpha_options = parser.add_argument_group(
         "Options for alpha-variable in Proximal Galerkin scheme")
     alpha_options.add_argument("--alpha_scheme", type=str, default="linear", choices=[
