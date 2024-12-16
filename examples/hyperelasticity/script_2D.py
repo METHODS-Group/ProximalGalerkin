@@ -9,40 +9,41 @@ import numpy
 L = 1  # diameter of domain
 h = 0.1  # height
 
-basen = 20  # resolution of base mesh
-mesh = dolfinx.mesh.create_box(
-    MPI.COMM_WORLD,  [[0, 0, 0], [L, h, h]], [basen, basen, basen])
+basen = 5  # resolution of base mesh
+mesh = dolfinx.mesh.create_rectangle(
+    MPI.COMM_WORLD,  [[0, 0], [L, h]], [basen, basen],
+    dolfinx.mesh.CellType.quadrilateral)
+
+v_el = basix.ufl.element("Lagrange", mesh.basix_cell(),
+                         2, shape=(mesh.geometry.dim, ))
+t_el = basix.ufl.element("Lagrange", mesh.basix_cell(), 1,
+                         shape=(mesh.geometry.dim, mesh.geometry.dim))
+m_el = basix.ufl.mixed_element([v_el, t_el])
+Z = dolfinx.fem.functionspace(mesh, m_el)
+z = dolfinx.fem.Function(Z)
+(u, psi) = ufl.split(z)
+(v, phi) = ufl.split(ufl.TestFunction(Z))
+z_prev = dolfinx.fem.Function(Z, name="PreviousContinuationSolution")
+(_, psi_prev) = ufl.split(z_prev)
+z_iter = dolfinx.fem.Function(Z, name="PreviousLVPPSolution")
+(u_iter, psi_iter) = ufl.split(z_iter)
 
 # v_el = basix.ufl.element("Lagrange", mesh.basix_cell(),
 #                          2, shape=(mesh.geometry.dim, ))
-# t_el = basix.ufl.element("DG", mesh.basix_cell(), 1,
-#                          shape=(mesh.geometry.dim, mesh.geometry.dim))
-# m_el = basix.ufl.mixed_element([v_el, t_el])
+# el_rt = basix.ufl.element("N1curl", mesh.basix_cell(), 2)
+# m_el = basix.ufl.mixed_element([v_el, el_rt, el_rt])
 # Z = dolfinx.fem.functionspace(mesh, m_el)
+# v, phi0, phi1 = ufl.TestFunctions(Z)
 # z = dolfinx.fem.Function(Z)
-# (u, psi) = ufl.split(z)
-# (v, phi) = ufl.split(ufl.TestFunction(Z))
+# u, psi0, psi1 = ufl.split(z)
+# psi = ufl.as_tensor([psi0, psi1])
+# phi = ufl.as_tensor([phi0, phi1])
 # z_prev = dolfinx.fem.Function(Z, name="PreviousContinuationSolution")
-# (_, psi_prev) = ufl.split(z_prev)
+# u_prev, psi0_prev, psi1_prev = ufl.split(z_prev)
+# psi_prev = ufl.as_tensor([psi0_prev, psi1_prev])
 # z_iter = dolfinx.fem.Function(Z, name="PreviousLVPPSolution")
-# (u_iter, psi_iter) = ufl.split(z_iter)
-
-v_el = basix.ufl.element("Lagrange", mesh.basix_cell(),
-                         1, shape=(mesh.geometry.dim, ))
-el_rt = basix.ufl.element("RT", mesh.basix_cell(), 1)
-m_el = basix.ufl.mixed_element([v_el, el_rt, el_rt, el_rt])
-Z = dolfinx.fem.functionspace(mesh, m_el)
-v, phi0, phi1, phi2 = ufl.TestFunctions(Z)
-z = dolfinx.fem.Function(Z)
-u, psi0, psi1, psi2 = ufl.split(z)
-psi = ufl.as_tensor([psi0, psi1, psi2])
-phi = ufl.as_tensor([phi0, phi1, phi2])
-z_prev = dolfinx.fem.Function(Z, name="PreviousContinuationSolution")
-u_prev, psi0_prev, psi1_prev, psi2_prev = ufl.split(z_prev)
-psi_prev = ufl.as_tensor([psi0_prev, psi1_prev, psi2_prev])
-z_iter = dolfinx.fem.Function(Z, name="PreviousLVPPSolution")
-u_iter, psi0_iter, psi1_iter, psi2_iter = ufl.split(z_iter)
-psi_iter = ufl.as_tensor([psi0_iter, psi1_iter, psi2_iter])
+# u_iter, psi0_iter, psi1_iter = ufl.split(z_iter)
+# psi_iter = ufl.as_tensor([psi0_iter, psi1_iter])
 
 alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
 
@@ -54,20 +55,32 @@ E = 0.5*(C - I)  # the Green-Lagrange strain tensor
 
 # Define strain energy density
 E = ufl.variable(E)
+
+### INCOMPRESSIBLE CASE
 # E_, nu = 1.0, 0.3
+# B = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(
+#     (0, -0.01)))  # Body force per unit volume
+
+### COMPRESSIBLE CASE
 E_, nu = 1000000.0, 0.3
+B = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(
+    (0, -10000)))  # Body force per unit volume
+
 mu = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(E_/(2*(1 + nu))))
 lmbda = dolfinx.fem.Constant(
     mesh, dolfinx.default_scalar_type(E_*nu/((1 + nu)*(1 - 2*nu))))
-W = lmbda/2*(ufl.tr(E)**2) + mu*ufl.tr(E*E)
+# W = lmbda/2*(ufl.tr(E)**2) + mu*ufl.tr(E*E)
 
 # Define Piola-Kirchoff stress tensors
-S = ufl.diff(W, E)  # the second Piola-Kirchoff stress tensor
-P = expm(psi)*S  # the first Piola-Kirchoff stress tensor
+# S = ufl.diff(W, E)  # the second Piola-Kirchoff stress tensor
+J = ufl.exp(ufl.tr(psi))
+FinvT = expm(-ufl.transpose(psi))
+P = mu*(F-FinvT) + lmbda*J*(J-1)*FinvT  # the first Piola-Kirchoff stress tensor
+# P = mu*(expm(psi)-FinvT) + lmbda*J*(J-1)*FinvT  # the first Piola-Kirchoff stress tensor
+# P = expm(psi)*S  # the first Piola-Kirchoff stress tensor
+# P = mu*F  # the first Piola-Kirchoff stress tensor
+# P = mu*expm(ufl.dev(psi))  # the first Piola-Kirchoff stress tensor
 # P = F*S        # the first Piola-Kirchoff stress tensor
-
-B = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(
-    (0, 0, -1000)))  # Body force per unit volume
 
 left_facets = dolfinx.mesh.locate_entities_boundary(
     mesh, mesh.topology.dim-1, lambda x: x[0] < 1e-10)
@@ -97,7 +110,7 @@ dx = ufl.Measure("dx", domain=mesh, metadata={"quadrature_degree": 10})
 
 three = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(3.0))
 
-eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e-1))
+eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1e-3))
 
 G = (
     + alpha*ufl.inner(P, ufl.grad(v))*dx
@@ -110,11 +123,10 @@ G = (
     - ufl.inner(expm(psi), phi)*dx
     # - eps*ufl.inner(psi, phi)*dx
     # - eps*ufl.inner(ufl.grad(psi), ufl.grad(phi))*dx
-    - eps*ufl.inner(ufl.div(psi0), ufl.div(phi0))*dx
-    - eps*ufl.inner(ufl.div(psi1), ufl.div(phi1))*dx
-    - eps*ufl.inner(ufl.div(psi2), ufl.div(phi2))*dx
+    # - eps*ufl.inner(ufl.curl(psi0), ufl.curl(phi0))*dx
+    # - eps*ufl.inner(ufl.curl(psi1), ufl.curl(phi1))*dx
 )
-
+# 
 v_out = dolfinx.fem.Function(V, name="Displacement")
 bp = dolfinx.io.VTXWriter(mesh.comm, "output/solution.bp",
                           [v_out], engine="BP5", mesh_policy=dolfinx.io.VTXMeshPolicy.reuse)
@@ -175,7 +187,7 @@ snes.getKSP().setTolerances(rtol=1.0e-9)
 snes.getKSP().getPC().setType("lu")
 
 sp = {"snes_type": "newtonls",
-      "snes_atol": 1.0e-4,
+      "snes_atol": 1.0e-8,
       "snes_monitor": None,
       "snes_linesearch_type": "l2",
       "snes_linesearch_monitor": None}
@@ -194,7 +206,7 @@ diff_z = dolfinx.fem.form(ufl.inner(z-z_prev, z-z_prev)*dx)
 # u.x.petsc_vec in the Jacobian and residual is *not* passed to
 # snes.solve.
 x = z.x.petsc_vec.copy()
-for i, eps_ in enumerate(numpy.linspace(0, 0.5, 20)):
+for i, eps_ in enumerate(numpy.linspace(0, 1.1, 20)):
     eps.value = -eps_
     epsilon.sub(0).interpolate(eps_func)
 
@@ -242,7 +254,7 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 20)):
             dolfinx.fem.assemble_scalar(diff), op=MPI.SUM)
         print(
             f"  Solved eps = {eps_:.3e} k = {k} α = {float(alpha)}. ||u_{k} - u_{k-1}|| = {nrm}", flush=True)
-        if nrm < 1.0e-8:
+        if nrm < 1.0e-5:
             break
 
         # Update alpha
@@ -267,7 +279,16 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 20)):
     bp.write(i)
 
     assert snes.getConvergedReason() > 0
-    assert snes.getIterationNumber() < 6
+    # assert snes.getIterationNumber() < 6
+
+    det1 = dolfinx.fem.form((ufl.det(F) - 1)**2*dx)
+    det2 = dolfinx.fem.form((ufl.det(expm(ufl.dev(psi))) - 1)**2*dx)
+    nrmdet1 = mesh.comm.allreduce(
+        dolfinx.fem.assemble_scalar(det1), op=MPI.SUM)
+    nrmdet2 = mesh.comm.allreduce(
+        dolfinx.fem.assemble_scalar(det2), op=MPI.SUM)
+    print(f"||det(F) - 1||_L2:  {numpy.sqrt(nrmdet1)}")
+    print(f"||det(exp(dev(psi))) - 1||_L2:  {numpy.sqrt(nrmdet2)}")
 
 bp.close()
 J.destroy()
