@@ -2,7 +2,7 @@
 Examples of the proximal Galerkin finite element method.
 
 |Figure|File: examples/|Backend|
-|:-:|:-:|
+|:-:|:-:|:-:|
 |2b|[obstacle/compare_all.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/compare_all.py)|FEniCSx|
 |2c(i)|[obstacle/finite_difference.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/finite_difference.jl)|Julia|
 |3|[signorini/script.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/signorini/script.py)|FEniCSx|
