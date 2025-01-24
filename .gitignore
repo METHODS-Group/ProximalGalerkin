@@ -165,3 +165,5 @@ cython_debug/
 *.bp
 
 *.png
+__pycache__
+ALIVE.d

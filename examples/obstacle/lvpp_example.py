@@ -1,14 +1,21 @@
 """
 
-Obstacle problem based of example 3 (P3) in: https://doi.org/10.1137/040611598
+Obstacle problem based of example 3 (P3) in Hintermüller and Kunisch [1].
 
-FEniCSx code solve this problem is based of the paper [1]:
+FEniCSx code solve this problem is based of the paper [2,3]:
 
 SPXD License: MIT License
 
-[1] Keith, B. and Surowiec, T. (2023) Proximal Galerkin: A structure-
-   preserving finite element method for pointwise bound constraints.
-   arXiv:2307.12444 [math.NA]
+Original license file [../../licenses/LICENSE.surowiec](../../licenses/LICENSE.surowiec)
+is included in the repository.
+
+[1] Hintermüller, M. and Kunisch K., Path-following Methods for a Class of
+    Constrained Minimization Problems in Function Space, SIAM Journal on Optimization 2006,
+    https://doi.org/10.1137/040611598
+[2] Keith, B. and Surowiec, T.M., Proximal Galerkin: A Structure-Preserving Finite Element Method
+for Pointwise Bound Constraints. Found Comput Math (2024). https://doi.org/10.1007/s10208-024-09681-8
+[3] Keith, B., Surowiec, T. M., & Dokken, J. S. (2023). Examples for the Proximal Galerkin Method
+    (Version 0.1.0) [Computer software]. https://github.com/thomas-surowiec/proximal-galerkin-examples
 """
 
 import argparse
@@ -266,36 +273,6 @@ def solve_problem(
     if k == maximum_number_of_outer_loop_iterations - 1:
         rank_print("Maximum number of outer loop iterations reached", msh.comm)
     return sol, k
-    # #V_latent, latent_to_mixed = V.sub(1).collapse()
-    # u_out = fem.Function(V_primal)
-    # u_out.x.array[:] = sol.x.array[primal_to_mixed]
-
-    # # Export primal solution variable
-    # # Use VTX to capture high-order dofs
-    # with io.VTXWriter(msh.comm, output_dir / "u.bp", [u_out]) as vtx:
-    #     vtx.write(0.0)
-
-    # # Export interpolant of exact solution u
-    # V_alt = fem.functionspace(msh, ("Lagrange", polynomial_order))
-    # q = fem.Function(V_alt)
-
-    # # Export interpolant of Lagrange multiplier λ
-    # W_out = fem.functionspace(msh, ("DG", max(1, polynomial_order - 1)))
-    # q = fem.Function(W_out)
-
-    # # Export latent solution variable
-    # q = fem.Function(W_out)
-    # expr = fem.Expression(sol.sub(1), W_out.element.interpolation_points())
-    # q.interpolate(expr)
-    # with io.VTXWriter(msh.comm, output_dir / "psi.bp", [q]) as vtx:
-    #     vtx.write(0.0)
-
-    # # Export feasible discrete solution
-    # exp_psi = exp(sol.sub(1)) - phi
-    # expr = fem.Expression(exp_psi, W_out.element.interpolation_points())
-    # q.interpolate(expr)
-    # with io.VTXWriter(msh.comm, output_dir / "tilde_u.bp", [q]) as vtx:
-    #     vtx.write(0.0)
 
 
 # -------------------------------------------------------

@@ -20,6 +20,7 @@ import dolfinx
 import numpy as np
 from ipopt_galahad import ObstacleProblem, setup_problem
 from lvpp_example import solve_problem
+from obstacle_snes import snes_solve
 
 from lvpp import galahad_solver, ipopt_solver
 
@@ -153,6 +154,24 @@ if __name__ == "__main__":
         ) as bp:
             bp.write(0.0)
 
+    # Solve with SNES
+    u_snes, num_snes_iterations = snes_solve(
+        args.infile,
+        snes_options={"snes_type": "vinewtonssls", "snes_monitor": None},
+        petsc_options={
+            "ksp_type": "preonly",
+            "pc_type": "lu",
+            "pc_factor_mat_solver_type": "mumps",
+        },
+    )
+    u_snes.name = "snes"
+    with dolfinx.io.VTXWriter(
+        mesh.comm,
+        args.result_dir / f"{args.infile.stem}_snes.bp",
+        [u_snes],
+    ) as bp:
+        bp.write(0.0)
+
     print(
         np.min(
             mesh.h(
@@ -160,8 +179,9 @@ if __name__ == "__main__":
             )
         )
     )
-    print(args.infile, "Galahad iterations: ", num_galahad_iterations)
-    print(args.infile, "llvp iterations: (P: 1)", max_it)
-    print(args.infile, "llvp iterations: (P: 2)", max_it_2)
-    print(args.infile, "Ipopt iterations: (With hessian)", ipopt_iteration_count[True])
-    print(args.infile, "Ipopt iterations: (Without hessian)", ipopt_iteration_count[False])
+    print(f"{args.infile} Galahad iterations: {num_galahad_iterations}")
+    print(f"{args.infile} llvp iterations: (P=1) {max_it}")
+    print(f"{args.infile} llvp iterations: (P=2) {max_it_2}")
+    print(f"{args.infile} Ipopt iterations: (With hessian) {ipopt_iteration_count[True]}")
+    print(f"{args.infile} Ipopt iterations: (Without hessian {ipopt_iteration_count[False]}")
+    print(f"{args.infile} SNES iterations: {num_snes_iterations}")

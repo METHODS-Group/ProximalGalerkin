@@ -2,7 +2,10 @@
 Solve obstacle problem with SNES
 Author: Jørgen S. Dokken
 SPDX-License-Identifier: MIT
-The SNES solver is based on https://github.com/Wells-Group/asimov-contact and is distributed under the MIT License
+
+The SNES solver is based on https://github.com/Wells-Group/asimov-contact
+and is distributed under the MIT License.
+The license file can be found under [../../licenses/LICENSE.asimov](../../licenses/LICENSE.asimov)
 """
 
 import argparse
@@ -16,6 +19,7 @@ import dolfinx.fem.petsc
 import numpy as np
 import ufl
 from lvpp.problem import SNESProblem
+
 parser = argparse.ArgumentParser(
     description="Solve the obstacle problem on a unit square.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -30,9 +34,7 @@ parser.add_argument(
 )
 
 
-
-
-def solve_problem(
+def snes_solve(
     filename: Path,
     snes_options: typing.Optional[dict] = None,
     petsc_options: typing.Optional[dict] = None,
@@ -84,7 +86,6 @@ def solve_problem(
     u_max = dolfinx.fem.Function(V)
     u_max.x.array[:] = PETSc.INFINITY
 
-
     # Create semismooth Newton solver (SNES)
     snes = PETSc.SNES().create(comm=mesh.comm)  # type: ignore
     snes.setTolerances(tol, tol, tol, 1000)
@@ -128,22 +129,15 @@ def solve_problem(
     V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree))
     u_out = dolfinx.fem.Function(V_out, name="llvp")
     u_out.interpolate(uh)
-    result_dir = Path("results")
-    with dolfinx.io.XDMFFile(mesh.comm, result_dir / "u_snes.xdmf", "w") as xdmf:
-        xdmf.write_mesh(mesh)
-        xdmf.write_function(u_out)
 
-    # with dolfinx.io.XDMFFile(mesh.comm,result_dir /  "phi_snes.xdmf", "w") as xdmf:
-    #     xdmf.write_mesh(mesh)
-    #     xdmf.write_function(phi)
+    return u_out, snes.getIterationNumber()
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    snes_solver = "vinewtonssls"  # "vinewtonrsls"
-    solve_problem(
+    snes_solve(
         args.infile,
-        snes_options={"snes_type": snes_solver, "snes_monitor": None},
+        snes_options={"snes_type": "vinewtonssls", "snes_monitor": None},
         petsc_options={
             "ksp_type": "preonly",
             "pc_type": "lu",
