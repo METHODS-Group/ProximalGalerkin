@@ -51,7 +51,7 @@ jobs:
         id: split
         env:
           FULL_TAG: ${{ env.DOCKER_METADATA_OUTPUT_TAGS }}
-        run: echo "image=${FULL_TAG*:*##}" >> $GITHUB_OUTPUT
+        run: echo "image=${FULL_TAG%%:*}" >> $GITHUB_OUTPUT
 
       - name: Test variable
         run: |
