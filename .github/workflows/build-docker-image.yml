@@ -54,7 +54,7 @@ jobs:
           file: docker/Dockerfile.${{ matrix.backend }}
           platforms: linux/${{ matrix.platform.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,"name=${{ env.DOCKER_META_IMAGES }}",push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,"name=${{ fromJson(steps.meta.outputs.bake-file)['target']['docker-metadata-action']['args']['DOCKER_META_IMAGES'] }}() }}",push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |
