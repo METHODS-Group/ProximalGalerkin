@@ -17,7 +17,7 @@ jobs:
   build-image:
     strategy:
       matrix:
-        backend: ["firedrake", "dolfinx", "mfem"]
+        backend: ["firedrake"] #, "dolfinx", "mfem"]
         platform: [
             { runner: "ubuntu-24.04", platform: amd64 },
             #{ runner: "ubuntu-24.04-arm", platform: arm64 }, # NOTE: Skip arm until repo is public
@@ -46,66 +46,71 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.backend }}
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: docker/
-          file: docker/Dockerfile.${{ matrix.backend }}
-          platforms: linux/${{ matrix.platform.platform }}
-          labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,"name=${{ fromJson(steps.meta.outputs.bake-file)['target']['docker-metadata-action']['args']['DOCKER_META_IMAGES'] }}() }}",push-by-digest=true,name-canonical=true,push=true
 
-      - name: Export digest
+      - name: Test
         run: |
-          mkdir -p ${{ runner.temp }}/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+          echo  ${{ fromJson(steps.meta.outputs.bake-file)['target']['docker-metadata-action']['args']['DOCKER_META_IMAGES'] }}
 
-      - name: Upload digest
-        #if: github.event_name == 'push'
-        uses: actions/upload-artifact@v4
-        with:
-          name: digests-${{ matrix.backend }}-${{ matrix.platform.platform }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
+          #   - name: Build and push by digest
+        # id: build
+        # uses: docker/build-push-action@v6
+        # with:
+        #   context: docker/
+        #   file: docker/Dockerfile.${{ matrix.backend }}
+        #   platforms: linux/${{ matrix.platform.platform }}
+        #   labels: ${{ steps.meta.outputs.labels }}
+        #   outputs: type=image,"name=${{ fromJson(steps.meta.outputs.bake-file)['target']['docker-metadata-action']['args']['DOCKER_META_IMAGES'] }}",push-by-digest=true,name-canonical=true,push=true
 
-  merge-and-publish:
-    #if: github.event_name == 'push'
-    strategy:
-      matrix:
-        backend: ["firedrake", "dolfinx", "mfem"]
-    runs-on: ubuntu-latest
-    needs:
-      - build-image
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@v4
-        with:
-          path: ${{ runner.temp }}/digests
-          pattern: digests-${{ matrix.backend }}*
-          merge-multiple: true
+      # - name: Export digest
+      #   run: |
+      #     mkdir -p ${{ runner.temp }}/digests
+      #     digest="${{ steps.build.outputs.digest }}"
+      #     touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Upload digest
+      #   #if: github.event_name == 'push'
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: digests-${{ matrix.backend }}-${{ matrix.platform.platform }}
+      #     path: ${{ runner.temp }}/digests/*
+      #     if-no-files-found: error
+      #     retention-days: 1
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.backend }}
+  # merge-and-publish:
+  #   #if: github.event_name == 'push'
+  #   strategy:
+  #     matrix:
+  #       backend: ["firedrake", "dolfinx", "mfem"]
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #     - build-image
+  #   steps:
+  #     - name: Download digests
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         path: ${{ runner.temp }}/digests
+  #         pattern: digests-${{ matrix.backend }}*
+  #         merge-multiple: true
 
-      - name: Create manifest list and push
-        working-directory: ${{ runner.temp }}/digests
-        run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}@sha256:%s ' *)
+  #     - name: Log in to the Container registry
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ${{ env.REGISTRY }}
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}-${{ matrix.backend }}:${{ steps.meta.outputs.version }}
+  #     - name: Extract metadata (tags, labels) for Docker
+  #       id: meta
+  #       uses: docker/metadata-action@v5
+  #       with:
+  #         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.backend }}
+
+  #     - name: Create manifest list and push
+  #       working-directory: ${{ runner.temp }}/digests
+  #       run: |
+  #         docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+  #           $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}@sha256:%s ' *)
+
+  #     - name: Inspect image
+  #       run: |
+  #         docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}-${{ matrix.backend }}:${{ steps.meta.outputs.version }}
