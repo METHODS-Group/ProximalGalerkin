@@ -1,5 +1,5 @@
 from pathlib import Path
-
+import packaging.version
 from mpi4py import MPI
 
 import dolfinx.io
@@ -33,11 +33,13 @@ def generate_disk(filename: Path, res: float, order: int = 1, refinement_level: 
 
     gmsh_model_rank = 0
     mesh_comm = MPI.COMM_WORLD
-    msh, _, _ = dolfinx.io.gmshio.model_to_mesh(
-        gmsh.model, mesh_comm, gmsh_model_rank, gdim=gdim)
+    model = dolfinx.io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=gdim)
+    if packaging.version.Version(dolfinx.__version__) > packaging.version.Version("0.9.0"):
+        msh = model.mesh
+    else:
+        msh = model[0]
     gmsh.finalize()
-    out_name = filename.with_stem(
-        f"{filename.stem}_{refinement_level}").with_suffix(".xdmf")
+    out_name = filename.with_stem(f"{filename.stem}_{refinement_level}").with_suffix(".xdmf")
     filename.parent.mkdir(exist_ok=True, parents=True)
     with dolfinx.io.XDMFFile(mesh_comm, out_name, "w") as xdmf:
         xdmf.write_mesh(msh)
@@ -45,5 +47,4 @@ def generate_disk(filename: Path, res: float, order: int = 1, refinement_level: 
 
 if __name__ == "__main__":
     for i in range(4):
-        generate_disk(Path("meshes/disk.xdmf"), res=0.2,
-                      order=2, refinement_level=i)
+        generate_disk(Path("meshes/disk.xdmf"), res=0.2, order=2, refinement_level=i)

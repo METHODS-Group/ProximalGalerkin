@@ -9,11 +9,12 @@ from pathlib import Path
 
 from mpi4py import MPI
 
-from lvpp import galahad_solver, ipopt_solver
 import dolfinx
 import numpy as np
 import scipy.sparse
 import ufl
+
+from lvpp import galahad_solver, ipopt_solver
 
 parser = argparse.ArgumentParser(
     description="""Solve the obstacle problem on a general mesh using a spatially varying
