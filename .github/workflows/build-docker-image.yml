@@ -111,12 +111,18 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.backend }}
 
+      - name: Split metadata
+        id: split
+        env:
+          FULL_TAG: ${{ env.DOCKER_METADATA_OUTPUT_TAGS }}
+        run: echo "image=${FULL_TAG%%:*}" >> $GITHUB_OUTPUT
+
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}@sha256:%s ' *)
+            $(printf '${{ steps.split.outputs.image }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ steps.split.outputs.image }}:${{ steps.meta.outputs.version }}
