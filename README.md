@@ -17,7 +17,7 @@ Examples of the proximal Galerkin finite element method.
 |11|?|MFEM|
 
 ## Obstacle problem (Figure 2)
-To get the results from Galahad, IPOPT and LVPP (FEM) use the LVPP docker image for DOLFINx and run (withing `examples/obstacle`)
+To get the results from Galahad, IPOPT, SNES and LVPP (FEM) use the LVPP docker image for DOLFINx and run (withing `examples/obstacle`)
 ```bash
 python3 generate_mesh_gmsh.py
 python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
