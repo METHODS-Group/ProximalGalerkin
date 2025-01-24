@@ -16,7 +16,8 @@ import scipy.sparse
 import ufl
 
 parser = argparse.ArgumentParser(
-    description="Solve the obstacle problem on a unit square using Galahad.",
+    description="""Solve the obstacle problem on a general mesh using a spatially varying
+      phi using Galahad or IPOPT""",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
 parser.add_argument(
@@ -90,6 +91,8 @@ def setup_problem(
 
 
 class ObstacleProblem:
+    total_iteration_count: int
+
     def __init__(self, S, M, f):
         S.eliminate_zeros()
         self._S = S
@@ -98,7 +101,7 @@ class ObstacleProblem:
         self._f = f
         tri_S = scipy.sparse.tril(self._S)
         self._sparsity = tri_S.nonzero()
-        self._H_data = tri_S.data
+        self._H_data = np.copy(tri_S.todense())[self.sparsity[0], self.sparsity[1]]
 
     def objective(self, x):
         """Returns the scalar value of the objective given x."""
