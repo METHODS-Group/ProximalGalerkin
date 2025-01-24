@@ -51,9 +51,11 @@ jobs:
         id: split
         env:
           FULL_TAG: ${{ env.DOCKER_METADATA_OUTPUT_TAGS }}
-        run:
-          echo "fragment=${FULL_TAG##*:}" >> $GITHUB_OUTPUT
+        run: echo "image=${FULL_TAG##*:}" >> $GITHUB_OUTPUT
 
+      - name: Test variable
+        run: |
+          echo ${{ steps.split.outputs.image }}
           #   - name: Build and push by digest
         # id: build
         # uses: docker/build-push-action@v6
