@@ -12,38 +12,24 @@ import numpy as np
 import numpy.typing as npt
 import scipy.sparse
 import ufl
-
-from lvpp import galahad_solver, ipopt_solver, AlphaScheme
-from lvpp.mesh_generation import create_half_disk
-from script import solve_contact_problem
+from run_lvpp_problem import solve_contact_problem
 from snes import solve_snes_problem
+
+from lvpp import AlphaScheme, galahad_solver, ipopt_solver
+from lvpp.mesh_generation import create_half_disk
 
 parser = argparse.ArgumentParser(
     description="Solve the obstacle problem on a unit square using Galahad.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
-parser.add_argument(
-    "--outdir", type=Path, default=Path("results"), help="Output directory"
-)
+parser.add_argument("--outdir", type=Path, default=Path("results"), help="Output directory")
 solver_params = parser.add_argument_group("Solver parameters")
-solver_params.add_argument(
-    "--ipopt", action="store_true", default=False, help="Use Ipopt"
-)
-solver_params.add_argument(
-    "--galahad", action="store_true", default=False, help="Use Galahad"
-)
-solver_params.add_argument(
-    "--lvpp", action="store_true", default=False, help="Use lvpp"
-)
-solver_params.add_argument(
-    "--snes", action="store_true", default=False, help="Use SNES"
-)
-solver_params.add_argument(
-    "--max-iter", type=int, default=200, help="Maximum number of iterations"
-)
-solver_params.add_argument(
-    "--tol", type=float, default=1e-6, help="Convergence tolerance"
-)
+solver_params.add_argument("--ipopt", action="store_true", default=False, help="Use Ipopt")
+solver_params.add_argument("--galahad", action="store_true", default=False, help="Use Galahad")
+solver_params.add_argument("--lvpp", action="store_true", default=False, help="Use lvpp")
+solver_params.add_argument("--snes", action="store_true", default=False, help="Use SNES")
+solver_params.add_argument("--max-iter", type=int, default=200, help="Maximum number of iterations")
+solver_params.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
 solver_params.add_argument(
     "--hessian",
     dest="use_hessian",
@@ -52,15 +38,9 @@ solver_params.add_argument(
     help="Use exact hessian",
 )
 problem_params = parser.add_argument_group("Problem parameters")
-problem_params.add_argument(
-    "--E", dest="E", type=float, default=2.0e5, help="Young's modulus"
-)
-problem_params.add_argument(
-    "--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio"
-)
-problem_params.add_argument(
-    "-R", dest="R", type=float, default=1.0, help="Radius of the half disk"
-)
+problem_params.add_argument("--E", dest="E", type=float, default=2.0e5, help="Young's modulus")
+problem_params.add_argument("--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio")
+problem_params.add_argument("-R", dest="R", type=float, default=1.0, help="Radius of the half disk")
 problem_params.add_argument(
     "--cy", dest="cy", type=float, default=1.2, help="Center of the half disk"
 )
@@ -75,7 +55,7 @@ problem_params.add_argument(
     "-o",
     "--order",
     type=int,
-    default=1,
+    default=2,
     help="Order of finite element used to represent the geometry",
 )
 problem_params.add_argument(
@@ -130,9 +110,7 @@ def setup_problem(
     dst = dolfinx.default_scalar_type
     mu = dolfinx.fem.Constant(
         mesh,
-        dst(
-            [[mu_s for _ in range(mesh.geometry.dim)] for _ in range(mesh.geometry.dim)]
-        ),
+        dst([[mu_s for _ in range(mesh.geometry.dim)] for _ in range(mesh.geometry.dim)]),
     )
     lmbda = dolfinx.fem.Constant(mesh, dst(E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))))
     C = lmbda * ufl.Identity(mesh.geometry.dim) + 2.0 * mu
@@ -143,9 +121,7 @@ def setup_problem(
     # Create boundary conditions
     tdim = mesh.topology.dim
     mesh.topology.create_connectivity(tdim - 1, tdim)
-    fixed_dofs = dolfinx.fem.locate_dofs_topological(
-        Vh, tdim - 1, facet_tags.find(t_marker)
-    )
+    fixed_dofs = dolfinx.fem.locate_dofs_topological(Vh, tdim - 1, facet_tags.find(t_marker))
     u_bc = dolfinx.fem.Function(Vh)
     u_bc.interpolate(lambda x: (np.zeros(x.shape[1]), np.full(x.shape[1], -g)))
     bcs = [dolfinx.fem.dirichletbc(u_bc, fixed_dofs)]
@@ -159,9 +135,7 @@ def setup_problem(
 
     # Restrict gap constraint to boundary dofs that are not in bcs
     potential_contact_facets = facet_tags.find(c_marker)
-    bound_dofs = dolfinx.fem.locate_dofs_topological(
-        Vh.sub(1), tdim - 1, potential_contact_facets
-    )
+    bound_dofs = dolfinx.fem.locate_dofs_topological(Vh.sub(1), tdim - 1, potential_contact_facets)
 
     # Compute lower and upper bounds
     lower_bound = dolfinx.fem.Function(Vh, name="lower_bound")
@@ -208,6 +182,10 @@ class SignoriniProblem:
     def hessianstructure(self):
         return self._sparsity
 
+    def intermediate(self, *args):
+        """Ipopt callback function"""
+        self.total_iteration_count = args[1]
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -243,6 +221,7 @@ if __name__ == "__main__":
     lower_bound = bounds[0].x.array
     upper_bound = bounds[1].x.array
     outdir = args.outdir
+    iterations = {}
     if args.galahad:
         x_g = dolfinx.fem.Function(Vh, name="galahad")
         x_g.x.array[:] = 0
@@ -254,17 +233,14 @@ if __name__ == "__main__":
             use_hessian=args.use_hessian,
             tol=args.tol,
         )
+        iterations["galahad"] = num_iterations
         x_g.x.array[:] = x_galahad
         mesh = x_g.function_space.mesh
         degree = mesh.geometry.cmap.degree
-        V_out = dolfinx.fem.functionspace(
-            mesh, ("Lagrange", degree, (mesh.geometry.dim,))
-        )
+        V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree, (mesh.geometry.dim,)))
         x_g_out = dolfinx.fem.Function(V_out, name="galahad")
         x_g_out.interpolate(x_g)
-        with dolfinx.io.VTXWriter(
-            V_out.mesh.comm, outdir / "galahad.bp", [x_g_out]
-        ) as bp:
+        with dolfinx.io.VTXWriter(V_out.mesh.comm, outdir / "galahad.bp", [x_g_out]) as bp:
             bp.write(0.0)
 
     if args.ipopt:
@@ -283,18 +259,16 @@ if __name__ == "__main__":
         # Output on geometry space
         mesh = x_i.function_space.mesh
         degree = mesh.geometry.cmap.degree
-        V_out = dolfinx.fem.functionspace(
-            mesh, ("Lagrange", degree, (mesh.geometry.dim,))
-        )
+        V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree, (mesh.geometry.dim,)))
         x_i_out = dolfinx.fem.Function(V_out, name="ipopt")
         x_i_out.interpolate(x_i)
         with dolfinx.io.VTXWriter(mesh.comm, outdir / "ipopt.bp", [x_i_out]) as bp:
             bp.write(0.0)
-
+        iterations["lvpp"] = problem.total_iteration_count
     if args.lvpp:
         bcs = {"contact": (c_marker,), "displacement": (t_marker,)}
 
-        solve_contact_problem(
+        lvpp_it = solve_contact_problem(
             mesh=mesh,
             facet_tag=ft,
             boundary_conditions=bcs,
@@ -313,9 +287,23 @@ if __name__ == "__main__":
             output=outdir,
             quadrature_degree=5,
         )
-
+        iterations["lvpp"] = lvpp_it
 
     if args.snes:
         bcs = {"contact": (c_marker,), "displacement": (t_marker,)}
-        solve_snes_problem(mesh=mesh, facet_tag=ft, boundary_conditions=bcs,
-                           E=args.E, nu=args.nu, disp=-args.g, max_iterations=args.max_iter, tol=args.tol, output=outdir)
+        snes_it = solve_snes_problem(
+            mesh=mesh,
+            facet_tag=ft,
+            boundary_conditions=bcs,
+            E=args.E,
+            nu=args.nu,
+            disp=-args.g,
+            max_iterations=args.max_iter,
+            tol=args.tol,
+            output=outdir,
+        )
+        iterations["snes"] = snes_it
+
+    print("Number of iterations")
+    for k, v in iterations.items():
+        print(f"{k}: {v}")

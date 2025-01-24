@@ -17,7 +17,7 @@ Examples of the proximal Galerkin finite element method.
 |11|?|MFEM|
 
 ## Obstacle problem (Figure 2)
-To get the results from Galahad, IPOPT, SNES and LVPP (FEM) use the LVPP docker image for DOLFINx and run (withing `examples/obstacle`)
+To get the results from Galahad, IPOPT, SNES and LVPP (FEM) use the LVPP docker image for DOLFINx and run (within `examples/obstacle`)
 ```bash
 python3 generate_mesh_gmsh.py
 python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
@@ -28,6 +28,17 @@ To get the results for the finite difference and spectral element method, use th
 ```bash
 julia finite_difference.jl
 julia spectral.jl
+```
+
+## Signorini problem (Figure 3)
+From within `examples/signorini`, call
+```bash
+python3 generate_mesh.py
+```
+to generate the mesh file `"meshes/half_sphere.xdmf"`.
+Next run the LVPP algorithm with
+```bash
+python3 run_lvpp_problem.py --alpha_0=0.1 --degree=2 --output output_lvpp file --filename=meshes/half_sphere.xdmf 
 ```
 
 ## Dependencies

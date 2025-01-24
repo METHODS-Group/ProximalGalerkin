@@ -2,15 +2,21 @@ from mpi4py import MPI
 
 import dolfinx.io
 import gmsh
+from packaging.version import Version
 import numpy as np
 
 __all__ = ["create_half_disk", "create_half_sphere"]
 
 
 def create_half_disk(
-    c_y: float, R: float, res: float, order: int = 1, refinement_level: int = 1,
-    disk_marker: int =2, top_marker:int =1
-) -> tuple[dolfinx.mesh.Mesh,dolfinx.mesh.MeshTags,dolfinx.mesh.MeshTags]:
+    c_y: float,
+    R: float,
+    res: float,
+    order: int = 1,
+    refinement_level: int = 1,
+    disk_marker: int = 2,
+    top_marker: int = 1,
+) -> tuple[dolfinx.mesh.Mesh, dolfinx.mesh.MeshTags, dolfinx.mesh.MeshTags]:
     """Generate a half-disk.
 
     Args:
@@ -65,9 +71,16 @@ def create_half_disk(
             gmsh.model.mesh.setOrder(order)
     gmsh_model_rank = 0
     mesh_comm = MPI.COMM_WORLD
-    msh, ct, ft = dolfinx.io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=2)
+    model = dolfinx.io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=2)
+
+    if Version(dolfinx.__version__) > Version("0.9.0"):
+        msh = model.mesh
+        ct = model.cell_tags
+        ft = model.facet_tags
+    else:
+        msh, ct, ft = model
     gmsh.finalize()
-    return msh,ct, ft
+    return msh, ct, ft
 
 
 def create_half_sphere(
@@ -144,6 +157,12 @@ def create_half_sphere(
         gmsh.model.mesh.generate(3)
         gmsh.model.mesh.setOrder(order)
         gmsh.model.mesh.remove_duplicate_nodes()
-    mesh, ct, ft = dolfinx.io.gmshio.model_to_mesh(gmsh.model, comm, 0)
+    model = dolfinx.io.gmshio.model_to_mesh(gmsh.model, comm, 0)
+    if Version(dolfinx.__version__) > Version("0.9.0"):
+        msh = model.mesh
+        ct = model.cell_tags
+        ft = model.facet_tags
+    else:
+        msh, ct, ft = model
     gmsh.finalize()
-    return mesh, ct, ft
+    return msh, ct, ft

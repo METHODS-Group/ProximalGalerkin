@@ -1,12 +1,14 @@
-from petsc4py import PETSc
-import dolfinx
 import typing
 from pathlib import Path
-import numpy as np
-import basix
-import ufl
-from lvpp.problem import SNESProblem
 
+from petsc4py import PETSc
+
+import basix
+import dolfinx
+import numpy as np
+import ufl
+
+from lvpp.problem import SNESProblem
 
 __all__ = ["solve_snes_problem"]
 
@@ -55,9 +57,7 @@ def solve_snes_problem(
 
     # NOTE: If we get facet-bubble spaces in DOLFINx we could use an alternative pair here
     gdim = mesh.geometry.dim
-    element_u = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), 1, shape=(gdim,)
-    )
+    element_u = basix.ufl.element("Lagrange", mesh.topology.cell_name(), 1, shape=(gdim,))
     V = dolfinx.fem.functionspace(mesh, element_u)
     u = dolfinx.fem.Function(V, name="displacement")
     v = ufl.TestFunction(V)
@@ -72,9 +72,9 @@ def solve_snes_problem(
     gap_V = dolfinx.fem.Function(V)
     gap_V.interpolate(gap)
 
-    F = ufl.inner(sigma(u, mu, lmbda), epsilon(v)) * ufl.dx(domain=mesh) - ufl.inner(
-        f, v
-    ) * ufl.dx(domain=mesh)
+    F = ufl.inner(sigma(u, mu, lmbda), epsilon(v)) * ufl.dx(domain=mesh) - ufl.inner(f, v) * ufl.dx(
+        domain=mesh
+    )
 
     residual = dolfinx.fem.form(F)
     jacobian = dolfinx.fem.form(ufl.derivative(F, u))
@@ -89,17 +89,15 @@ def solve_snes_problem(
     u_bc.interpolate(disp_func)
     disp_facets = [facet_tag.find(d) for d in boundary_conditions["displacement"]]
     bc_facets = np.unique(np.concatenate(disp_facets))
-    bc = dolfinx.fem.dirichletbc(
-        u_bc, dolfinx.fem.locate_dofs_topological(V, fdim, bc_facets)
-    )
+    bc = dolfinx.fem.dirichletbc(u_bc, dolfinx.fem.locate_dofs_topological(V, fdim, bc_facets))
     bcs = [bc]
 
     snes_options = {"snes_type": "vinewtonrsls", "snes_monitor": None}
     petsc_options = {
-            "ksp_type": "preonly",
-            "pc_type": "lu",
-            "pc_factor_mat_solver_type": "mumps",
-        }  # Create semismooth Newton solver (SNES)
+        "ksp_type": "preonly",
+        "pc_type": "lu",
+        "pc_factor_mat_solver_type": "mumps",
+    }  # Create semismooth Newton solver (SNES)
 
     snes = PETSc.SNES().create(comm=mesh.comm)  # type: ignore
     snes.setTolerances(tol, tol, tol, max_iterations)
@@ -138,9 +136,7 @@ def solve_snes_problem(
         all_contact_facets.append(facet_tag.find(contact_marker))
     contact_facets = np.unique(np.concatenate(all_contact_facets))
 
-    bound_dofs = dolfinx.fem.locate_dofs_topological(
-        V.sub(1), facet_tag.dim, contact_facets
-    )
+    bound_dofs = dolfinx.fem.locate_dofs_topological(V.sub(1), facet_tag.dim, contact_facets)
 
     # Compute lower and upper bounds
     lower_bound = dolfinx.fem.Function(V, name="lower_bound")
@@ -164,7 +160,7 @@ def solve_snes_problem(
 
     snes.solve(None, u.x.petsc_vec)
     assert snes.getConvergedReason() > 0
-
+    num_iterations = snes.getIterationNumber()
     mesh = u.function_space.mesh
     degree = mesh.geometry.cmap.degree
     V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree, (mesh.geometry.dim,)))
@@ -175,3 +171,4 @@ def solve_snes_problem(
         xdmf.write_function(u_out)
     ksp.destroy()
     snes.destroy()
+    return num_iterations
