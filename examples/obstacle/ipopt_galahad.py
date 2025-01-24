@@ -27,14 +27,10 @@ parser.add_argument(
     required=True,
     help="Path to infile",
 )
-parser.add_argument("--ipopt", action="store_true",
-                    default=False, help="Use Ipopt")
-parser.add_argument("--galahad", action="store_true",
-                    default=False, help="Use Galahad")
-parser.add_argument("--max-iter", type=int, default=200,
-                    help="Maximum number of iterations")
-parser.add_argument("--tol", type=float, default=1e-6,
-                    help="Convergence tolerance")
+parser.add_argument("--ipopt", action="store_true", default=False, help="Use Ipopt")
+parser.add_argument("--galahad", action="store_true", default=False, help="Use Galahad")
+parser.add_argument("--max-iter", type=int, default=200, help="Maximum number of iterations")
+parser.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
 parser.add_argument(
     "--hessian", dest="use_hessian", action="store_true", default=False, help="Use exact hessian"
 )
@@ -59,12 +55,10 @@ def setup_problem(
     tdim = mesh.topology.dim
     mesh.topology.create_connectivity(tdim - 1, tdim)
     boundary_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-    boundary_dofs = dolfinx.fem.locate_dofs_topological(
-        Vh, tdim - 1, boundary_facets)
+    boundary_dofs = dolfinx.fem.locate_dofs_topological(Vh, tdim - 1, boundary_facets)
 
     # Get dofs to deactivate
-    bcs = [dolfinx.fem.dirichletbc(
-        dolfinx.default_scalar_type(0.0), boundary_dofs, Vh)]
+    bcs = [dolfinx.fem.dirichletbc(dolfinx.default_scalar_type(0.0), boundary_dofs, Vh)]
 
     def psi(x):
         r = np.sqrt(x[0] ** 2 + x[1] ** 2)
@@ -123,6 +117,10 @@ class ObstacleProblem:
 
     def hessianstructure(self):
         return self._sparsity
+
+    def intermediate(self, *args):
+        """Ipopt callback function"""
+        self.total_iteration_count = args[1]
 
 
 if __name__ == "__main__":

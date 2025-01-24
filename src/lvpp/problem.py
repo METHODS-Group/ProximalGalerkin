@@ -9,6 +9,8 @@ __all__ = ["OptimizationProblem", "galahad_solver", "ipopt_solver", "SNESProblem
 
 
 class OptimizationProblem(typing.Protocol):
+    total_iteration_count: int
+
     def objective(self, x: npt.NDArray[np.float64]) -> np.float64:
         """Returns the scalar value of the objective given x."""
         ...
@@ -55,9 +57,9 @@ try:
             Optimized solution and number of iterations used
         """
 
-        assert (
-            len(bounds[0]) == len(bounds[1]) == len(x_init)
-        ), "Bounds and x_init must have the same length"
+        assert len(bounds[0]) == len(bounds[1]) == len(x_init), (
+            "Bounds and x_init must have the same length"
+        )
 
         options = trb.initialize()
 
@@ -128,9 +130,9 @@ try:
         Returns:
             Optimized solution
         """
-        assert (
-            len(bounds[0]) == len(bounds[1]) == len(x_init)
-        ), "Bounds and x_init must have the same length"
+        assert len(bounds[0]) == len(bounds[1]) == len(x_init), (
+            "Bounds and x_init must have the same length"
+        )
 
         options = {
             "print_level": log_level,
@@ -145,7 +147,14 @@ try:
         else:
             options["hessian_approximation"] = "limited-memory"
 
-        nlp = cyipopt.Problem(n=len(x_init), m=0, lb=bounds[0], ub=bounds[1], problem_obj=problem)
+        nlp = cyipopt.Problem(
+            n=len(x_init),
+            m=0,
+            lb=bounds[0],
+            ub=bounds[1],
+            problem_obj=problem,
+        )
+
         for key, val in options.items():
             nlp.add_option(key, val)
 
@@ -164,8 +173,6 @@ except ModuleNotFoundError:
         activate_hessian: bool = True,
     ) -> npt.NDArray[np.float64]:
         raise ModuleNotFoundError("cyipopt has not been installed")
-
-
 
 
 class SNESProblem:
@@ -228,4 +235,3 @@ class SNESProblem:
         J.zeroEntries()
         dolfinx.fem.petsc.assemble_matrix(J, self.a, self.bcs)
         J.assemble()
-

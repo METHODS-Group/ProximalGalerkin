@@ -1,3 +1,6 @@
+import Pkg; Pkg.add("ClassicalOrthogonalPolynomials")
+import Pkg; Pkg.add("Plots")
+import Pkg; Pkg.add("LaTeXStrings")
 using LinearAlgebra, SparseArrays
 import ClassicalOrthogonalPolynomials: band
 using Plots, LaTeXStrings

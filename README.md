@@ -16,7 +16,22 @@ Examples of the proximal Galerkin finite element method.
 |10|[harmonic_maps/harmonic_1d.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/harmonic_maps/harmonic_1d.py)|FEniCSx|
 |11|?|MFEM|
 
+## Obstacle problem (Figure 2)
+To get the results from Galahad, IPOPT and LVPP (FEM) use the LVPP docker image for DOLFINx and run (withing `examples/obstacle`)
+```bash
+python3 generate_mesh_gmsh.py
+python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
+python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
+python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
+```
+To get the results for the finite difference and spectral element method, use the `julia:1.10.8` Docker container and call
+```bash
+julia finite_difference.jl
+julia spectral.jl
+```
 
 ## Dependencies
+
+
 
 Scripts may rely on FEniCSx, Firedrake, MFEM, or Julia package backends.

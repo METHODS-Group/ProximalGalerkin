@@ -1,11 +1,27 @@
+"""
+Solve obstacle problem with DOLFINx (LVPP), Galahad and IPOPT and compare the results
+
+Author: Jørgen S. Dokken
+SPDX-License-Identifier: BSD 3-Clause License
+
+To reproduce the results from the paper, run the following commands
+```bash
+python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
+python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
+python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
+```
+
+"""
+
 import argparse
 from pathlib import Path
 
 import dolfinx
 import numpy as np
 from ipopt_galahad import ObstacleProblem, setup_problem
-from lvpp import ipopt_solver, galahad_solver
 from lvpp_example import solve_problem
+
+from lvpp import galahad_solver, ipopt_solver
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -17,7 +33,7 @@ if __name__ == "__main__":
         "-P",
         dest="infile",
         type=Path,
-        required=True,
+        default="./meshes/disk_3.xdmf",
         help="Path to infile",
     )
     parser.add_argument(
@@ -62,8 +78,7 @@ if __name__ == "__main__":
     x_g_out = dolfinx.fem.Function(V_out, name="ipopt")
     x_g_out.interpolate(x_g)
     with dolfinx.io.VTXWriter(
-        V.mesh.comm, args.result_dir /
-            f"{args.infile.stem}_galahad.bp", [x_g_out]
+        V.mesh.comm, args.result_dir / f"{args.infile.stem}_galahad.bp", [x_g_out]
     ) as bp:
         bp.write(0.0)
 
@@ -84,8 +99,7 @@ if __name__ == "__main__":
     u_out = dolfinx.fem.Function(V_out, name="llvp")
     u_out.interpolate(u_lvpp.sub(0))
     with dolfinx.io.VTXWriter(
-        mesh.comm, args.result_dir /
-            f"{args.infile.stem}_llvp_first_order.bp", [u_out]
+        mesh.comm, args.result_dir / f"{args.infile.stem}_llvp_first_order.bp", [u_out]
     ) as bp:
         bp.write(0.0)
 
@@ -108,12 +122,12 @@ if __name__ == "__main__":
         bp.write(0.0)
 
     with dolfinx.io.VTXWriter(
-        mesh.comm, args.result_dir /
-            f"{args.infile.stem}_obstacle.bp", [bounds_[0]]
+        mesh.comm, args.result_dir / f"{args.infile.stem}_obstacle.bp", [bounds_[0]]
     ) as bp:
         bp.write(0.0)
 
     # Solve with IPOPT (With hessian)
+    ipopt_iteration_count = {}
     for with_hessian in [True, False]:
         x_i = dolfinx.fem.Function(V, name="ipopt")
         x_i.x.array[:] = 0.0
@@ -125,7 +139,7 @@ if __name__ == "__main__":
             tol=tol,
             activate_hessian=with_hessian,
         )
-
+        ipopt_iteration_count[with_hessian] = problem.total_iteration_count
         x_i.x.array[:] = x_ipopt
 
         # Output on geometry space
@@ -134,8 +148,7 @@ if __name__ == "__main__":
         x_i_out.interpolate(x_i)
         with dolfinx.io.VTXWriter(
             mesh.comm,
-            args.result_dir /
-                f"{args.infile.stem}_ipopt_hessian_{with_hessian}.bp",
+            args.result_dir / f"{args.infile.stem}_ipopt_hessian_{with_hessian}.bp",
             [x_i_out],
         ) as bp:
             bp.write(0.0)
@@ -143,11 +156,12 @@ if __name__ == "__main__":
     print(
         np.min(
             mesh.h(
-                mesh.topology.dim, np.arange(
-                    mesh.topology.index_map(mesh.topology.dim).size_local)
+                mesh.topology.dim, np.arange(mesh.topology.index_map(mesh.topology.dim).size_local)
             )
         )
     )
     print(args.infile, "Galahad iterations: ", num_galahad_iterations)
     print(args.infile, "llvp iterations: (P: 1)", max_it)
     print(args.infile, "llvp iterations: (P: 2)", max_it_2)
+    print(args.infile, "Ipopt iterations: (With hessian)", ipopt_iteration_count[True])
+    print(args.infile, "Ipopt iterations: (Without hessian)", ipopt_iteration_count[False])
