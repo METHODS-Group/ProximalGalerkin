@@ -1,0 +1,4 @@
+FROM firedrakeproject/firedrake
+
+RUN echo "source /home/firedrake/firedrake/bin/activate" >> /home/firedrake/.bashrc
+RUN ./firedrake/bin/python3 -m pip install siphash24
