@@ -31,38 +31,40 @@ for mesh in mh:
     rho = det(hessian(u_exact))  # forcing term
     g = u_exact  # boundary data
 
-    V = FunctionSpace(mesh, "CG", 3)
-    W = VectorFunctionSpace(mesh, "RT", 3, dim=2)
+    k = 6
+    V = FunctionSpace(mesh, "CG", k)
+    U = VectorFunctionSpace(mesh, "CG", k+1)
+    W = VectorFunctionSpace(mesh, "DG", k, dim=3)
 
     C = FunctionSpace(mesh, "DG", W.ufl_element().degree())
     rho_c = Function(C, name="Density").interpolate(rho)
     VTKFile("output/density.pvd").write(rho_c)
     assert all(rho_c.dat.data > 0)
 
-    Z = MixedFunctionSpace([V, W])
+    Z = MixedFunctionSpace([V, U, W])
     z = Function(Z)
-    print(f"# degrees of freedom: {Z.dim()} {(Z.sub(0).dim(), Z.sub(1).dim())}", flush=True)
+    print(f"# degrees of freedom: {Z.dim()} {tuple(W.dim() for W in Z)}", flush=True)
 
-    (u, Psi) = split(z)
-    psi = as_tensor([Psi[0], Psi[1]])
-    (v, Phi) = split(TestFunction(Z))
-    phi = as_tensor([Phi[0], Phi[1]])
+    (u, p, Psi) = split(z)
+    psi = as_tensor([[Psi[0], Psi[1]], [Psi[1], Psi[2]]])
+    (v, q, Phi) = split(TestFunction(Z))
+    phi = as_tensor([[Phi[0], Phi[1]], [Phi[1], Phi[2]]])
     n = FacetNormal(mesh)
 
     F = (
-          inner(grad(u), div(phi))*dx
-        - inner(grad(u), dot(phi, n))*ds
-        + inner(expm(psi), phi)*dx
-        + inner(tr(psi) - ln(rho), v)*dx
+          inner(tr(psi) - ln(rho), v)*dx
+        + inner(p, q)*dx
+        - inner(grad(u), q)*dx
+        + inner(grad(p), phi)*dx
+        - inner(expm(psi), phi)*dx
         )
 
     bc = DirichletBC(Z.sub(0), g, "on_boundary")
-    #bc = [DirichletBC(Z.sub(0), g, "on_boundary"),
-    #      DirichletBC(Z.sub(1), 0, "on_boundary")]
 
     # Construct initial guesses
     z.subfunctions[0].rename("Solution")
-    z.subfunctions[1].rename("LatentVariable")
+    z.subfunctions[1].rename("GradSolution")
+    z.subfunctions[2].rename("LatentVariable")
 
     if z_prev is not None:
         prolong(z_prev, z)
@@ -74,13 +76,14 @@ for mesh in mh:
 
         B = TensorFunctionSpace(mesh, "DG", W.ufl_element().degree())
         z.subfunctions[0].project(u_guess, solver_parameters=None)
+        z.subfunctions[1].project(grad(u_guess), solver_parameters=None)
         psi_init = Function(B).interpolate(hessian(z.subfunctions[0]))
         # Should be able to vectorize this, but not done natively
         loghessian = Function(B, name="LogHessian")
         for i in range(loghessian.dat.data.shape[0]):
             loghessian.dat.data[i, :, :] = sc.linalg.logm(psi_init.dat.data[i, :, :])
-        z.subfunctions[1].project(loghessian)
-        VTKFile("output/initialguess.pvd").write(z.subfunctions[0], z.subfunctions[1])
+        z.subfunctions[2].project(as_vector([loghessian[0, 0], loghessian[0, 1], loghessian[1, 1]]))
+        VTKFile("output/initialguess.pvd").write(z.subfunctions[0], z.subfunctions[1], z.subfunctions[2])
 
     sp = {"snes_monitor": None,
           "snes_linesearch_type": "l2",
@@ -98,7 +101,7 @@ error_ = project(u_exact - u, V, solver_parameters=projsp)
 u_exact_ = project(u_exact, V, solver_parameters=projsp)
 error_.rename("Error")
 u_exact_.rename("ExactSolution")
-VTKFile("output/solution.pvd").write(z.subfunctions[0], z.subfunctions[1], u_exact_, error_)
+VTKFile("output/solution.pvd").write(z.subfunctions[0], z.subfunctions[1], z.subfunctions[2], u_exact_, error_)
 
 print("Errors: ", errors, flush=True)
 convergence_orders = lambda x: np.log2(np.array(x)[:-1] / np.array(x)[1:])
