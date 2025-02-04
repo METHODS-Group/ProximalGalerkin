@@ -41,6 +41,15 @@ Next run the LVPP algorithm with
 python3 run_lvpp_problem.py --alpha_0=0.1 --degree=2 --output output_lvpp file --filename=meshes/half_sphere.xdmf 
 ```
 
+## Gradient constraint
+Use DOLFINx docker image and run the `script.py` with the following input parameters:
+```bash
+python3 script.py -N 80 -M 80 --alpha_scheme=doubling
+```
+
+
+
+
 ## Dependencies
 
 
