@@ -93,14 +93,14 @@ J = Gridap.Algebra.jacobian( FEOperator(au0, jacu0, Uu, Vu), interpolate_everywh
 u0 = interpolate_everywhere(x->0.0, Uu).free_values
 T0 = interpolate_everywhere(x->1.0, UT).free_values
 w0 = interpolate_everywhere(x->0.0, Uψ).free_values
-zh = FEFunction(U,[u0; T0; w0]);
-wh = FEFunction(Uψ,w0);
+global zh = FEFunction(U,[u0; T0; w0]);
+global wh = FEFunction(Uψ,w0);
 newton_its=[];
 
 zhs, cauchy = [zh.single_fe_functions[1].free_values[:]], []
 
 # Run LVPP solve
-α = 2^(-6)
+global α = 2^(-6)
 for j in 1:100
     print("Considering α = $α. \n")
 
@@ -111,11 +111,11 @@ for j in 1:100
     # Newton solver with backtracking linesearch
     nls = NLSolver(show_trace=true, method=:newton, linesearch=LineSearches.BackTracking(c_1=-1e8), ftol=1e-5, xtol=10*eps())
     solver = FESolver(nls)
-    zh, its = solve!(zh,solver,op)
+    global zh, its = solve!(zh,solver,op)
     its = its.result.iterations
 
     push!(zhs, zh.single_fe_functions[1].free_values[:])
-    wh = FEFunction(Vψ, zh.single_fe_functions[3].free_values)
+    global wh = FEFunction(Vψ, zh.single_fe_functions[3].free_values)
     push!(newton_its, its)
 
     d = zhs[end] - zhs[end-1]
@@ -123,7 +123,7 @@ for j in 1:100
     print("Cauchy norm: $(cauchy[end]).\n")
 
     # α-update rule
-    α = 4*α
+    global α = 4*α
 
     # break if tolerance reached
     if cauchy[end] < 1e-9
