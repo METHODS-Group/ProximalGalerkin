@@ -6,14 +6,14 @@ import typing
 from pathlib import Path
 
 from mpi4py import MPI
-
+from scifem import BlockedNewtonSolver
 import dolfinx
 import dolfinx.fem.petsc
 import numpy as np
 import ufl
 from packaging.version import Version
 
-from lvpp import AlphaScheme, NewtonSolver
+from lvpp import AlphaScheme
 
 
 class _HelpAction(argparse._HelpAction):
@@ -270,29 +270,23 @@ def solve_contact_problem(
 
     # Set up Dirichlet conditions
     u_bc.interpolate(disp_func)
-    _, V0_to_V = V.sub(gdim - 1).collapse()  # Used for partial loading in y/z direction
+    # Used for partial loading in y/z direction
+    _, V0_to_V = V.sub(gdim - 1).collapse()
     disp_facets = [facet_tag.find(d) for d in boundary_conditions["displacement"]]
     bc_facets = np.unique(np.concatenate(disp_facets))
     bc = dolfinx.fem.dirichletbc(u_bc, dolfinx.fem.locate_dofs_topological(V, fdim, bc_facets))
     bcs = [bc]
 
     # Set up solver
-    solver = NewtonSolver(
-        F,
-        J,
-        [u, psi],
-        bcs=bcs,
-        max_iterations=newton_max_its,
-        petsc_options={
-            "ksp_type": "preonly",
-            "pc_type": "lu",
-            "pc_factor_mat_solver_type": "mumps",
-            # "mat_mumps_icntl_14": 120,
-            "ksp_error_if_not_converged": True,
-        },
-        error_on_nonconvergence=True,
-    )
-
+    petsc_options = {
+        "ksp_type": "preonly",
+        "pc_type": "lu",
+        "pc_factor_mat_solver_type": "mumps",
+        # "mat_mumps_icntl_14": 120,
+        "ksp_error_if_not_converged": True,
+    }
+    solver = BlockedNewtonSolver(F, [u, psi], bcs=bcs, J=J, petsc_options=petsc_options)
+    solver.max_iter = newton_max_its
     violation = dolfinx.fem.Function(V)
     bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u, violation])
     bp_psi = dolfinx.io.VTXWriter(mesh.comm, output / "psi.bp", [psi])
@@ -316,7 +310,10 @@ def solve_contact_problem(
         local_penetration = dolfinx.fem.assemble_scalar(boundary_penetration)
         return np.sqrt(mesh.comm.allreduce(local_penetration, op=MPI.SUM))
 
-    for it in range(max_iterations):
+    iterations = []
+    solver.error_on_nonconvergence = True
+    solver.convergence_criterion = "residual"
+    for it in range(1, max_iterations + 1):
         print(
             f"{it=}/{max_iterations} {normed_diff:.2e} Penetration L2(Gamma):",
             f" {assemble_penetration():.2e}",
@@ -331,8 +328,10 @@ def solve_contact_problem(
             alpha.value = alpha_0 * 2**it
 
         solver_tol = 10 * newton_tol if it < 2 else newton_tol
-        converged = solver.solve(solver_tol, 1)
-
+        solver.atol = solver_tol
+        solver.rtol = solver_tol
+        num_its, converged = solver.solve()
+        iterations.append(num_its)
         diff.x.array[:] = u.x.array - u_prev.x.array
         diff.x.petsc_vec.normBegin(2)
         normed_diff = diff.x.petsc_vec.normEnd(2)
@@ -350,15 +349,21 @@ def solve_contact_problem(
         bp_psi.write(it)
 
         if not converged:
-            print(f"Solver did not convert at {it=}, exiting with {converged=}")
+            print(
+                f"Solver did not convert at {
+                  it=}, exiting with {converged=}"
+            )
             break
-
     if it == max_iterations - 1:
         print(f"Did not converge within {max_iterations} iterations")
     bp_psi.close()
     bp.close()
     bp_vonmises.close()
-    return it
+    num_dofs_u = V.dofmap.index_map.size_global * V.dofmap.index_map_bs
+    num_cells = mesh.topology.index_map(mesh.topology.dim).size_global
+    print(f"{num_dofs_u=}, {num_cells=}")
+
+    return it, iterations
 
 
 # python3 script.py --alpha_0=0.1 --degree=2 file --filename=sphere.xdmf
@@ -404,7 +409,7 @@ if __name__ == "__main__":
             mt = xdmf.read_meshtags(mesh, name="Facet tags")
             bcs = {"contact": (args.ct,), "displacement": (args.dt,)}
 
-    it = solve_contact_problem(
+    it, iterations = solve_contact_problem(
         mesh=mesh,
         facet_tag=mt,
         boundary_conditions=bcs,
@@ -423,3 +428,5 @@ if __name__ == "__main__":
         output=args.output,
         quadrature_degree=args.quadrature_degree,
     )
+    print(it, iterations, sum(iterations), min(iterations), max(iterations))
+    assert it == len(iterations)
