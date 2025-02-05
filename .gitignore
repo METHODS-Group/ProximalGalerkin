@@ -167,3 +167,11 @@ cython_debug/
 *.png
 __pycache__
 ALIVE.d
+
+*.csv
+*.tar.*
+*.npz
+*.pvsm
+*.vtu
+*.pdf
+*.zip

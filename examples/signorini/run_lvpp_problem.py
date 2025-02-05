@@ -1,17 +1,22 @@
-# Contact example
-# SPDX-License-Identifier: MIT
+"""
+Solve Signorini contact problem using the Latent Variable Proximal Point algorithm
+
+Author: Jørgen S. Dokken
+SPDX-License-Identifier: MIT
+"""
 
 import argparse
 import typing
 from pathlib import Path
 
 from mpi4py import MPI
-from scifem import BlockedNewtonSolver
+
 import dolfinx
 import dolfinx.fem.petsc
 import numpy as np
 import ufl
 from packaging.version import Version
+from scifem import BlockedNewtonSolver
 
 from lvpp import AlphaScheme
 

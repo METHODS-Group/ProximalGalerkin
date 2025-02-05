@@ -2,15 +2,7 @@
 Solve obstacle problem with DOLFINx (LVPP), Galahad and IPOPT and compare the results
 
 Author: Jørgen S. Dokken
-SPDX-License-Identifier: BSD 3-Clause License
-
-To reproduce the results from the paper, run the following commands
-```bash
-python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
-python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
-python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
-```
-
+SPDX-License-Identifier: MIT
 """
 
 import argparse
