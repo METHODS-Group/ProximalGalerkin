@@ -286,7 +286,7 @@ def solve_contact_problem(
         "ksp_error_if_not_converged": True,
     }
     solver = BlockedNewtonSolver(F, [u, psi], bcs=bcs, J=J, petsc_options=petsc_options)
-
+    solver.max_iter = newton_max_its
     violation = dolfinx.fem.Function(V)
     bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u, violation])
     bp_psi = dolfinx.io.VTXWriter(mesh.comm, output / "psi.bp", [psi])
@@ -359,6 +359,10 @@ def solve_contact_problem(
     bp_psi.close()
     bp.close()
     bp_vonmises.close()
+    num_dofs_u = V.dofmap.index_map.size_global * V.dofmap.index_map_bs
+    num_cells = mesh.topology.index_map(mesh.topology.dim).size_global
+    print(f"{num_dofs_u=}, {num_cells=}")
+
     return it, iterations
 
 

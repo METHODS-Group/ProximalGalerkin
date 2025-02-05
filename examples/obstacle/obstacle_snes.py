@@ -123,13 +123,18 @@ def snes_solve(
         opts[k] = v
     opts.prefixPop()
     ksp.setFromOptions()
+    # For SNES line search to function correctly it is necessary that the
+    # u.x.petsc_vec in the Jacobian and residual is *not* passed to
+    # snes.solve.
+    x = dolfinx.fem.Function(V)
+    snes.solve(None, x.x.petsc_vec)
+    x.x.scatter_forward()
 
-    snes.solve(None, uh.x.petsc_vec)
     mesh = uh.function_space.mesh
     degree = mesh.geometry.cmap.degree
     V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree))
     u_out = dolfinx.fem.Function(V_out, name="llvp")
-    u_out.interpolate(uh)
+    u_out.interpolate(x)
 
     return u_out, snes.getIterationNumber()
 
