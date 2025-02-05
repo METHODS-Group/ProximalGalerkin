@@ -101,14 +101,10 @@ python3 script.py -N 80 -M 80 --alpha_scheme=doubling
 
 <a name="harmonic"></a>
 
-## Harmonic maps (Figure 10)
+## Harmonic maps
 
 Requires DOLFINx. Run
 
 ```bash
 python3 harmonic_1D.py
 ```
-
-## Dependencies
-
-Scripts may rely on FEniCSx, Firedrake, MFEM, or Julia package backends.
