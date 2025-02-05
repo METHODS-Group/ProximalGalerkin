@@ -31,3 +31,7 @@ jobs:
       - name: Run Spectral method
         working-directory: ./examples/obstacle
         run: julia spectral.jl
+
+      - name: Run thermoform
+        working-directory: ./examples/thermoforming_qvi
+        run: julia thermoform.jl
