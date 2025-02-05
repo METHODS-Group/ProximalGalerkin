@@ -68,14 +68,12 @@ def solve_problem(
     w0 = dolfinx.fem.Function(V)
     _, psi0 = ufl.split(w0)
 
-    x = ufl.SpatialCoordinate(mesh)
-    phi = ufl.sqrt(x[0] ** 2 + (2 + ufl.cos(2 * ufl.pi * x[0])) ** 2)
-    # dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
+    one = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
     gamma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100000))
 
     # Variational form
     F = alpha * ufl.inner(ufl.grad(u), ufl.grad(v)) * dx
-    F += gamma * (ufl.dot(psi, psi) - phi) * ufl.inner(u, v) * dx
+    F += gamma * (ufl.dot(psi, psi) - one) * ufl.inner(u, v) * dx
     F += ufl.inner(psi, v) * dx
     # f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type((0, 0)))
     # F -= alpha * ufl.inner(f, v) * dx
@@ -84,27 +82,18 @@ def solve_problem(
     F += ufl.inner(u, w) * dx
 
     non_lin_term = 1 / (ufl.sqrt(ufl.dot(psi, psi)))
+    phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w) * dx
 
-    # def bc_func(x, theta=5.7 * np.pi):
-    #     u_x = np.cos(theta * x[0])
-    #     u_z = 1 - 2 * x[0] - np.sin(0.8 * np.pi * x[0])
-    #     u_y = np.sin(theta * x[0])
-    #     return (u_x, u_y, u_z) / np.sqrt(u_x**2 + u_y**2 + u_z**2)
-    def bc_left(x):
-        values = np.zeros((3, x.shape[1]))
-        values[2] = 3.0
-        return values
-
-    def bc_right(x):
-        values = np.zeros((3, x.shape[1]))
-        values[0] = 1.0
-        values[2] = 3.0
-        return values
+    def bc_func(x, theta=5.7 * np.pi):
+        u_x = np.cos(theta * x[0])
+        u_z = 1 - 2 * x[0] - np.sin(0.8 * np.pi * x[0])
+        u_y = np.sin(theta * x[0])
+        return (u_x, u_y, u_z) / np.sqrt(u_x**2 + u_y**2 + u_z**2)
 
     # Create boundary conditions
     u_left = dolfinx.fem.Function(U)
-    u_left.interpolate(bc_left)
+    u_left.interpolate(bc_func)
     left_facets = dolfinx.mesh.locate_entities_boundary(
         mesh, mesh.topology.dim - 1, lambda x: np.isclose(x[0], 0.0)
     )
@@ -112,7 +101,7 @@ def solve_problem(
         (V.sub(0), U), mesh.topology.dim - 1, left_facets
     )
     u_right = dolfinx.fem.Function(U)
-    u_right.interpolate(bc_right)
+    u_right.interpolate(bc_func)
 
     right_facets = dolfinx.mesh.locate_entities_boundary(
         mesh, mesh.topology.dim - 1, lambda x: np.isclose(x[0], 1.0)
@@ -125,15 +114,11 @@ def solve_problem(
         dolfinx.fem.dirichletbc(u_left, left_dofs, V.sub(0)),
         dolfinx.fem.dirichletbc(u_right, right_dofs, V.sub(0)),
     ]
-
     # sol.sub(0).interpolate(lambda x: (
     #    np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
     # [bc.set(sol.x.array) for bc in bcs]
-    def initial_guess(x):
-        return (x[0], np.zeros(x.shape[1]), -2 - np.cos(2 * np.pi * x[0]))
-
-    sol.sub(0).interpolate(initial_guess)
-    sol.sub(1).interpolate(initial_guess)
+    sol.sub(0).interpolate(bc_func)
+    sol.sub(1).interpolate(bc_func)
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
