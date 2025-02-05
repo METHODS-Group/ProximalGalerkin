@@ -10,8 +10,10 @@ __all__ = ["AlphaScheme", "NewtonSolver"]
 
 class AlphaScheme(Enum):
     constant = 1  # Constant alpha (alpha_0)
-    linear = 2  # Linearly increasing alpha (alpha_0 + alpha_c * i) where i is the iteration number
-    doubling = 3  # Doubling alpha (alpha_0 * 2^i) where i is the iteration number
+    # Linearly increasing alpha (alpha_0 + alpha_c * i) where i is the iteration number
+    linear = 2
+    # Doubling alpha (alpha_0 * 2^i) where i is the iteration number
+    doubling = 3
 
     @classmethod
     def from_string(cls, method: str):
@@ -109,7 +111,8 @@ class NewtonSolver:
         dolfinx.cpp.la.petsc.scatter_local_vectors(
             self.x, [si.x.petsc_vec.array_r for si in self.w], maps
         )
-        self.x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+        self.x.ghostUpdate(addv=PETSc.InsertMode.INSERT,
+                           mode=PETSc.ScatterMode.FORWARD)
 
     def solve(self, tol=1e-6, beta=1.0) -> int:
         """Solve nonlinear problem
@@ -134,10 +137,6 @@ class NewtonSolver:
             for si in self.w
         ]
         while i <= self.max_iterations:
-            if i < self.max_iterations // 2:
-                tol = 10 * tol_
-            else:
-                tol = tol_
             # Assemble F(u_{i-1}) - J(u_D - u_{i-1}) and set du|_bc= u_D - u_{i-1}
             with self.b.localForm() as b_loc:
                 b_loc.set(0)
@@ -149,18 +148,21 @@ class NewtonSolver:
                 dolfinx.fem.petsc.assemble_vector_block(
                     self.b, self.F, self.J, bcs=self.bcs, x0=self.x, alpha=-1.0
                 )
-            self.b.ghostUpdate(PETSc.InsertMode.INSERT_VALUES, PETSc.ScatterMode.FORWARD)
+            self.b.ghostUpdate(PETSc.InsertMode.INSERT_VALUES,
+                               PETSc.ScatterMode.FORWARD)
 
             # Assemble Jacobian
             self.A.zeroEntries()
-            dolfinx.fem.petsc.assemble_matrix_block(self.A, self.J, bcs=self.bcs)
+            dolfinx.fem.petsc.assemble_matrix_block(
+                self.A, self.J, bcs=self.bcs)
             self.A.assemble()
 
             # Solve linear system for correction
             with self.dx.localForm() as dx_loc:
                 dx_loc.set(0)
             self._solver.solve(self.b, self.dx)
-            self.dx.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+            self.dx.ghostUpdate(addv=PETSc.InsertMode.INSERT,
+                                mode=PETSc.ScatterMode.FORWARD)
 
             # Update solution
             self._update_solution(beta)
@@ -175,12 +177,14 @@ class NewtonSolver:
             else:
                 converged = self._solver.getConvergedReason()
                 if converged <= 0:
-                    warnings.warn("Linear solver did not converge, exiting", RuntimeWarning)
+                    warnings.warn(
+                        "Linear solver did not converge, exiting", RuntimeWarning)
                     return 0
 
             # Compute norm of primal space diff
 
-            local_du, _ = dolfinx.cpp.la.petsc.get_local_vectors(self.dx, blocked_maps)
+            local_du, _ = dolfinx.cpp.la.petsc.get_local_vectors(
+                self.dx, blocked_maps)
 
             self.norm_array.x.array[:] = local_du
             self.norm_array.x.petsc_vec.ghostUpdate(

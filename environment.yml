@@ -15,6 +15,7 @@ dependencies:
   - trame
   - ipywidgets
   - python-gmsh
+  - scifem
 variables:
   PYVISTA_TRAME_SERVER_PROXY_PREFIX: "/proxy/"
   PYVISTA_TRAME_SERVER_PROXY_ENABLED: "True"
