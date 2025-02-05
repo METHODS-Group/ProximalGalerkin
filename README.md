@@ -15,7 +15,7 @@ Examples of the proximal Galerkin finite element method.
 |   8    |                                                                            ?                                                                            | Firedrake |                                  |
 |   9    |                                                                            ?                                                                            | Firedrake |                                  |
 |   10   |            [harmonic_maps/harmonic_1d.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/harmonic_maps/harmonic_1d.py)            |  FEniCSx  | [Harmonic map](#harmonic)        |
-|   11   |                                                                            ?                                                                            |   MFEM    |                                  |
+|   11   |                                                                            ?                                                                            |   MFEM    | [Eikonal](#eikonal)              |
 
 ## Installation
 
@@ -108,3 +108,13 @@ Requires DOLFINx. Run
 ```bash
 python3 harmonic_1D.py
 ```
+
+## Eikonal equation
+
+Meshes at:
+
+- https://github.com/mfem/mfem/blob/master/data/star.mesh
+
+- https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh
+
+- https://github.com/mfem/mfem/blob/master/data/mobius-strip.mesh
