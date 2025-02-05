@@ -1,3 +1,9 @@
+
+import Pkg
+Pkg.add("Gridap")
+Pkg.add("LineSearches")
+Pkg.add("Plots")
+Pkg.add("LaTeXStrings")
 using Gridap, LineSearches
 using Plots, LaTeXStrings
 
