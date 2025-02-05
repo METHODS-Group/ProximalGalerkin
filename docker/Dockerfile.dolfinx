@@ -1,6 +1,8 @@
 FROM ghcr.io/fenics/dolfinx/dev-env:v0.9.0-openmpi AS optimization
 ARG TARGETPLATFORM
 
+ENV OMPI_ALLOW_RUN_AS_ROOT=1
+ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 
 WORKDIR /galahad
 RUN python3 -m pip install meson

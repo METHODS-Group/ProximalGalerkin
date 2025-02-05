@@ -1,7 +1,6 @@
 import argparse
-from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional, get_args
 
 from mpi4py import MPI
 from petsc4py import PETSc
@@ -13,24 +12,7 @@ import ufl
 from dolfinx.fem.petsc import NonlinearProblem
 from dolfinx.nls.petsc import NewtonSolver
 
-
-class AlphaScheme(Enum):
-    constant = 1  # Constant alpha (alpha_0)
-    # Linearly increasing alpha (alpha_0 + alpha_c * i) where i is the iteration number
-    linear = 2
-    # Doubling alpha (alpha_0 * 2^i) where i is the iteration number
-    doubling = 3
-
-    @classmethod
-    def from_string(cls, method: str):
-        if method == "constant":
-            return AlphaScheme.constant
-        elif method == "linear":
-            return AlphaScheme.linear
-        elif method == "doubling":
-            return AlphaScheme.doubling
-        else:
-            raise ValueError(f"Unknown alpha scheme {method}")
+AlphaScheme = Literal["constant", "linear", "doubling"]
 
 
 def solve_problem(
@@ -45,6 +27,8 @@ def solve_problem(
     max_iterations: int,
     stopping_tol: float,
     result_dir: Path,
+    tau0: float,
+    T: float,
 ):
     _cell_type = dolfinx.mesh.to_type(cell_type)
 
@@ -52,10 +36,8 @@ def solve_problem(
         MPI.COMM_WORLD, N, M, cell_type=_cell_type, diagonal=dolfinx.mesh.DiagonalType.crossed
     )
     num_species = 4
-    el_0 = basix.ufl.element(
-        "P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
-    el_1 = basix.ufl.element(
-        "P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
+    el_0 = basix.ufl.element("P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
+    el_1 = basix.ufl.element("P", mesh.topology.cell_name(), primal_degree, shape=(num_species,))
 
     # Trial space is (u, z, psi)
     trial_el = basix.ufl.mixed_element([el_0, el_0, el_1])
@@ -68,8 +50,8 @@ def solve_problem(
 
     dx = ufl.Measure("dx", domain=mesh)
     alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(alpha_0))
-    h = 2*ufl.Circumradius(mesh)
-    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(2))*h
+    h = 2 * ufl.Circumradius(mesh)
+    epsilon = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(2)) * h
 
     C, c_to_V = V_trial.sub(0).collapse()
 
@@ -91,7 +73,6 @@ def solve_problem(
     F -= alpha * sum(y[m] * dx for m in range(num_species))
 
     # EQ 2
-    tau0 = 2.5e-4
     tau = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(tau0))
     F += u[i] * v[i] * dx
     F -= tau * ufl.grad(z[i])[k] * ufl.grad(v[i])[k] * dx
@@ -102,19 +83,23 @@ def solve_problem(
     eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(eps_0))
     sum_psi = sum(ufl.exp(psi[m]) for m in range(num_species))
     F += (
-        sum((u[m] - ufl.exp(psi[m]) / sum_psi) * w[m] - eps * psi[m] * w[m]
-            for m in range(num_species))
+        sum(
+            (u[m] - ufl.exp(psi[m]) / sum_psi) * w[m] - eps * psi[m] * w[m]
+            for m in range(num_species)
+        )
         * dx
     )
 
     def rectangle(x, tol=1e-14):
-        return (0.2-tol <= x[1]) & (x[1] <= 0.75+tol) & (0.2-tol <= x[0]) & (x[0] <= 0.8+tol)
+        return (
+            (0.2 - tol <= x[1]) & (x[1] <= 0.75 + tol) & (0.2 - tol <= x[0]) & (x[0] <= 0.8 + tol)
+        )
 
     def lower_left(x, tol=1e-14):
-        return (x[1] <= 0.5+tol) & (0.2 - tol <= x[1]) & (0.2 - tol <= x[0]) & (x[0] <= 0.5+tol)
+        return (x[1] <= 0.5 + tol) & (0.2 - tol <= x[1]) & (0.2 - tol <= x[0]) & (x[0] <= 0.5 + tol)
 
     def lower_right(x, tol=1e-14):
-        return (x[1] <= 0.5+tol) & (0.2 <= x[1] + tol) & (0.5-tol <= x[0]) & (x[0] <= 0.8+tol)
+        return (x[1] <= 0.5 + tol) & (0.2 <= x[1] + tol) & (0.5 - tol <= x[0]) & (x[0] <= 0.8 + tol)
 
     def field1(x):
         values = np.zeros((num_species, x.shape[1]))
@@ -140,7 +125,7 @@ def solve_problem(
     u_prev.interpolate(field3, cells0=cells3)
     u_prev.x.scatter_forward()
 
-    bcs = []
+    bcs: list[dolfinx.fem.DirichletBC] = []
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
@@ -162,21 +147,29 @@ def solve_problem(
     opts[f"{prefix}mat_mumps_icntl_14"] = 500
     # opts[f"{prefix}mat_mumps_icntl_4"] = 3
     opts[f"{prefix}mat_mumps_icntl_24"] = 1
-    opts[f"{prefix}ksp_monitor"] = None
+    if dolfinx.log.get_log_level() == dolfinx.log.LogLevel.INFO:
+        opts[f"{prefix}ksp_monitor"] = None
     # opts[f"{option_prefix}ksp_view"] = None
     ksp.setFromOptions()
-    dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
     bp_c = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "u.bp", [u_prev], engine="BP5",
-        mesh_policy=dolfinx.io.VTXMeshPolicy.reuse)
+        mesh.comm,
+        result_dir / "u.bp",
+        [u_prev],
+        engine="BP5",
+        mesh_policy=dolfinx.io.VTXMeshPolicy.reuse,
+    )
     bp_c.write(0)
 
     psi_space, psi_to_V = V_trial.sub(2).collapse()
     psi_out = dolfinx.fem.Function(psi_space)
     bp_psi = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "psi.bp", [psi_out], engine="BP5",
-        mesh_policy=dolfinx.io.VTXMeshPolicy.reuse)
+        mesh.comm,
+        result_dir / "psi.bp",
+        [psi_out],
+        engine="BP5",
+        mesh_policy=dolfinx.io.VTXMeshPolicy.reuse,
+    )
     bp_psi.write(0)
 
     diff = sol.sub(0) - u_old
@@ -184,17 +177,23 @@ def solve_problem(
     L2_squared = ufl.dot(diff, diff) * dx
     compiled_diff = dolfinx.fem.form(L2_squared)
 
-    num_steps = 700
+    num_steps = np.ceil(T / tau0).astype(np.int32)
+
     newton_iterations = np.zeros(num_steps, dtype=np.int32)
     lvpp_iterations = np.zeros(num_steps, dtype=np.int32)
-    t = 0
+    t = 0.0
 
     psi_scalar = [V_trial.sub(2).sub(i).collapse() for i in range(num_species)]
-    psi_init = [dolfinx.fem.Expression(ufl.ln(
-        abs(u[i])+1e-7) + 1, psi_scalar[i][0].element.interpolation_points()) for i in range(num_species)]
-    psi_sub = [dolfinx.fem.Function(psi_scalar[i][0])
-               for i in range(num_species)]
-    for j in range(num_steps):
+    psi_init = [
+        dolfinx.fem.Expression(
+            ufl.ln(abs(u[i]) + 1e-7) + 1, psi_scalar[i][0].element.interpolation_points()
+        )
+        for i in range(num_species)
+    ]
+    psi_sub = [dolfinx.fem.Function(psi_scalar[i][0]) for i in range(num_species)]
+    for j in range(1, num_steps + 1):
+        if mesh.comm.rank == 0:
+            print(f"Step {j}/{num_steps}", flush=True)
         t += float(tau)
         # Set psi_i = ln(u_i) + 1
         for i in range(num_species):
@@ -204,15 +203,12 @@ def solve_problem(
 
         u_old.x.array[:] = 0
         for i in range(1, max_iterations + 1):
-            L2_diff = np.zeros(max_iterations, dtype=np.float64)
-
-            if alpha_scheme == AlphaScheme.constant:
+            if alpha_scheme == "constant":
                 pass
-            elif alpha_scheme == AlphaScheme.linear:
+            elif alpha_scheme == "linear":
                 alpha.value = min(alpha_0 + alpha_c * i, alpha_max)
-            elif alpha_scheme == AlphaScheme.doubling:
+            elif alpha_scheme == "doubling":
                 alpha.value = min(alpha_0 * 2**i, alpha_max)
-            # dolfinx.log.set_log_level(dolfinx.log.LogLevel.ERROR)
             num_newton_iterations, converged = solver.solve(sol)
 
             newton_iterations[j] += num_newton_iterations
@@ -221,9 +217,11 @@ def solve_problem(
             if mesh.comm.rank == 0:
                 print(
                     f"Iteration {i}: {converged=} alpha={
-                        float(alpha):.2e} {num_newton_iterations=}",
+                        float(alpha):.2e
+                    } {num_newton_iterations=}",
                     f"|delta u |= {global_diff}",
                     f"{ksp.getConvergedReason()=}",
+                    flush=True,
                 )
 
             # ksp.view()
@@ -252,11 +250,12 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHe
 
 def main(argv: Optional[list[str]] = None):
     parser = argparse.ArgumentParser(formatter_class=CustomFormatter)
+    parser.add_argument("--dt", dest="tau0", type=float, default=1e-5, help="Time step")
+    parser.add_argument("--T", dest="T", type=float, default=7e-3, help="End time")
+    parser.add_argument("-l", "--logging", action="store_true", help="Enable logging")
     mesh_options = parser.add_argument_group("Mesh options")
-    mesh_options.add_argument(
-        "-N", type=int, default=40, help="Number of elements in x-direction")
-    mesh_options.add_argument(
-        "-M", type=int, default=40, help="Number of elements in y-direction")
+    mesh_options.add_argument("-N", type=int, default=200, help="Number of elements in x-direction")
+    mesh_options.add_argument("-M", type=int, default=200, help="Number of elements in y-direction")
     mesh_options.add_argument(
         "--cell_type",
         "-c",
@@ -265,8 +264,7 @@ def main(argv: Optional[list[str]] = None):
         choices=["triangle", "quadrilateral"],
         help="Cell type",
     )
-    element_options = parser.add_argument_group(
-        "Finite element discretization options")
+    element_options = parser.add_argument_group("Finite element discretization options")
     element_options.add_argument(
         "--primal_degree",
         type=int,
@@ -281,11 +279,10 @@ def main(argv: Optional[list[str]] = None):
         "--alpha_scheme",
         type=str,
         default="constant",
-        choices=["constant", "linear", "doubling"],
+        choices=get_args(AlphaScheme),
         help="Scheme for updating alpha",
     )
-    alpha_options.add_argument(
-        "--alpha_0", type=float, default=1.0, help="Initial value of alpha")
+    alpha_options.add_argument("--alpha_0", type=float, default=1.0, help="Initial value of alpha")
     alpha_options.add_argument(
         "--alpha_c", type=float, default=1.0, help="Increment of alpha in linear scheme"
     )
@@ -308,29 +305,44 @@ def main(argv: Optional[list[str]] = None):
         "--result_dir", type=Path, default=Path("results"), help="Directory to store results"
     )
     parsed_args = parser.parse_args(argv)
-
+    if parsed_args.logging:
+        dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
+    else:
+        dolfinx.log.set_log_level(dolfinx.log.LogLevel.ERROR)
     newton_its, lvpp_its = solve_problem(
         N=parsed_args.N,
         M=parsed_args.M,
         primal_degree=parsed_args.primal_degree,
         cell_type=parsed_args.cell_type,
         alpha_max=parsed_args.alpha_max,
-        alpha_scheme=AlphaScheme.from_string(parsed_args.alpha_scheme),
+        alpha_scheme=parsed_args.alpha_scheme,
         alpha_0=parsed_args.alpha_0,
         alpha_c=parsed_args.alpha_c,
         max_iterations=parsed_args.max_iterations,
         result_dir=parsed_args.result_dir,
         stopping_tol=parsed_args.stopping_tol,
+        tau0=parsed_args.tau0,
+        T=parsed_args.T,
     )
     newton_its = 0
     lvpp_its = 1
     if MPI.COMM_WORLD.rank == 0:
         Path(parsed_args.result_dir).mkdir(parents=True, exist_ok=True)
-        np.savez(parsed_args.result_dir/"iteration_count.npz", newton_its=newton_its, lvpp_its=lvpp_its,
-                 N=parsed_args.N, M=parsed_args.M, primal_degree=parsed_args.primal_degree, cell_type=parsed_args.cell_type,
-                 a_scheme=parsed_args.alpha_scheme, alpha_0=parsed_args.alpha_0, alpha_c=parsed_args.alpha_c,
-                 alpha_max=parsed_args.alpha_max, max_iterations=parsed_args.max_iterations, stopping_tol=parsed_args.stopping_tol)
-
+        np.savez(
+            parsed_args.result_dir / "iteration_count.npz",
+            newton_its=newton_its,
+            lvpp_its=lvpp_its,
+            N=parsed_args.N,
+            M=parsed_args.M,
+            primal_degree=parsed_args.primal_degree,
+            cell_type=parsed_args.cell_type,
+            a_scheme=parsed_args.alpha_scheme,
+            alpha_0=parsed_args.alpha_0,
+            alpha_c=parsed_args.alpha_c,
+            alpha_max=parsed_args.alpha_max,
+            max_iterations=parsed_args.max_iterations,
+            stopping_tol=parsed_args.stopping_tol,
+        )
 
 
 if __name__ == "__main__":
