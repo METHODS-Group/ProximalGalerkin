@@ -90,7 +90,7 @@ if __name__ == "__main__":
         1,
         maximum_number_of_outer_loop_iterations=max_iter,
         alpha_scheme="double_exponential",
-        alpha_max=1e4,
+        alpha_max=1e3,
         tol_exit=tol,
     )
 
@@ -111,7 +111,7 @@ if __name__ == "__main__":
         2,
         maximum_number_of_outer_loop_iterations=max_iter,
         alpha_scheme="double_exponential",
-        alpha_max=1000,
+        alpha_max=1e3,
         tol_exit=tol,
     )
     u_out = u_lvpp_2.sub(0).collapse()
