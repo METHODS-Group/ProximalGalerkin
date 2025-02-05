@@ -1,35 +1,18 @@
+import argparse
 from pathlib import Path
-import numpy as np
+from typing import Literal, Optional
+
 from mpi4py import MPI
 from petsc4py import PETSc
-import dolfinx
+
 import basix.ufl
+import dolfinx
+import numpy as np
 import ufl
+from dolfinx.fem.petsc import NonlinearProblem
 from dolfinx.nls.petsc import NewtonSolver
-from dolfinx.fem.petsc import NonlinearProblem, LinearProblem
-from typing import Optional
-import argparse
-from enum import Enum
-from typing import Callable
 
-
-class AlphaScheme(Enum):
-    constant = 1  # Constant alpha (alpha_0)
-    # Linearly increasing alpha (alpha_0 + alpha_c * i) where i is the iteration number
-    linear = 2
-    # Doubling alpha (alpha_0 * 2^i) where i is the iteration number
-    doubling = 3
-
-    @classmethod
-    def from_string(cls, method: str):
-        if method == "constant":
-            return AlphaScheme.constant
-        elif method == "linear":
-            return AlphaScheme.linear
-        elif method == "doubling":
-            return AlphaScheme.doubling
-        else:
-            raise ValueError(f"Unknown alpha scheme {method}")
+AlphaScheme = Literal["constant", "linear", "doubling"]
 
 
 def solve_problem(
@@ -41,9 +24,9 @@ def solve_problem(
     max_iterations: int,
     stopping_tol: float,
     result_dir: Path,
+    gamma: float,
 ):
     mesh = dolfinx.mesh.create_unit_interval(MPI.COMM_WORLD, N)
-    print(N)
 
     el_0 = basix.ufl.element("Lagrange", mesh.topology.cell_name(), primal_degree + 1, shape=(3,))
     el_1 = basix.ufl.element("Lagrange", mesh.topology.cell_name(), primal_degree, shape=(3,))
@@ -69,14 +52,12 @@ def solve_problem(
     _, psi0 = ufl.split(w0)
 
     one = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-    gamma = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100000))
+    gamma_ = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(gamma))
 
     # Variational form
     F = alpha * ufl.inner(ufl.grad(u), ufl.grad(v)) * dx
-    F += gamma * (ufl.dot(psi, psi) - one) * ufl.inner(u, v) * dx
+    F += gamma_ * (ufl.dot(psi, psi) - one) * ufl.inner(u, v) * dx
     F += ufl.inner(psi, v) * dx
-    # f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type((0, 0)))
-    # F -= alpha * ufl.inner(f, v) * dx
     F -= ufl.inner(psi0, v) * dx
 
     F += ufl.inner(u, w) * dx
@@ -114,9 +95,6 @@ def solve_problem(
         dolfinx.fem.dirichletbc(u_left, left_dofs, V.sub(0)),
         dolfinx.fem.dirichletbc(u_right, right_dofs, V.sub(0)),
     ]
-    # sol.sub(0).interpolate(lambda x: (
-    #    np.ones(x.shape[1]), np.zeros(x.shape[1]), np.zeros(x.shape[1])))
-    # [bc.set(sol.x.array) for bc in bcs]
     sol.sub(0).interpolate(bc_func)
     sol.sub(1).interpolate(bc_func)
     problem = NonlinearProblem(F, sol, bcs=bcs)
@@ -155,11 +133,11 @@ def solve_problem(
     newton_iterations = np.zeros(max_iterations, dtype=np.int32)
     L2_diff = np.zeros(max_iterations, dtype=np.float64)
     for i in range(1, max_iterations + 1):
-        if alpha_scheme == AlphaScheme.constant:
+        if alpha_scheme == "constant":
             pass
-        elif alpha_scheme == AlphaScheme.linear:
+        elif alpha_scheme == "linear":
             alpha.value = alpha_0 + alpha_c * i
-        elif alpha_scheme == AlphaScheme.doubling:
+        elif alpha_scheme == "doubling":
             alpha.value = alpha_0 * 2**i
 
         num_newton_iterations, converged = solver.solve(sol)
@@ -184,14 +162,7 @@ def solve_problem(
         w0.x.array[:] = sol.x.array
     bp_u.close()
     bp_psi.close()
-    # import scipy
-    # import matplotlib.pyplot as plt
-    # ai, aj, av = solver.A.getValuesCSR()
-    # A_csr = scipy.sparse.csr_matrix((av, aj, ai))
-    # plt.spy(A_csr)
-    # plt.grid()
-    # plt.savefig(f"local_sparsity.png")
-    # breakpoint()
+
     return newton_iterations[: i + 1], L2_diff[: i + 1]
 
 
@@ -199,11 +170,7 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHe
     pass
 
 
-def main(
-    argv: Optional[list[str]] = None,
-    phi_func: Callable[[np.ndarray], np.ndarray] = None,
-    f_func: Callable[[np.ndarray], np.ndarray] = None,
-):
+def main(argv: Optional[list[str]] = None):
     parser = argparse.ArgumentParser(formatter_class=CustomFormatter)
     mesh_options = parser.add_argument_group("Mesh options")
     mesh_options.add_argument("-N", type=int, default=40, help="Number of elements in x-direction")
@@ -240,6 +207,9 @@ def main(
         default=1e-8,
         help="Stopping tolerance between two successive PG iterations (L2-difference)",
     )
+    pg_options.add_argument(
+        "-g", "--gamma", dest="gamma", type=float, default=1e5, help="Gamma parameter"
+    )
     result_options = parser.add_argument_group("Output options")
     result_options.add_argument(
         "--result_dir", type=Path, default=Path("results"), help="Directory to store results"
@@ -249,12 +219,13 @@ def main(
     iteration_counts, L2_diffs = solve_problem(
         N=parsed_args.N,
         primal_degree=parsed_args.primal_degree,
-        alpha_scheme=AlphaScheme.from_string(parsed_args.alpha_scheme),
+        alpha_scheme=parsed_args.alpha_scheme,
         alpha_0=parsed_args.alpha_0,
         alpha_c=parsed_args.alpha_c,
         max_iterations=parsed_args.max_iterations,
         result_dir=parsed_args.result_dir,
         stopping_tol=parsed_args.stopping_tol,
+        gamma=parsed_args.gamma,
     )
     print(iteration_counts)
     print(L2_diffs)
