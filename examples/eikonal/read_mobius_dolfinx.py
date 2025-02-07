@@ -13,15 +13,18 @@ from pathlib import Path
 eps = np.finfo(dolfinx.default_scalar_type).eps
 
 
-def remove_duplicates(points, tol=1e2 * eps):
+def remove_duplicates(points, tol=1e2 * eps, num_batches: int = 10):
     """
     Remove duplicate points from a list of points and create a map to the new, unique set
     """
     # Compute distances between boundary coordinates and T coordinates
     points_A = np.expand_dims(points, 1)
+    # for i in range(num_batches):
+
     points_B = np.expand_dims(points, 0)
     distances = np.sum(np.square(points_A - points_B), axis=2)
     is_close = distances < tol
+
     new_point_indices = []
     point_map = np.full(points.shape[0], -1, dtype=np.int32)
     for i in range(points.shape[0]):

@@ -1,7 +1,3 @@
-from ufl.algorithms.compute_form_data \
-    import estimate_total_polynomial_degree
-from ufl.algorithms import expand_derivatives
-import time
 import dolfinx.fem.petsc
 import numpy as np
 from mpi4py import MPI
@@ -10,174 +6,170 @@ import dolfinx
 import basix.ufl
 import ufl
 from dolfinx.nls.petsc import NewtonSolver
-from dolfinx.fem.petsc import NonlinearProblem, LinearProblem
+from dolfinx.fem.petsc import NonlinearProblem
+from read_mobius_dolfinx import read_mobius_strip
 
-# N = 50
-# M = 50
-# mesh = dolfinx.mesh.create_rectangle(
-#     MPI.COMM_WORLD, [[1, 2], [3, 4]], [N, M], diagonal=dolfinx.mesh.DiagonalType.crossed)
-# # , dolfinx.mesh.CellType.quadrilateral)
-# with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", "r") as xdmf:
-#     mesh = xdmf.read_mesh()
-#     mesh.topology.create_connectivity(mesh.topology.dim-1, mesh.topology.dim)
-#     #ft = xdmf.read_meshtags(mesh, name="Facet tags")
-mesh = dolfinx.mesh.create_unit_cube(
-    MPI.COMM_WORLD, 20, 20, 20, cell_type=dolfinx.mesh.CellType.hexahedron)
+mesh = read_mobius_strip("./mobius-strip.mesh/Cycle000000/proc000000.vtu")
 
-el_0 = basix.ufl.element("DG", mesh.topology.cell_name(), 1)
-el_1 = basix.ufl.element(
-    "RT", mesh.topology.cell_name(), 2)
+# from mpi4py import MPI
+
+# import gmsh
+
+# import dolfinx
+
+# gmsh.initialize()
+# center = (0, 0, 0)
+# aspect_ratio = 1
+# R_i = 0.5
+# R_e = 1
+
+# inner_disk = gmsh.model.occ.addDisk(*center, R_i, aspect_ratio * R_i)
+# outer_disk = gmsh.model.occ.addDisk(*center, R_e, R_e)
+# whole_domain, map_to_input = gmsh.model.occ.cut([(2, outer_disk)], [(2, inner_disk)])
+# gmsh.model.occ.synchronize()
+# gmsh.model.addPhysicalGroup(whole_domain[0][0], [whole_domain[0][1]], 1)
+# gmsh.option.setNumber("Mesh.CharacteristicLengthMax", 0.1)
+# gmsh.model.mesh.generate(2)
+# gmsh.model.mesh.setOrder(2)
+# mesh, _, _ = dolfinx.io.gmshio.model_to_mesh(gmsh.model, MPI.COMM_WORLD, 0, gdim=3)
+# # mesh.geometry.x[:, 2] += np.sin(2 * np.pi * mesh.geometry.x[:, 0])
+# x = mesh.geometry.x
+# t = x[0] ** 2 + x[1] ** 2
+
+
+el_0 = basix.ufl.element("DG", mesh.topology.cell_name(), 2)
+el_1 = basix.ufl.element("RT", mesh.topology.cell_name(), 3)
 trial_el = basix.ufl.mixed_element([el_0, el_1])
-V_trial = dolfinx.fem.functionspace(mesh, trial_el)
-# test_el = basix.ufl.mixed_element([el_0, el_1])
-# V_test = dolfinx.fem.functionspace(mesh, test_el)
-V_test = V_trial
+V = dolfinx.fem.functionspace(mesh, trial_el)
 
-w = dolfinx.fem.Function(V_trial)
+w = dolfinx.fem.Function(V)
 u, psi = ufl.split(w)
 
-v, tau = ufl.TestFunctions(V_test)
+v, tau = ufl.TestFunctions(V)
 
-metadata = {"quadrature_degree": 5}
-dx = ufl.Measure("dx",  domain=mesh, metadata=metadata)
-ds = ufl.Measure("ds",  domain=mesh, metadata=metadata)
-dS = ufl.Measure("dS",  domain=mesh, metadata=metadata)
+dx = ufl.Measure("dx", domain=mesh)
 
 uD = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
-U, U_to_W = V_trial.sub(0).collapse()
-Q, Q_to_W = V_trial.sub(1).collapse()
+U, U_to_W = V.sub(0).collapse()
+Q, Q_to_W = V.sub(1).collapse()
 f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-
-
-# FIXME: Add better initial condition
-# Create initial condition
-# beta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(100))
-# h = 2 * ufl.Circumradius(mesh)
-# h_avg = ufl.avg(h)
-# n = ufl.FacetNormal(mesh)
-# p = ufl.TrialFunction(U)
-# q = ufl.TestFunction(U)
-# a = ufl.inner(ufl.grad(p), ufl.grad(q))*dx
-# a -= (ufl.inner(n, ufl.grad(q)) * p + beta / h * ufl.inner(p, q)) * ds
-# a += beta/h_avg*ufl.inner(ufl.jump(q, n), ufl.jump(p, n))*dS
-
-# L = ufl.inner(f, q) * dx
-# L += (-ufl.inner(n, ufl.grad(q)) * uD + beta / h * ufl.inner(uD, q)) * ds
-
-# lin_prob = LinearProblem(a, L, bcs=[])
-# u_init_out = lin_prob.solve()
-# u_init_out.name = "InitialU"
-# u init is equal to the solution of the linear problem
-# w.x.array[U_to_W] = u_init_out.x.array
-# w.x.array[Q_to_W] = 0.
 
 
 alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
 phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-w0 = dolfinx.fem.Function(V_trial)
+w0 = dolfinx.fem.Function(V)
 u0, psi0 = ufl.split(w0)
 
-amp = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1))
-F = ufl.inner(ufl.div(psi), v)*dx
-F -= ufl.inner(ufl.div(psi0), v)*dx
-F -= alpha * ufl.inner(f, v) * dx
+F = ufl.inner(ufl.div(psi), v) * dx
+F -= ufl.inner(ufl.div(psi0), v) * dx
+F += alpha * ufl.inner(f, v) * dx
 
-non_lin_term = 1/(ufl.sqrt(1 + ufl.dot(psi, psi)))
+non_lin_term = 1 / (ufl.sqrt(1 + ufl.dot(psi, psi)))
 F += ufl.inner(u, ufl.div(tau)) * dx
-F += phi * non_lin_term * ufl.dot(psi, tau)*dx
+F += phi * non_lin_term * ufl.dot(psi, tau) * dx
 
 
 J = ufl.derivative(F, w)
-# start = time.perf_counter()
-# A = dolfinx.fem.petsc.assemble_matrix(dolfinx.fem.form(J))
-# end = time.perf_counter()
-# print(f"{end-start:.2e}")
-# exit()
+
+tol = 1e-5
+
 problem = NonlinearProblem(F, w, bcs=[], J=J)
 solver = NewtonSolver(mesh.comm, problem)
 solver.convergence_criterion = "residual"
-solver.rtol = 1e-5
-solver.atol = 1e-6
-solver.max_it = 20
-# solver.relaxation_factor = 0.7
-solver.error_on_nonconvergence = False
+solver.rtol = tol
+solver.atol = tol
+solver.max_it = 100
+solver.error_on_nonconvergence = True
 
 
 ksp = solver.krylov_solver
 opts = PETSc.Options()  # type: ignore
 option_prefix = ksp.getOptionsPrefix()
-# opts[f"{option_prefix}ksp_type"] = "gmres"
-# opts[f"{option_prefix}pc_type"] = "cholesky"
 opts[f"{option_prefix}ksp_type"] = "preonly"
 opts[f"{option_prefix}pc_type"] = "lu"
 opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
-
-# For factorisation prefer MUMPS, then superlu_dist, then default.
-# sys = PETSc.Sys()  # type: ignore
-# if sys.hasExternalPackage("mumps"):
-#     opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
-# elif sys.hasExternalPackage("superlu_dist"):
-#     opts[f"{option_prefix}pc_factor_mat_solver_type"] = "superlu_dist"
 ksp.setFromOptions()
 
-
-# T = dolfinx.fem.functionspace(mesh, ("DG", 0, (mesh.geometry.dim,)))
-# grad_psi = dolfinx.fem.Expression(
-#     ufl.grad(w.sub(1)), T.element.interpolation_points())
-# t = dolfinx.fem.Function(T)
-# t.name = "grad_psi"
-
-# Q = dolfinx.fem.functionspace(mesh, ("DG", 1, (mesh.geometry.dim, )))
-# grad_u = dolfinx.fem.Expression(
-#     ufl.grad(w.sub(0)), Q.element.interpolation_points())
-# q_out = dolfinx.fem.Function(Q)
-# q_out.name = "gradu"
-
-
 dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
-# xdmf = dolfinx.io.XDMFFile(MPI.COMM_WORLD, "output.xdmf", "w")
-# xdmf.write_mesh(mesh)
-u_out = w.sub(0).collapse()
+V_out = dolfinx.fem.functionspace(mesh, ("DG", mesh.geometry.cmap.degree))
+u_out = dolfinx.fem.Function(V_out)
 u_out.name = "u"
 bp_u = dolfinx.io.VTXWriter(mesh.comm, "u.bp", [u_out], engine="BP4")
-
-# bp_grad_u = dolfinx.io.XDMFFile(mesh.comm, "grad_u.bp", [q_out], engine="bp4")
-
-
-diff = w.sub(0)-w0.sub(0)
-L2_squared = ufl.dot(diff, diff)*dx
+diff = w.sub(0) - w0.sub(0)
+L2_squared = ufl.dot(diff, diff) * dx
 compiled_diff = dolfinx.fem.form(L2_squared)
 
-for i in range(20):
-    if i < 5:
-        alpha.value += 2**i
-    # alpha.value += 1
-    num_newton_iterations, converged = solver.solve(w)
-    # ksp.view()
-    print(
-        f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}")
-    local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
-    global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
-    print(f"|delta u |= {global_diff}")
-    w0.x.array[:] = w.x.array
 
-    dolfinx.log.set_log_level(dolfinx.log.LogLevel.ERROR)
+nh = ufl.FacetNormal(mesh)
+mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
+num_facets = mesh.topology.index_map(mesh.topology.dim - 1).size_local
+submesh, entity_map, _, _ = dolfinx.mesh.create_submesh(
+    mesh, mesh.topology.dim - 1, np.arange(num_facets, dtype=np.int32)
+)
+q_el = basix.ufl.quadrature_element(submesh.basix_cell(), nh.ufl_shape, "default", 1)
+Q = dolfinx.fem.functionspace(submesh, q_el)
+expr = dolfinx.fem.Expression(
+    nh, Q.element.interpolation_points(), dtype=dolfinx.default_scalar_type
+)
+f_to_c = mesh.topology.connectivity(mesh.topology.dim - 1, mesh.topology.dim)
+mesh.topology.create_connectivity(mesh.topology.dim, mesh.topology.dim - 1)
+c_to_f = mesh.topology.connectivity(mesh.topology.dim, mesh.topology.dim - 1)
+ie = []
+for facet in entity_map:
+    cells = f_to_c.links(facet)
+    if len(cells) > 1:
+        cell = f_to_c.links(facet)[1]
+    else:
+        cell = f_to_c.links(facet)[0]
+    facets = c_to_f.links(cell)
+    local_index = np.flatnonzero(facets == facet)[0]
+    ie.append(cell)
+    ie.append(local_index)
+values = expr.eval(mesh, np.asarray(ie, dtype=np.int32))
+qq = dolfinx.fem.Function(Q)
+qq.x.array[:] = values.flatten()
+import scifem
 
-    u_out.x.array[:] = w.sub(0).x.array[U_to_W]
-    bp_u.write(i)
-    if global_diff < 5e-5:
-        break
-    # q_out.interpolate(grad_u)
+scifem.xdmf.create_pointcloud("data.xdmf", [qq])
+Q_out = dolfinx.fem.functionspace(mesh, ("DG", mesh.geometry.cmap.degree, (mesh.geometry.dim,)))
+q_out = dolfinx.fem.Function(Q_out)
+q_out.name = "grad(u)"
+q_expr = dolfinx.fem.Expression(ufl.grad(w.sub(0)), Q_out.element.interpolation_points())
 
-   # bp_grad_u.write(i)
+psi_out = dolfinx.fem.Function(Q_out)
+psi_out.name = "psi"
+vtx_psi = dolfinx.io.VTXWriter(
+    mesh.comm,
+    "psi.bp",
+    [q_out, psi_out],
+    engine="BP5",
+)
+try:
+    newton_iterations = []
+    for i in range(1, 100):
+        alpha.value = min(2**i, 10)
 
-    # t.interpolate(grad_psi)
+        num_newton_iterations, converged = solver.solve(w)
+        newton_iterations.append(num_newton_iterations)
+        print(f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}")
+        local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
+        global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
+        print(f"|delta u |= {global_diff}")
+        w0.x.array[:] = w.x.array
 
-    # xdmf.write_function(u_out, i)
-    # xdmf.write_function(psi_out, i)
-    # xdmf.write_function(q_out, i)
-    # xdmf.write_function(t, i)
-# xdmf.close()
-bp_u.close()
+        dolfinx.log.set_log_level(dolfinx.log.LogLevel.ERROR)
 
-# bp_grad_u.close()
+        u_out.interpolate(w.sub(0))
+        bp_u.write(i)
+        q_out.interpolate(q_expr)
+        psi_out.interpolate(w.sub(1))
+        vtx_psi.write(i)
+
+        if global_diff < 5 * tol:
+            break
+finally:
+    bp_u.close()
+    vtx_psi.close()
+
+print(f"Num LVPP iterations {i}, Total number of newton iterations {sum(newton_iterations)}")
+print(f"{min(newton_iterations)=} and {max(newton_iterations)=}")

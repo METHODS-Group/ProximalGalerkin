@@ -2,7 +2,7 @@
 // To run this file, move it into the examples folder in mfem
 // docker run -it --rm -v ./examples/eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
 // cp /home/euler/shared/convert_mesh.cpp /home/euler/mfem/examples/
-// make convert_mesh
+// cd examples && make convert_mesh
 // ./convert_mesh --mesh ../data/mobius-strip.mesh
 // cp -r  mobius-strip.mesh/ ../../shared/
 
@@ -39,8 +39,11 @@ int main(int argc, char *argv[])
    }
    args.PrintOptions(cout);
    Mesh *mesh;
-   mesh = new Mesh(mesh_file, 1, 0);
+   mesh = new Mesh(mesh_file, 1, 1);
    mesh->SetCurvature(3);
+   mesh->UniformRefinement();
+   mesh->UniformRefinement();
+
    ParaViewDataCollection *pd = NULL;
    pd = new ParaViewDataCollection(mesh_file, mesh);
    pd->SetPrefixPath("");
