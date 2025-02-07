@@ -1,3 +1,4 @@
+// Author: Jørgen S. Dokken
 // To run this file, move it into the examples folder in mfem
 // docker run -it --rm -v ./examples/eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
 // cp /home/euler/shared/convert_mesh.cpp /home/euler/mfem/examples/
