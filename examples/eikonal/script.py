@@ -7,9 +7,16 @@ import basix.ufl
 import ufl
 from dolfinx.nls.petsc import NewtonSolver
 from dolfinx.fem.petsc import NonlinearProblem
-from read_mobius_dolfinx import read_mobius_strip
+# from read_mobius_dolfinx import read_mobius_strip
 
-mesh = read_mobius_strip("./mobius-strip.mesh/Cycle000000/proc000000.vtu")
+# mesh = read_mobius_strip("./mobius-strip.mesh/Cycle000000/proc000000.vtu")
+
+from mob_create import create_mobius_mesh
+
+M = 10
+degree = 2
+mesh = create_mobius_mesh(M, degree=degree)
+import dolfinx.io
 
 # from mpi4py import MPI
 
