@@ -112,13 +112,10 @@ sp = {
     "pc_type": "lu",
     "pc_factor_mat_solver_type": "mumps",
     "mat_mumps_icntl_14": 500,
+    "ksp_monitor": None,
 }
 NFAIL_MAX = 50
-A = dolfinx.fem.petsc.create_matrix(J_reg)
-b = dolfinx.fem.Function(Z)
-b_vec = b.x.petsc_vec
-x = dolfinx.fem.Function(Z)
-problem = SNESProblem(F_compiled, z, bcs=bcs, J=J_reg)
+
 
 xdmf_file = dolfinx.io.XDMFFile(mesh.comm, "solution.xdmf", "w")
 xdmf_file.write_mesh(mesh)
@@ -133,8 +130,9 @@ C, C_to_Z = Z.sub(1).collapse()
 c_out = dolfinx.fem.Function(C, name="c")
 Psi, Psi_to_Z = Z.sub(2).collapse()
 psi_out = dolfinx.fem.Function(Psi, name="psi")
-
-for step, T in enumerate(np.linspace(0, 5, 101)[1:]):
+converged_reason = -1
+num_iterations = -1
+for step, T in enumerate(np.linspace(0, 2.1, 20)[1:]):
     if mesh.comm.rank == 0:
         print(f"Solving for T = {float(T)}", flush=True)
     bcminus.value = -T
@@ -158,19 +156,32 @@ for step, T in enumerate(np.linspace(0, 5, 101)[1:]):
             opts.prefixPop()
             snes.setFromOptions()
 
+            # NOTE: Normally these would be outside the loop, but there are cases when
+            # SNES/A becomes singular and not possible to reuse, and we need a new matrix
+            A = dolfinx.fem.petsc.create_matrix(J_reg)
+            b = dolfinx.fem.Function(Z)
+            b_vec = b.x.petsc_vec
+            problem = SNESProblem(F_compiled, z, bcs=bcs, J=J_reg)
+            x = dolfinx.fem.Function(Z)
+
             # Set solve functions and variable bounds
             snes.setFunction(problem.F, b_vec)
             snes.setJacobian(problem.J, A)
+            x.interpolate(z)
             snes.solve(None, x.x.petsc_vec)
             x.x.scatter_forward()
             z.interpolate(x)
-            if snes.getConvergedReason() < 0:
-                raise NotConvergedError("Not converged")
-            if snes.getIterationNumber() == 0:
+            converged_reason = snes.getConvergedReason()
+            num_iterations = snes.getIterationNumber()
+            print(converged_reason, num_iterations)
+            if num_iterations == 0:
                 # solver didn't actually get to do any work,
                 # we've just reduced alpha so much that the initial guess
                 # satisfies the PDE
                 raise NotConvergedError("Not converged")
+            if converged_reason < 0:
+                raise NotConvergedError("Not converged")
+
         except NotConvergedError:
             nfail += 1
             if mesh.comm.rank == 0:
@@ -187,6 +198,10 @@ for step, T in enumerate(np.linspace(0, 5, 101)[1:]):
                 break
             else:
                 continue
+        finally:
+            snes.destroy()
+
+        # Termination
         nrm = np.sqrt(
             mesh.comm.allreduce(dolfinx.fem.assemble_scalar(L2_c), op=MPI.SUM)
         )
@@ -199,9 +214,9 @@ for step, T in enumerate(np.linspace(0, 5, 101)[1:]):
             break
 
         # Update alpha
-        if snes.getIterationNumber() <= 4:
+        if num_iterations <= 4:
             alpha.value *= r
-        elif snes.getIterationNumber() >= 10:
+        elif num_iterations >= 10:
             alpha.value /= r
 
         # Update z_iter
@@ -221,7 +236,7 @@ for step, T in enumerate(np.linspace(0, 5, 101)[1:]):
         break
     c_conform_out.interpolate(c_conform_expr)
 
-    if step % 10 == 0:
+    if step % 1 == 0:
         with dolfinx.io.XDMFFile(mesh.comm, "solution.xdmf", "a") as xdmf_file:
             u_out.x.array[:] = z.x.array[U_to_Z]
             c_out.x.array[:] = z.x.array[C_to_Z]
@@ -232,9 +247,7 @@ for step, T in enumerate(np.linspace(0, 5, 101)[1:]):
 
         z_prev.interpolate(z)
         vtx_damage.write(T)
-
 vtx_damage.close()
-snes.destroy()
 with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "mesh_output.xdmf", "w") as xdmf:
     xdmf.write_mesh(mesh)
     mesh.topology.create_connectivity(1, 2)
