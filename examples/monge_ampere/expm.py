@@ -1,4 +1,20 @@
-from firedrake import *
+from ufl import (
+    Identity,
+    acos,
+    as_tensor,
+    conditional,
+    cos,
+    cosh,
+    dot,
+    eq,
+    exp,
+    gt,
+    lt,
+    pi,
+    sin,
+    sinh,
+    sqrt,
+)
 
 
 def expm(A):
@@ -70,6 +86,7 @@ def expm3(A):
 
     Note (28'), the key formula, has a sign error. The coefficient of A^2 and of I should be negated.
     """
+
     I = Identity(3)
 
     # Extract elements of the 3x3 matrix
@@ -185,6 +202,7 @@ def expm3(A):
 if __name__ == "__main__":
     import numpy
     import scipy.linalg
+    from firedrake import *
 
     #    mesh = UnitTriangleMesh()
     #    V = TensorFunctionSpace(mesh, "DG", 0)
