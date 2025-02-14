@@ -6,7 +6,7 @@ SPDX-License-Identifier: MIT
 
 import argparse
 from pathlib import Path
-import typing
+
 import dolfinx
 import numpy as np
 import numpy.typing as npt
@@ -15,9 +15,8 @@ import ufl
 from run_lvpp_problem import solve_contact_problem
 from snes import solve_snes_problem
 
-from lvpp.optimization import galahad_solver, ipopt_solver
 from lvpp.mesh_generation import create_half_disk
-
+from lvpp.optimization import galahad_solver, ipopt_solver
 
 parser = argparse.ArgumentParser(
     description="Solve the obstacle problem on a unit square using Galahad.",

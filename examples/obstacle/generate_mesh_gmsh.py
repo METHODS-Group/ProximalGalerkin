@@ -1,9 +1,10 @@
 from pathlib import Path
-import packaging.version
+
 from mpi4py import MPI
 
 import dolfinx.io
 import gmsh
+import packaging.version
 
 __all__ = ["generate_disk"]
 

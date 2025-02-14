@@ -1,22 +1,20 @@
-from petsc4py import PETSc
 from mpi4py import MPI
-import dolfinx.fem.petsc
+from petsc4py import PETSc
+
 import basix.ufl
+import dolfinx.fem.petsc
+import numpy
 import ufl
 from expm import expm
-import numpy
 
 L = 1  # diameter of domain
 h = 0.1  # height
 
 basen = 8  # resolution of base mesh
-mesh = dolfinx.mesh.create_box(
-    MPI.COMM_WORLD,  [[0, 0, 0], [L, h, h]], [basen, basen, basen])
+mesh = dolfinx.mesh.create_box(MPI.COMM_WORLD, [[0, 0, 0], [L, h, h]], [basen, basen, basen])
 
-v_el = basix.ufl.element("Lagrange", mesh.basix_cell(),
-                         2, shape=(mesh.geometry.dim, ))
-t_el = basix.ufl.element("DG", mesh.basix_cell(), 0,
-                         shape=(mesh.geometry.dim, mesh.geometry.dim))
+v_el = basix.ufl.element("Lagrange", mesh.basix_cell(), 2, shape=(mesh.geometry.dim,))
+t_el = basix.ufl.element("DG", mesh.basix_cell(), 0, shape=(mesh.geometry.dim, mesh.geometry.dim))
 m_el = basix.ufl.mixed_element([v_el, t_el])
 Z = dolfinx.fem.functionspace(mesh, m_el)
 
@@ -34,33 +32,36 @@ alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
 # Define strain measures
 I = ufl.Identity(mesh.geometry.dim)  # the identity matrix
 F = I + ufl.grad(u)  # the deformation gradient
-C = F.T*F       # the right Cauchy-Green tensor
-E = 0.5*(C - I)  # the Green-Lagrange strain tensor
+C = F.T * F  # the right Cauchy-Green tensor
+E = 0.5 * (C - I)  # the Green-Lagrange strain tensor
 
 # Define strain energy density
 E = ufl.variable(E)
 E_, nu = 1000000.0, 0.3
-mu = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(E_/(2*(1 + nu))))
-lmbda = dolfinx.fem.Constant(
-    mesh, dolfinx.default_scalar_type(E_*nu/((1 + nu)*(1 - 2*nu))))
-W = lmbda/2*(ufl.tr(E)**2) + mu*ufl.tr(E*E)
+mu = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(E_ / (2 * (1 + nu))))
+lmbda = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(E_ * nu / ((1 + nu) * (1 - 2 * nu))))
+W = lmbda / 2 * (ufl.tr(E) ** 2) + mu * ufl.tr(E * E)
 
 # Define Piola-Kirchoff stress tensors
 S = ufl.diff(W, E)  # the second Piola-Kirchoff stress tensor
-P = expm(alpha*psi)*S  # the first Piola-Kirchoff stress tensor
+P = expm(alpha * psi) * S  # the first Piola-Kirchoff stress tensor
 # P = F*S        # the first Piola-Kirchoff stress tensor
 
-B = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(
-    (0, 0, -1000)))  # Body force per unit volume
+B = dolfinx.fem.Constant(
+    mesh, dolfinx.default_scalar_type((0, 0, -1000))
+)  # Body force per unit volume
 
 left_facets = dolfinx.mesh.locate_entities_boundary(
-    mesh, mesh.topology.dim-1, lambda x: x[0] < 1e-10)
+    mesh, mesh.topology.dim - 1, lambda x: x[0] < 1e-10
+)
 right_facets = dolfinx.mesh.locate_entities_boundary(
-    mesh, mesh.topology.dim-1, lambda x: x[0] > L - 1e-10)
+    mesh, mesh.topology.dim - 1, lambda x: x[0] > L - 1e-10
+)
 
 
 V, V_to_Z = Z.sub(0).collapse()
 eps = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0))
+
 
 def eps_func(x):
     return numpy.full(x.shape[1], float(eps))
@@ -70,11 +71,17 @@ epsilon = dolfinx.fem.Function(V)
 epsilon.sub(0).interpolate(eps_func)
 
 zero = dolfinx.fem.Function(V)
-bcl = dolfinx.fem.dirichletbc(zero, dolfinx.fem.locate_dofs_topological(
-    (Z.sub(0), V), mesh.topology.dim-1, left_facets), Z.sub(0))
+bcl = dolfinx.fem.dirichletbc(
+    zero,
+    dolfinx.fem.locate_dofs_topological((Z.sub(0), V), mesh.topology.dim - 1, left_facets),
+    Z.sub(0),
+)
 
-bcr = dolfinx.fem.dirichletbc(epsilon, dolfinx.fem.locate_dofs_topological(
-    (Z.sub(0), V), mesh.topology.dim-1, right_facets), Z.sub(0))
+bcr = dolfinx.fem.dirichletbc(
+    epsilon,
+    dolfinx.fem.locate_dofs_topological((Z.sub(0), V), mesh.topology.dim - 1, right_facets),
+    Z.sub(0),
+)
 bcs = [bcl, bcr]
 
 dx = ufl.Measure("dx", domain=mesh, metadata={"quadrature_degree": 10})
@@ -82,25 +89,32 @@ dx = ufl.Measure("dx", domain=mesh, metadata={"quadrature_degree": 10})
 three = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(3.0))
 
 G = (
-    + ufl.inner(P, ufl.grad(v))*dx
-    - ufl.inner(B, v)*dx
-    + ufl.inner(psi, ufl.grad(v))*dx
-    - ufl.inner(psi_prev, ufl.grad(v))*dx
-    + ufl.inner(ufl.grad(u), phi)*dx
-    + ufl.inner(I, phi)*ufl.dx
+    +ufl.inner(P, ufl.grad(v)) * dx
+    - ufl.inner(B, v) * dx
+    + ufl.inner(psi, ufl.grad(v)) * dx
+    - ufl.inner(psi_prev, ufl.grad(v)) * dx
+    + ufl.inner(ufl.grad(u), phi) * dx
+    + ufl.inner(I, phi) * ufl.dx
     # - ufl.inner(expm(alpha*ufl.dev(psi)), phi)*dx
-    - ufl.inner(expm(alpha*psi), phi)*dx
+    - ufl.inner(expm(alpha * psi), phi) * dx
 )
 
-sp = {"snes_type": "newtonls",
-      "snes_atol": 1.0e-8,
-      "snes_monitor": None,
-      "snes_linesearch_type": "l2",
-      "snes_linesearch_monitor": None}
+sp = {
+    "snes_type": "newtonls",
+    "snes_atol": 1.0e-8,
+    "snes_monitor": None,
+    "snes_linesearch_type": "l2",
+    "snes_linesearch_monitor": None,
+}
 
 v_out = dolfinx.fem.Function(V, name="Displacement")
-bp = dolfinx.io.VTXWriter(mesh.comm, "output/solution.bp",
-                          [v_out], engine="BP5", mesh_policy=dolfinx.io.VTXMeshPolicy.reuse)
+bp = dolfinx.io.VTXWriter(
+    mesh.comm,
+    "output/solution.bp",
+    [v_out],
+    engine="BP5",
+    mesh_policy=dolfinx.io.VTXMeshPolicy.reuse,
+)
 
 J = ufl.derivative(G, z)
 J_compiled = dolfinx.fem.form(J)
@@ -121,18 +135,15 @@ class NonlinearPDE_SNESProblem:
 
         from dolfinx.fem.petsc import apply_lifting, assemble_vector, set_bc
 
-        x.ghostUpdate(addv=PETSc.InsertMode.INSERT,
-                      mode=PETSc.ScatterMode.FORWARD)
+        x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
         x.copy(self.u.x.petsc_vec)
-        self.u.x.petsc_vec.ghostUpdate(
-            addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+        self.u.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
         with F.localForm() as f_local:
             f_local.set(0.0)
         assemble_vector(F, self.L)
         apply_lifting(F, [self.a], bcs=[self.bcs], x0=[x], alpha=-1.0)
-        F.ghostUpdate(addv=PETSc.InsertMode.ADD,
-                      mode=PETSc.ScatterMode.REVERSE)
+        F.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
         set_bc(F, self.bcs, x, -1.0)
 
     def J(self, snes, x, J, P):
@@ -157,11 +168,13 @@ snes.getKSP().setType("preonly")
 snes.getKSP().setTolerances(rtol=1.0e-9)
 snes.getKSP().getPC().setType("lu")
 
-sp = {"snes_type": "newtonls",
-      "snes_atol": 1.0e-8,
-      "snes_monitor": None,
-      "snes_linesearch_type": "l2",
-      "snes_linesearch_monitor": None}
+sp = {
+    "snes_type": "newtonls",
+    "snes_atol": 1.0e-8,
+    "snes_monitor": None,
+    "snes_linesearch_type": "l2",
+    "snes_linesearch_monitor": None,
+}
 opts = PETSc.Options()
 for key, value in sp.items():
     opts[key] = value
@@ -170,8 +183,8 @@ snes.view()
 NFAIL_MAX = 50
 
 
-diff = dolfinx.fem.form(ufl.inner(u-u_iter, u-u_iter)*dx)
-diff_z = dolfinx.fem.form(ufl.inner(z-z_prev, z-z_prev)*dx)
+diff = dolfinx.fem.form(ufl.inner(u - u_iter, u - u_iter) * dx)
+diff_z = dolfinx.fem.form(ufl.inner(z - z_prev, z - z_prev) * dx)
 
 # For SNES line search to function correctly it is necessary that the
 # u.x.petsc_vec in the Jacobian and residual is *not* passed to
@@ -193,8 +206,7 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 100)):
     nfail = 0
     while True:
         try:
-            print(
-                f"  Attempting eps = {eps_:.3e} k = {k} α = {float(alpha)}", flush=True)
+            print(f"  Attempting eps = {eps_:.3e} k = {k} α = {float(alpha)}", flush=True)
             snes.solve(None, x)
             z.x.petsc_vec.copy(x)
             z.x.scatter_forward()
@@ -205,8 +217,7 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 100)):
                 raise RuntimeError("Solver did not converge")
         except RuntimeError:
             nfail += 1
-            print(
-                f"  Failed eps = {eps_} k = {k} α = {float(alpha)}.", flush=True)
+            print(f"  Failed eps = {eps_} k = {k} α = {float(alpha)}.", flush=True)
             alpha.value *= 0.5
 
             if k == 1:
@@ -215,16 +226,17 @@ for i, eps_ in enumerate(numpy.linspace(0, 0.5, 100)):
                 z.x.array[:] = z_iter.x.array[:]
 
             if nfail >= NFAIL_MAX:
-                print(f"  Giving up.", flush=True)
+                print("  Giving up.", flush=True)
                 break
             else:
                 continue
         v_out.x.array[:] = z.x.array[V_to_Z]
         # Termination
-        nrm = mesh.comm.allreduce(
-            dolfinx.fem.assemble_scalar(diff), op=MPI.SUM)
+        nrm = mesh.comm.allreduce(dolfinx.fem.assemble_scalar(diff), op=MPI.SUM)
         print(
-            f"  Solved eps = {eps_:.3e} k = {k} α = {float(alpha)}. ||u_{k} - u_{k-1}|| = {nrm}", flush=True)
+            f"  Solved eps = {eps_:.3e} k = {k} α = {float(alpha)}. ||u_{k} - u_{k - 1}|| = {nrm}",
+            flush=True,
+        )
         if nrm < 1.0e-8:
             break
 

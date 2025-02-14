@@ -2,13 +2,15 @@
 Read mobius strip from pvd
 """
 
+from pathlib import Path
+
+from mpi4py import MPI
+
+import basix.ufl
+import dolfinx
 import meshio
 import numpy as np
-from mpi4py import MPI
-import dolfinx
 import ufl
-import basix.ufl
-from pathlib import Path
 
 eps = np.finfo(dolfinx.default_scalar_type).eps
 

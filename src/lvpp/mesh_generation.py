@@ -2,8 +2,8 @@ from mpi4py import MPI
 
 import dolfinx.io
 import gmsh
-from packaging.version import Version
 import numpy as np
+from packaging.version import Version
 
 __all__ = ["create_half_disk", "create_half_sphere"]
 

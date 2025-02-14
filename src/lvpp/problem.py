@@ -1,5 +1,7 @@
-from petsc4py import PETSc
 import typing
+
+from petsc4py import PETSc
+
 import dolfinx
 import ufl
 

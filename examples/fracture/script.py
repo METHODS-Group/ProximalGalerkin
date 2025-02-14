@@ -1,21 +1,22 @@
 from mpi4py import MPI
+
 import basix.ufl
-from lvpp import SNESProblem, SNESSolver
 import dolfinx.fem.petsc
+import numpy as np
+from generate_mesh import create_crack_mesh
 from ufl import (
+    Circumradius,
     TestFunction,
     TrialFunction,
-    split,
-    inner,
-    grad,
+    derivative,
     dx,
     exp,
-    Circumradius,
-    derivative,
+    grad,
+    inner,
+    split,
 )
-import numpy as np
 
-from generate_mesh import create_crack_mesh
+from lvpp import SNESProblem, SNESSolver
 
 
 class NotConvergedError(Exception):
@@ -60,9 +61,7 @@ output_space = dolfinx.fem.functionspace(mesh, ("Lagrange", 3))
 c_conform_out = dolfinx.fem.Function(output_space, name="ConformingDamage")
 alpha = dolfinx.fem.Constant(mesh, st(1.0))
 c_conform = (c_prev + exp(psi)) / (exp(psi) + 1)
-c_conform_expr = dolfinx.fem.Expression(
-    c_conform, output_space.element.interpolation_points()
-)
+c_conform_expr = dolfinx.fem.Expression(c_conform, output_space.element.interpolation_points())
 
 eps = dolfinx.fem.Constant(mesh, 1.0e-5)
 E = (
@@ -188,9 +187,7 @@ for step, T in enumerate(np.linspace(0, 5, 1001)[1:]):
                 continue
 
         # Termination
-        nrm = np.sqrt(
-            mesh.comm.allreduce(dolfinx.fem.assemble_scalar(L2_c), op=MPI.SUM)
-        )
+        nrm = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(L2_c), op=MPI.SUM))
         if mesh.comm.rank == 0:
             print(
                 f"Solved {k=} alpha={float(alpha)} ||c_{k} - c_{k - 1}|| = {nrm}",

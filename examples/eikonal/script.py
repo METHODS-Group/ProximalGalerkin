@@ -1,12 +1,13 @@
-import dolfinx.fem.petsc
-import numpy as np
 from mpi4py import MPI
 from petsc4py import PETSc
-import dolfinx
+
 import basix.ufl
+import dolfinx
+import dolfinx.fem.petsc
+import numpy as np
 import ufl
-from dolfinx.nls.petsc import NewtonSolver
 from dolfinx.fem.petsc import NonlinearProblem
+from dolfinx.nls.petsc import NewtonSolver
 from read_mobius_dolfinx import read_mobius_strip
 
 # Mesh generated with MFEM, see: convert_mesh.cpp for instructions
