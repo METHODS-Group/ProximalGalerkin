@@ -22,10 +22,10 @@ Examples of the proximal Galerkin finite element method.
 
 We provide several docker container for the various methods used in the paper
 
-- DOLFINx: `ghcr.io/methods-group/proximalgalerkin-dolfinx:main`
-- MFEM: `ghcr.io/methods-group/proximalgalerkin-mfem:main`
-- Firedrake: `ghcr.io/methods-group/proximalgalerkin-firedrake:main`
-- Julia/GridAP: `julia:1.10.8`
+- DOLFINx: [ghcr.io/methods-group/proximalgalerkin-dolfinx:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-dolfinx)
+- MFEM: [ghcr.io/methods-group/proximalgalerkin-mfem:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-mfem)
+- Firedrake: [ghcr.io/methods-group/proximalgalerkin-firedrake:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-firedrake)
+- Julia/GridAP: [julia:1.10.8](https://hub.docker.com/layers/library/julia/1.10.8/images/sha256-66656909ed7b5e75f4208631b01fc585372f906d68353d97cc06b40a8028c437)
 
 <a name="obstacle"></a>
 
