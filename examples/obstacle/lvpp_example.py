@@ -112,7 +112,7 @@ def solve_problem(
     Qe = basix.ufl.quadrature_element(msh.topology.cell_name(), degree=quadrature_degree)
     Vq = fem.functionspace(msh, Qe)
     # Lower bound for the obstacle
-    phi = fem.Function(Vq)
+    phi = fem.Function(Vq, name="phi")
     phi.interpolate(phi_set)
 
     # Define non-linear residual
@@ -252,6 +252,11 @@ def solve_problem(
 
     num_primal_dofs = V_primal.dofmap.index_map.size_global
 
+    phi_out_space = fem.functionspace(msh, basix.ufl.element("Lagrange", msh.basix_cell(), 6))
+    phi_out = fem.Function(phi_out_space, name="phi")
+    phi_out.interpolate(phi_set)
+    with io.VTXWriter(msh.comm, output_dir / "phi.bp", [phi_out]) as bp:
+        bp.write(0.0)
     if MPI.COMM_WORLD.rank == 0:
         df = pd.DataFrame()
         df["Energy"] = energies
