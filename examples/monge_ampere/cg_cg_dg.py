@@ -48,7 +48,6 @@ for mesh in mh:
     psi = as_tensor([[Psi[0], Psi[1]], [Psi[1], Psi[2]]])
     (v, q, Phi) = split(TestFunction(Z))
     phi = as_tensor([[Phi[0], Phi[1]], [Phi[1], Phi[2]]])
-    n = FacetNormal(mesh)
 
     F = (
         inner(tr(psi) - ln(rho), v) * dx
@@ -99,7 +98,6 @@ for mesh in mh:
 
     errors.append(norm((u_exact - u), "L2"))
     print("||skew(psi)||_L2: ", norm(0.5 * (psi - psi.T)), flush=True)
-
 error_ = project(u_exact - u, V, solver_parameters=projsp)
 u_exact_ = project(u_exact, V, solver_parameters=projsp)
 error_.rename("Error")

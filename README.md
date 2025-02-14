@@ -16,6 +16,7 @@ Examples of the proximal Galerkin finite element method.
 |   9    |                                                                            ?                                                                            |     Firedrake     |                                  |
 |   10   |            [harmonic_maps/harmonic_1d.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/harmonic_maps/harmonic_1d.py)            |      FEniCSx      | [Harmonic map](#harmonic)        |
 |   11   |                                                                            ?                                                                            |       MFEM        | [Eikonal](#eikonal)              |
+|   12   |                [monge_ampere/cg_cg_dg.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/monge_ampere/cg_cg_dg.py)                | Firedrake/FEniCS  | [Monge-Ampere](#monge)           |
 
 ## Installation
 
@@ -136,3 +137,19 @@ Meshes at:
 - https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh
 
 - https://github.com/mfem/mfem/blob/master/data/mobius-strip.mesh
+
+<a name="monge"></a>
+
+# Monge-Ampere
+
+The firedrake code can be run with
+
+```bash
+python3 cg_cg_dg.py
+```
+
+The equivalent FEniCS/DOLFINx code can be run with
+
+```bash
+python3 cg_cg_dg_fenics.py
+```
