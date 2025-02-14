@@ -4,11 +4,12 @@ except ModuleNotFoundError:
     print("This example requires the netgen-mesher module to be installed.")
     exit(1)
 from mpi4py import MPI
-import numpy as np
-from packaging.version import Version
-import dolfinx
-import ufl
+
 import basix.ufl
+import dolfinx
+import numpy as np
+import ufl
+from packaging.version import Version
 
 
 def create_crack_mesh(comm, max_res: float = 0.05):
