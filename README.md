@@ -2,21 +2,21 @@
 
 Examples of the proximal Galerkin finite element method.
 
-| Figure |                                                                     File: examples/                                                                     |     Backend      | Instructions                     |
-| :----: | :-----------------------------------------------------------------------------------------------------------------------------------------------------: | :--------------: | -------------------------------- |
-|   2b   |                 [obstacle/compare_all.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/compare_all.py)                 |      FEniCS      | [Obstacle problem](#obstacle)    |
-| 2c(i)  |           [obstacle/finite_difference.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/finite_difference.jl)           |      Julia       | [Obstacle problem](#obstacle)    |
-| 2c(ii) |                    [obstacle/spectral.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/spectral.jl)                    |      Julia       | [Obstacle problem](#obstacle)    |
-|   3    |                     [signorini/script.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/signorini/script.py)                     |      FEniCS      | [Signorini problem](#signorini)  |
-|   4    |                                                                            ?                                                                            | Firedrake/FEniCS | [Fracture](#fracture)            |
-|   5    |                [cahn-hilliard/problem.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/cahn-hilliard/problem.py)                |      FEniCS      | [Cahn-Hilliard](#ch)             |
-|   6    | [thermoforming_qvi/thermoforming_lvpp.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/thermoforming_qvi/thermoforming_lvpp.jl) |      Julia       | [Thermoforming QVI](#qvi)        |
-|   7    |           [gradient_constraint/script.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/gradient_constraint/script.py)           |      FEniCS      | [Gradient constraint](#gradient) |
-|   8    |                                                                            ?                                                                            |    Firedrake     |                                  |
-|   9    |                                                                            ?                                                                            |    Firedrake     |                                  |
-|   10   |            [harmonic_maps/harmonic_1d.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/harmonic_maps/harmonic_1d.py)            |      FEniCS      | [Harmonic map](#harmonic)        |
-|   11   |                                                                            ?                                                                            |       MFEM       | [Eikonal](#eikonal)              |
-|   12   |                [monge_ampere/cg_cg_dg.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/monge_ampere/cg_cg_dg.py)                | Firedrake/FEniCS | [Monge-Ampere](#monge)           |
+| Figure |                                        File: examples/                                        |     Backend      | Instructions                     |
+| :----: | :-------------------------------------------------------------------------------------------: | :--------------: | -------------------------------- |
+|   2b   |                 [obstacle/compare_all.py](./examples/obstacle/compare_all.py)                 |      FEniCS      | [Obstacle problem](#obstacle)    |
+| 2c(i)  |           [obstacle/finite_difference.jl](./examples/obstacle/finite_difference.jl)           |      Julia       | [Obstacle problem](#obstacle)    |
+| 2c(ii) |                    [obstacle/spectral.jl](./examples/obstacle/spectral.jl)                    |      Julia       | [Obstacle problem](#obstacle)    |
+|   3    |                     [signorini/script.py](./examples/signorini/script.py)                     |      FEniCS      | [Signorini problem](#signorini)  |
+|   4    |                                               ?                                               | Firedrake/FEniCS | [Fracture](#fracture)            |
+|   5    |                [cahn-hilliard/problem.py](./examples/cahn-hilliard/problem.py)                |      FEniCS      | [Cahn-Hilliard](#ch)             |
+|   6    | [thermoforming_qvi/thermoforming_lvpp.jl](./examples/thermoforming_qvi/thermoforming_lvpp.jl) |      Julia       | [Thermoforming QVI](#qvi)        |
+|   7    |           [gradient_constraint/script.py](./examples/gradient_constraint/script.py)           |      FEniCS      | [Gradient constraint](#gradient) |
+|   8    |                                               ?                                               |    Firedrake     |                                  |
+|   9    |                                               ?                                               |    Firedrake     |                                  |
+|   10   |            [harmonic_maps/harmonic_1d.py](./examples/harmonic_maps/harmonic_1d.py)            |      FEniCS      | [Harmonic map](#harmonic)        |
+|   11   |                        [eikonal/ex40.cpp](./examples/eikonal/ex40.cpp)                        |       MFEM       | [Eikonal](#eikonal)              |
+|   12   |                [monge_ampere/cg_cg_dg.py](./examples/monge_ampere/cg_cg_dg.py)                | Firedrake/FEniCS | [Monge-Ampere](#monge)           |
 
 ## Installation
 
@@ -81,8 +81,10 @@ python3 script.py
 
 while the Firedrake code can be executed with:
 
+> [!WARNING]  
+> Add instructions
+
 ```bash
-FIXME: ADD Instructions
 
 ```
 
@@ -130,13 +132,31 @@ python3 harmonic_1D.py
 
 ## Eikonal equation
 
-Meshes at:
+The MFEM example can be executed by copying
+[./examples/eikonal/ex40.cpp](./examples/eikonal/ex40.cpp) into the `mfem` examples folder
+and call `make ex40`. It can then be executed with:
 
-- https://github.com/mfem/mfem/blob/master/data/star.mesh
+```bash
+docker run -it --rm -v ./examples/eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
+cp /home/euler/shared/ex40.cpp /home/euler/mfem/examples/
+cd examples && make ex40
+./ex40
+```
 
-- https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh
+For the non-manifold examples, with the [Star](https://github.com/mfem/mfem/blob/master/data/star.mesh)
+and [Ball](https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh) you can compile the [official demo](https://mfem.org/examples/), `ex40.cpp` or `ex40p.cpp` without copying any files from this repository.
 
-- https://github.com/mfem/mfem/blob/master/data/mobius-strip.mesh
+The DOLFINx example, in [./examples/eikonal/script.py](./examples/eikonal/script.py) requires to convert the mobius strip mesh from `mfem`, called [mobius-strip.mesh](https://github.com/mfem/mfem/blob/master/data/mobius-strip.mesh)
+
+From the root of the repository, you can call the following commands to compile the code
+
+```bash
+docker run -it --rm -v ./examples/eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
+cp /home/euler/shared/convert_mesh.cpp /home/euler/mfem/examples/
+cd examples && make convert_mesh
+./convert_mesh --mesh ../data/mobius-strip.mesh
+cp -r  mobius-strip.mesh/ ../../shared/
+```
 
 <a name="monge"></a>
 
