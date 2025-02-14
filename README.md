@@ -2,21 +2,21 @@
 
 Examples of the proximal Galerkin finite element method.
 
-| Figure |                                                                     File: examples/                                                                     |      Backend      | Instructions                     |
-| :----: | :-----------------------------------------------------------------------------------------------------------------------------------------------------: | :---------------: | -------------------------------- |
-|   2b   |                 [obstacle/compare_all.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/compare_all.py)                 |      FEniCSx      | [Obstacle problem](#obstacle)    |
-| 2c(i)  |           [obstacle/finite_difference.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/finite_difference.jl)           |       Julia       | [Obstacle problem](#obstacle)    |
-| 2c(ii) |                    [obstacle/spectral.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/spectral.jl)                    |       Julia       | [Obstacle problem](#obstacle)    |
-|   3    |                     [signorini/script.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/signorini/script.py)                     |      FEniCSx      | [Signorini problem](#signorini)  |
-|   4    |                                                                            ?                                                                            | Firedrake/DOLFINx | [Fracture](#fracture)            |
-|   5    |                [cahn-hilliard/problem.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/cahn-hilliard/problem.py)                |      FEniCSx      | [Cahn-Hilliard](#ch)             |
-|   6    | [thermoforming_qvi/thermoforming_lvpp.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/thermoforming_qvi/thermoforming_lvpp.jl) |       Julia       | [Thermoforming QVI](#qvi)        |
-|   7    |           [gradient_constraint/script.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/gradient_constraint/script.py)           |      FEniCSx      | [Gradient constraint](#gradient) |
-|   8    |                                                                            ?                                                                            |     Firedrake     |                                  |
-|   9    |                                                                            ?                                                                            |     Firedrake     |                                  |
-|   10   |            [harmonic_maps/harmonic_1d.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/harmonic_maps/harmonic_1d.py)            |      FEniCSx      | [Harmonic map](#harmonic)        |
-|   11   |                                                                            ?                                                                            |       MFEM        | [Eikonal](#eikonal)              |
-|   12   |                [monge_ampere/cg_cg_dg.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/monge_ampere/cg_cg_dg.py)                | Firedrake/FEniCS  | [Monge-Ampere](#monge)           |
+| Figure |                                                                     File: examples/                                                                     |     Backend      | Instructions                     |
+| :----: | :-----------------------------------------------------------------------------------------------------------------------------------------------------: | :--------------: | -------------------------------- |
+|   2b   |                 [obstacle/compare_all.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/compare_all.py)                 |      FEniCS      | [Obstacle problem](#obstacle)    |
+| 2c(i)  |           [obstacle/finite_difference.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/finite_difference.jl)           |      Julia       | [Obstacle problem](#obstacle)    |
+| 2c(ii) |                    [obstacle/spectral.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/obstacle/spectral.jl)                    |      Julia       | [Obstacle problem](#obstacle)    |
+|   3    |                     [signorini/script.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/signorini/script.py)                     |      FEniCS      | [Signorini problem](#signorini)  |
+|   4    |                                                                            ?                                                                            | Firedrake/FEniCS | [Fracture](#fracture)            |
+|   5    |                [cahn-hilliard/problem.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/cahn-hilliard/problem.py)                |      FEniCS      | [Cahn-Hilliard](#ch)             |
+|   6    | [thermoforming_qvi/thermoforming_lvpp.jl](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/thermoforming_qvi/thermoforming_lvpp.jl) |      Julia       | [Thermoforming QVI](#qvi)        |
+|   7    |           [gradient_constraint/script.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/gradient_constraint/script.py)           |      FEniCS      | [Gradient constraint](#gradient) |
+|   8    |                                                                            ?                                                                            |    Firedrake     |                                  |
+|   9    |                                                                            ?                                                                            |    Firedrake     |                                  |
+|   10   |            [harmonic_maps/harmonic_1d.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/harmonic_maps/harmonic_1d.py)            |      FEniCS      | [Harmonic map](#harmonic)        |
+|   11   |                                                                            ?                                                                            |       MFEM       | [Eikonal](#eikonal)              |
+|   12   |                [monge_ampere/cg_cg_dg.py](https://github.com/METHODS-Group/ProximalGalerkin/blob/main/examples/monge_ampere/cg_cg_dg.py)                | Firedrake/FEniCS | [Monge-Ampere](#monge)           |
 
 ## Installation
 
@@ -72,7 +72,7 @@ python3 run_lvpp_problem.py --alpha_0=0.005 --degree=2 --disp=-0.3 --n-max-itera
 
 # Fracture
 
-Can be simulated with either DOLFINx or Firdrake.
+Can be simulated with either FEniCS/DOLFINx or Firedrake.
 The DOLFINx code can be executed with
 
 ```bash
