@@ -102,8 +102,8 @@ def solve_problem(
     solver.convergence_criterion = "residual"
     solver.rtol = 1e-9
     solver.atol = 1e-9
-    solver.max_it = 25
-    solver.error_on_nonconvergence = False
+    solver.max_it = 100
+    solver.error_on_nonconvergence = True
 
     ksp = solver.krylov_solver
     opts = PETSc.Options()  # type: ignore
@@ -173,12 +173,14 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHe
 def main(argv: Optional[list[str]] = None):
     parser = argparse.ArgumentParser(formatter_class=CustomFormatter)
     mesh_options = parser.add_argument_group("Mesh options")
-    mesh_options.add_argument("-N", type=int, default=40, help="Number of elements in x-direction")
+    mesh_options.add_argument(
+        "-N", type=int, default=1000, help="Number of elements in x-direction"
+    )
     element_options = parser.add_argument_group("Finite element discretization options")
     element_options.add_argument(
         "--primal_degree",
         type=int,
-        default=1,
+        default=2,
         choices=[1, 2, 3, 4, 5, 6, 7, 8],
         help="Polynomial degree for primal variable",
     )
@@ -188,7 +190,7 @@ def main(argv: Optional[list[str]] = None):
     alpha_options.add_argument(
         "--alpha_scheme",
         type=str,
-        default="linear",
+        default="constant",
         choices=["constant", "linear", "doubling"],
         help="Scheme for updating alpha",
     )

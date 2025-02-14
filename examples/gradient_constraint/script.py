@@ -19,7 +19,7 @@ def solve_problem(
     N: int,
     M: int,
     primal_space: str,
-    dual_space: str,
+    latent_space: str,
     primal_degree: int,
     cell_type: str,
     alpha_scheme: AlphaScheme,
@@ -37,11 +37,16 @@ def solve_problem(
     mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, M, cell_type=_cell_type)
 
     el_0 = basix.ufl.element(primal_space, mesh.topology.cell_name(), primal_degree)
-    if dual_space == "RT":
+    if latent_space == "RT":
         el_1 = basix.ufl.element("RT", mesh.topology.cell_name(), primal_degree - 1)
-    elif dual_space == "DG":
+    elif latent_space == "DG":
         el_1 = basix.ufl.element(
             "DG", mesh.topology.cell_name(), primal_degree - 1, shape=(mesh.geometry.dim,)
+        )
+    elif latent_space == "Lagrange":
+        assert primal_degree > 1
+        el_1 = basix.ufl.element(
+            "Lagrange", mesh.topology.cell_name(), primal_degree - 1, shape=(mesh.geometry.dim,)
         )
 
     trial_el = basix.ufl.mixed_element([el_0, el_1])
@@ -178,6 +183,9 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHe
     pass
 
 
+latent_spaces = Literal["Lagrange", "RT", "DG"]
+
+
 def main(
     argv: Optional[list[str]] = None,
     phi_func: Optional[Callable[[np.ndarray], np.ndarray]] = None,
@@ -204,10 +212,10 @@ def main(
         help="Finite Element family for primal variable",
     )
     element_options.add_argument(
-        "--dual_space",
+        "--latent_space",
         type=str,
         default="RT",
-        choices=["RT", "DG"],
+        choices=get_args(latent_spaces),
         help="Finite element family for auxiliary variable",
     )
     element_options.add_argument(
@@ -269,7 +277,7 @@ def main(
         N=parsed_args.N,
         M=parsed_args.M,
         primal_space=parsed_args.primal_space,
-        dual_space=parsed_args.dual_space,
+        latent_space=parsed_args.latent_space,
         primal_degree=parsed_args.primal_degree,
         cell_type=parsed_args.cell_type,
         alpha_scheme=parsed_args.alpha_scheme,
@@ -282,6 +290,10 @@ def main(
         warm_start=parsed_args.warm_start,
         stopping_tol=parsed_args.stopping_tol,
     )
+    print(f"Number of LVPP iterations {len(iteration_counts)}")
+    print(f"Minimum number of solves {np.min(iteration_counts)}")
+    print(f"Maximum number of solves {np.max(iteration_counts)}")
+    print(f"Total number of Newton iterations: {np.sum(iteration_counts)}")
     print(iteration_counts)
     print(L2_diffs)
 
