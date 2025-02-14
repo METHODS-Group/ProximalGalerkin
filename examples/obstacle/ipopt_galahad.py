@@ -14,7 +14,7 @@ import numpy as np
 import scipy.sparse
 import ufl
 
-from lvpp import galahad_solver, ipopt_solver
+from lvpp.optimization import galahad_solver, ipopt_solver
 
 parser = argparse.ArgumentParser(
     description="""Solve the obstacle problem on a general mesh using a spatially varying

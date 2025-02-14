@@ -14,7 +14,7 @@ from ipopt_galahad import ObstacleProblem, setup_problem
 from lvpp_example import solve_problem
 from obstacle_snes import snes_solve
 
-from lvpp import galahad_solver, ipopt_solver
+from lvpp.optimization import galahad_solver, ipopt_solver
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

@@ -7,45 +7,13 @@ import basix.ufl
 import ufl
 from dolfinx.nls.petsc import NewtonSolver
 from dolfinx.fem.petsc import NonlinearProblem
-# from read_mobius_dolfinx import read_mobius_strip
+from read_mobius_dolfinx import read_mobius_strip
 
-# mesh = read_mobius_strip("./mobius-strip.mesh/Cycle000000/proc000000.vtu")
+# Mesh generated with MFEM, see: convert_mesh.cpp for instructions
+mesh = read_mobius_strip("./mobius-strip.mesh/Cycle000000/proc000000.vtu")
 
-from mob_create import create_mobius_mesh
-
-M = 10
-degree = 2
-mesh = create_mobius_mesh(M, degree=degree)
-import dolfinx.io
-
-# from mpi4py import MPI
-
-# import gmsh
-
-# import dolfinx
-
-# gmsh.initialize()
-# center = (0, 0, 0)
-# aspect_ratio = 1
-# R_i = 0.5
-# R_e = 1
-
-# inner_disk = gmsh.model.occ.addDisk(*center, R_i, aspect_ratio * R_i)
-# outer_disk = gmsh.model.occ.addDisk(*center, R_e, R_e)
-# whole_domain, map_to_input = gmsh.model.occ.cut([(2, outer_disk)], [(2, inner_disk)])
-# gmsh.model.occ.synchronize()
-# gmsh.model.addPhysicalGroup(whole_domain[0][0], [whole_domain[0][1]], 1)
-# gmsh.option.setNumber("Mesh.CharacteristicLengthMax", 0.1)
-# gmsh.model.mesh.generate(2)
-# gmsh.model.mesh.setOrder(2)
-# mesh, _, _ = dolfinx.io.gmshio.model_to_mesh(gmsh.model, MPI.COMM_WORLD, 0, gdim=3)
-# # mesh.geometry.x[:, 2] += np.sin(2 * np.pi * mesh.geometry.x[:, 0])
-# x = mesh.geometry.x
-# t = x[0] ** 2 + x[1] ** 2
-
-
-el_0 = basix.ufl.element("DG", mesh.topology.cell_name(), 2)
-el_1 = basix.ufl.element("RT", mesh.topology.cell_name(), 3)
+el_0 = basix.ufl.element("P", mesh.topology.cell_name(), 1)
+el_1 = basix.ufl.element("P", mesh.topology.cell_name(), 2, shape=(3,))
 trial_el = basix.ufl.mixed_element([el_0, el_1])
 V = dolfinx.fem.functionspace(mesh, trial_el)
 

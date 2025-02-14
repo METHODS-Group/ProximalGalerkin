@@ -1,7 +1,6 @@
 from mpi4py import MPI
-from petsc4py import PETSc
 import basix.ufl
-from lvpp import SNESProblem
+from lvpp import SNESProblem, SNESSolver
 import dolfinx.fem.petsc
 from ufl import (
     TestFunction,
@@ -24,7 +23,7 @@ class NotConvergedError(Exception):
 
 
 st = dolfinx.default_scalar_type
-mesh, ft, _ = create_crack_mesh(MPI.COMM_WORLD, max_res=0.025)
+mesh, ft, material_map = create_crack_mesh(MPI.COMM_WORLD, max_res=0.0125)
 el = basix.ufl.element("Lagrange", mesh.basix_cell(), 1)
 el = basix.ufl.mixed_element([el, el, el])
 Z = dolfinx.fem.functionspace(mesh, el)
@@ -93,8 +92,19 @@ J_reg = dolfinx.fem.form(
 bcminus = dolfinx.fem.Constant(mesh, 0.0)
 bcplus = dolfinx.fem.Constant(mesh, 0.0)
 mesh.topology.create_connectivity(1, 2)
-left_dofs = dolfinx.fem.locate_dofs_topological(Z.sub(0), ft.dim, ft.find(7))
-right_dofs = dolfinx.fem.locate_dofs_topological(Z.sub(0), ft.dim, ft.find(4))
+
+left_dofs = np.hstack(
+    [
+        dolfinx.fem.locate_dofs_topological(Z.sub(0), ft.dim, ft.find(value))
+        for value in material_map["topleft"]
+    ]
+)
+right_dofs = np.hstack(
+    [
+        dolfinx.fem.locate_dofs_topological(Z.sub(0), ft.dim, ft.find(value))
+        for value in material_map["topright"]
+    ]
+)
 bcs = [
     dolfinx.fem.dirichletbc(bcplus, right_dofs, Z.sub(0)),
     dolfinx.fem.dirichletbc(bcminus, left_dofs, Z.sub(0)),
@@ -132,7 +142,10 @@ Psi, Psi_to_Z = Z.sub(2).collapse()
 psi_out = dolfinx.fem.Function(Psi, name="psi")
 converged_reason = -1
 num_iterations = -1
-for step, T in enumerate(np.linspace(0, 2.1, 20)[1:]):
+
+
+problem = SNESProblem(F_compiled, z, bcs=bcs, J=J_reg)
+for step, T in enumerate(np.linspace(0, 5, 1001)[1:]):
     if mesh.comm.rank == 0:
         print(f"Solving for T = {float(T)}", flush=True)
     bcminus.value = -T
@@ -146,42 +159,17 @@ for step, T in enumerate(np.linspace(0, 2.1, 20)[1:]):
         try:
             if mesh.comm.rank == 0:
                 print(f"Attempting {k=} alpha={float(alpha)}", flush=True)
-            snes = PETSc.SNES().create(comm=mesh.comm)  # type: ignore
-            opts = PETSc.Options()  # type: ignore
-            snes.setOptionsPrefix("snes_solve")
-            option_prefix = snes.getOptionsPrefix()
-            opts.prefixPush(option_prefix)
-            for key, v in sp.items():
-                opts[key] = v
-            opts.prefixPop()
-            snes.setFromOptions()
+            solver = SNESSolver(problem, sp)
+            converged_reason, num_iterations = solver.solve()
 
-            # NOTE: Normally these would be outside the loop, but there are cases when
-            # SNES/A becomes singular and not possible to reuse, and we need a new matrix
-            A = dolfinx.fem.petsc.create_matrix(J_reg)
-            b = dolfinx.fem.Function(Z)
-            b_vec = b.x.petsc_vec
-            problem = SNESProblem(F_compiled, z, bcs=bcs, J=J_reg)
-            x = dolfinx.fem.Function(Z)
-
-            # Set solve functions and variable bounds
-            snes.setFunction(problem.F, b_vec)
-            snes.setJacobian(problem.J, A)
-            x.interpolate(z)
-            snes.solve(None, x.x.petsc_vec)
-            x.x.scatter_forward()
-            z.interpolate(x)
-            converged_reason = snes.getConvergedReason()
-            num_iterations = snes.getIterationNumber()
             print(converged_reason, num_iterations)
-            if num_iterations == 0:
+            if num_iterations == 0 and converged_reason > 0:
                 # solver didn't actually get to do any work,
                 # we've just reduced alpha so much that the initial guess
                 # satisfies the PDE
                 raise NotConvergedError("Not converged")
             if converged_reason < 0:
                 raise NotConvergedError("Not converged")
-
         except NotConvergedError:
             nfail += 1
             if mesh.comm.rank == 0:
@@ -198,8 +186,6 @@ for step, T in enumerate(np.linspace(0, 2.1, 20)[1:]):
                 break
             else:
                 continue
-        finally:
-            snes.destroy()
 
         # Termination
         nrm = np.sqrt(
@@ -248,7 +234,3 @@ for step, T in enumerate(np.linspace(0, 2.1, 20)[1:]):
         z_prev.interpolate(z)
         vtx_damage.write(T)
 vtx_damage.close()
-with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "mesh_output.xdmf", "w") as xdmf:
-    xdmf.write_mesh(mesh)
-    mesh.topology.create_connectivity(1, 2)
-    xdmf.write_meshtags(ft, mesh.geometry)

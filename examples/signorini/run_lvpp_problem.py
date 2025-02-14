@@ -18,7 +18,7 @@ import ufl
 from packaging.version import Version
 from scifem import BlockedNewtonSolver
 
-from lvpp import AlphaScheme
+AlphaScheme = typing.Literal["constant", "linear", "doubling"]
 
 
 class _HelpAction(argparse._HelpAction):
@@ -325,11 +325,11 @@ def solve_contact_problem(
         )
         u_bc.x.array[V0_to_V] = disp  # (it+1)/M * disp
 
-        if alpha_scheme == AlphaScheme.constant:
+        if alpha_scheme == "constant":
             pass
-        elif alpha_scheme == AlphaScheme.linear:
+        elif alpha_scheme == "linear":
             alpha.value = alpha_0 + alpha_c * it
-        elif alpha_scheme == AlphaScheme.doubling:
+        elif alpha_scheme == "doubling":
             alpha.value = alpha_0 * 2**it
 
         solver_tol = 10 * newton_tol if it < 2 else newton_tol

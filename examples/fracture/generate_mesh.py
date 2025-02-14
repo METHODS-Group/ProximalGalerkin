@@ -11,7 +11,6 @@ import ufl
 import basix.ufl
 
 
-# Porting: https://github.com/pefarrell/proximalgalerkin/blob/master/fracture/lvpp.py
 def create_crack_mesh(comm, max_res: float = 0.05):
     geo = netgen.geom2d.CSG2d()
     poly = netgen.geom2d.Solid2d(
@@ -33,7 +32,7 @@ def create_crack_mesh(comm, max_res: float = 0.05):
         ]
     )
 
-    disk = netgen.geom2d.Circle((0.3, 0.3), 0.2)
+    disk = netgen.geom2d.Circle((0.3, 0.3), 0.2, bc="hole")
     geo.Add(poly - disk)
     if comm.rank == 0:
         ngmesh = geo.GenerateMesh(maxh=max_res)
@@ -60,9 +59,9 @@ def create_crack_mesh(comm, max_res: float = 0.05):
     linear_mesh = dolfinx.mesh.create_mesh(MPI.COMM_WORLD, cells, x, ud)
 
     if comm.rank == 0:
-        regions = [
-            (name, i + 1) for i, name in enumerate(ngmesh.GetRegionNames(codim=1))
-        ]
+        regions: dict[str, list[int]] = {name: [] for name in ngmesh.GetRegionNames(codim=1)}
+        for i, name in enumerate(ngmesh.GetRegionNames(codim=1), 1):
+            regions[name].append(i)
         ng_facets = ngmesh.Elements1D()
         facet_indices = ng_facets.NumPy()["nodes"].astype(np.int64)
         if Version(np.__version__) >= Version("2.2"):
@@ -75,8 +74,9 @@ def create_crack_mesh(comm, max_res: float = 0.05):
                 )
                 - 1
             )
-
-        facet_values = ng_facets.NumPy()["index"].astype(np.int32)
+        # Can't use the vectorized version, due to a bug in ngsolve:
+        # https://forum.ngsolve.org/t/extract-facet-markers-from-netgen-mesh/3256
+        facet_values = np.array([facet.index for facet in ng_facets], dtype=np.int32)
         regions = comm.bcast(regions, root=0)
     else:
         facets = np.zeros((0, 3), dtype=np.int64)
@@ -105,6 +105,3 @@ if __name__ == "__main__":
             linear_mesh.topology.dim - 1, linear_mesh.topology.dim
         )
         xdmf.write_meshtags(ft, linear_mesh.geometry)
-
-    # with dolfinx.io.VTXWriter(linear_mesh.comm, "mesh.bp", linear_mesh) as bp:
-    #     bp.write(0.0)
