@@ -2,3 +2,9 @@
 *.bp
 *.xdmf
 *.h5
+__pycache__
+ALIVE.d
+.mypy_cache
+.ruff_cache
+results
+output

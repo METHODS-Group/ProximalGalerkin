@@ -114,7 +114,7 @@ alpha_options.add_argument(
     "--alpha_scheme",
     type=str,
     default="constant",
-    choices=["constant", "linear", "doubling"],
+    choices=typing.get_args(AlphaScheme),
     help="Scheme for updating alpha",
 )
 alpha_options.add_argument("--alpha_0", type=float, default=1.0, help="Initial value of alpha")
@@ -426,7 +426,7 @@ if __name__ == "__main__":
         newton_max_its=args.newton_max_iterations,
         newton_tol=args.newton_tol,
         max_iterations=args.max_iterations,
-        alpha_scheme=AlphaScheme.from_string(args.alpha_scheme),
+        alpha_scheme=args.alpha_scheme,
         alpha_0=args.alpha_0,
         alpha_c=args.alpha_c,
         tol=args.tol,

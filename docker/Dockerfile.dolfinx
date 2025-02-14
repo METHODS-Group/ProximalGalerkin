@@ -209,9 +209,9 @@ RUN cp /src/dolfinx/docker/complex-kernel.json /usr/local/share/jupyter/kernels/
 RUN python3 -m pip install git+https://github.com/scientificcomputing/scifem.git
 
 # Copy over examples and source code
-COPY . /
-RUN python3 -m pip install -e .[examples]
+ADD . /root/src/
 WORKDIR /root/src/
+RUN python3 -m pip install -e .[examples]
 
 EXPOSE 8888/tcp
 ENV SHELL /bin/bash
