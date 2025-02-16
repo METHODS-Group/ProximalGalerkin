@@ -49,7 +49,7 @@ x, y = SpatialCoordinate(mesh)
 s_prev = dolfinx.fem.Function(V)
 u_prev, _, psi_prev = split(s_prev)
 beta = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
-alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(2e-6))
+alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(2 ** (-6)))
 f = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(25))
 Phi0 = 1 - 2 * max_value(abs(x - 0.5), abs(y - 0.5))
 xi = sin(pi * x) * sin(pi * y)
@@ -60,12 +60,6 @@ F += inner(grad(T), grad(q)) * dx + beta * inner(T, q) * dx
 F += -inner(g(exp(-psi)), q) * dx
 F += inner(u, w) * dx + inner(exp(-psi), w) * dx
 F += -inner(Phi0 + xi * T, w) * dx
-
-# out = dolfinx.fem.Function(V.sub(0).collapse()[0])
-# out.interpolate(dolfinx.fem.Expression(Phi0, V.sub(0).collapse()[0].element.interpolation_points()))
-# with dolfinx.io.VTXWriter(mesh.comm, "phi0.bp", [out]) as bp:
-#     bp.write(0.0)
-# exit()
 
 # Create modified Jacobian
 eps = dolfinx.fem.Constant(mesh, 1e-10)
@@ -88,28 +82,63 @@ sp = {
     "snes_monitor": None,
     "snes_linesearch_type": "l2",
     "pc_type": "lu",
-    "pc_factor_mat_solver_type": "mumps",
+    "pc_factor_mat_solver_type": "superlu_dist",
     "pc_svd_monitor": None,
-    "mat_mumps_icntl_14": 1000,
+    # "mat_mumps_icntl_14": 1000,
 }
-problem = SNESProblem(F, s, bcs=[bc])
-solver = SNESSolver(problem, sp)
 
 max_lvpp_iterations = 100
-V0, sub_to_parent = V.sub(0).collapse()
+V0, sub0_to_parent = V.sub(0).collapse()
 u_out = dolfinx.fem.Function(V0)
-vtx = dolfinx.io.VTXWriter(MPI.COMM_WORLD, "output.bp", [u_out])
+u_out.name = "u"
+V1, sub1_to_parent = V.sub(1).collapse()
+T_out = dolfinx.fem.Function(V1)
+T_out.name = "T"
+
+vtx_u = dolfinx.io.VTXWriter(mesh.comm, "u.bp", [u_out])
+vtx_T = dolfinx.io.VTXWriter(mesh.comm, "T.bp", [T_out])
+
+num_iterations = []
 for i in range(1, max_lvpp_iterations + 1):
+    problem = SNESProblem(F, s, bcs=[bc])
+    solver = SNESSolver(problem, sp)
+
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
-    converged, num_iterations = solver.solve()
-    u_out.x.array[:] = s.x.array[sub_to_parent]
-    vtx.write(i)
-    if i == 3:
-        break
+    converged_reason, num_its = solver.solve()
+    assert converged_reason > 0, f"Solver did not converge with {converged_reason}"
+
+    # Output
+    u_out.x.array[:] = s.x.array[sub0_to_parent]
+    T_out.x.array[:] = s.x.array[sub1_to_parent]
+    vtx_u.write(i)
+    vtx_T.write(i)
     diff_local = dolfinx.fem.assemble_scalar(u_diff_L2)
     normed_diff = np.sqrt(mesh.comm.allreduce(diff_local, op=MPI.SUM))
-    print(i, converged, num_iterations, normed_diff)
+    print(
+        f"LVPP iteration {i}, Converged reason {converged_reason}",
+        f" Newton iterations {num_its} ||u-u_prev||_L2={normed_diff}",
+    )
+    num_iterations.append(num_its)
     if normed_diff < termination_tol:
+        print("Solver converged after {i} iterations")
         break
     s_prev.x.array[:] = s.x.array
     alpha.value *= 4
+
+print("Total number of LVPP iterations:", i)
+print("Total number of Newton iterations:", sum(num_iterations))
+
+vtx_u.close()
+vtx_T.close()
+
+original_mould = dolfinx.fem.Function(V0)
+original_mould.interpolate(dolfinx.fem.Expression(Phi0, V0.element.interpolation_points()))
+original_mould.name = "OriginalMould"
+mould = dolfinx.fem.Function(V0)
+mould.interpolate(dolfinx.fem.Expression(Phi0 + xi * T, V0.element.interpolation_points()))
+mould.name = "Mould"
+
+
+with dolfinx.io.VTXWriter(mesh.comm, "original_mould.bp", [original_mould, mould]) as bp:
+    bp.write(0.0)
+exit()
