@@ -74,17 +74,21 @@ boundary_dofs = dolfinx.fem.locate_dofs_topological(
 bc = dolfinx.fem.dirichletbc(dolfinx.default_scalar_type(0.0), boundary_dofs, V.sub(0))
 
 
-u_diff_L2 = dolfinx.fem.form(inner(u - u_prev, u - u_prev) * dx)
-termination_tol = 1e-9
+u_diff = u - u_prev
+u_diff_H1 = dolfinx.fem.form(inner(u_diff, u_diff) * dx + inner(grad(u_diff), grad(u_diff)) * dx)
+termination_tol = 1e-8
 s.sub(1).interpolate(lambda x: np.ones_like(x[1]))
 
 sp = {
     "snes_monitor": None,
-    "snes_linesearch_type": "l2",
+    "snes_linesearch_type": "bt",
     "pc_type": "lu",
-    "pc_factor_mat_solver_type": "superlu_dist",
+    "pc_factor_mat_solver_type": "mumps",
     "pc_svd_monitor": None,
-    # "mat_mumps_icntl_14": 1000,
+    "mat_mumps_icntl_14": 1000,
+    "snes_atol": 1e-8,
+    "snes_rtol": 1e-6,
+    "snes_linesearch_damping": 0.5,
 }
 
 max_lvpp_iterations = 100
@@ -98,10 +102,12 @@ T_out.name = "T"
 vtx_u = dolfinx.io.VTXWriter(mesh.comm, "u.bp", [u_out])
 vtx_T = dolfinx.io.VTXWriter(mesh.comm, "T.bp", [T_out])
 
+problem = SNESProblem(F, s, bcs=[bc])
+solver = SNESSolver(problem, sp)
+
 num_iterations = []
 for i in range(1, max_lvpp_iterations + 1):
-    problem = SNESProblem(F, s, bcs=[bc])
-    solver = SNESSolver(problem, sp)
+    print(f"LVPP iteration: {i} Alpha: {float(alpha)}")
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
     converged_reason, num_its = solver.solve()
@@ -112,7 +118,7 @@ for i in range(1, max_lvpp_iterations + 1):
     T_out.x.array[:] = s.x.array[sub1_to_parent]
     vtx_u.write(i)
     vtx_T.write(i)
-    diff_local = dolfinx.fem.assemble_scalar(u_diff_L2)
+    diff_local = dolfinx.fem.assemble_scalar(u_diff_H1)
     normed_diff = np.sqrt(mesh.comm.allreduce(diff_local, op=MPI.SUM))
     print(
         f"LVPP iteration {i}, Converged reason {converged_reason}",
