@@ -147,10 +147,6 @@ python3 script.py -N 80 -M 80 --alpha_scheme=doubling
 Deploy the `Firedrake` Docker container to reproduce the results in this example.
 Then run the following command within `examples/[TODO]`:
 
-```bash
-python3 script.py -N 80 -M 80 --alpha_scheme=doubling
-```
-
 > [!WARNING]  
 > Add instructions 
 
