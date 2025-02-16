@@ -34,7 +34,7 @@ The following table associates each implementation to the figures in the paper. 
 
 ## Installation
 
-We provide the following Docker containers for the various methods used in the paper:
+We encourage using following Docker containers to run the  codes listed in the table above:
 
 - DOLFINx: [ghcr.io/methods-group/proximalgalerkin-dolfinx:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-dolfinx)
 - MFEM: [ghcr.io/methods-group/proximalgalerkin-mfem:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-mfem)
@@ -43,11 +43,11 @@ We provide the following Docker containers for the various methods used in the p
 
 <a name="obstacle"></a>
 
-# Example 1: The obstacle problem
+# Example 1: The Obstacle Problem
 
-Figures 2 (a) and (b) are generated with DOLFINx.
+Figures 2 (a) and (b) are generated with `DOLFINx`.
 
-To reproduce the results in Figures 2 (a) (the comparison between Proximal Galerkin, SNES, Galahad, and IPOPT), first deploy the `DOLFINx` Docker containers and then run the following commands within `examples/obstacle`:
+To reproduce the results in Figures 2 (a) (the comparison between Proximal Galerkin, SNES, Galahad, and IPOPT), first deploy the `DOLFINx` Docker container. Then run the following commands within `examples/obstacle`:
 
 ```bash
 python3 generate_mesh_gmsh.py
@@ -56,7 +56,7 @@ python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
 python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
 ```
 
-Reproduce the finite difference and spectral element method results in Figure 2 (c) by deploying the `julia:1.10.8` Docker container and calling
+To reproduce the finite difference and spectral element method results in Figure 2 (c), deploy the `julia:1.10.8` Docker container and call
 
 ```bash
 julia finite_difference.jl
@@ -67,7 +67,7 @@ within `examples/obstacle`.
 
 <a name="signorini"></a>
 
-# Example 2: The Signorini problem
+# Example 2: The Signorini Problem
 
 Deploy the `DOLFINx` Docker container to reproduce the results in Figure 3.
 Then call
@@ -87,8 +87,8 @@ python3 run_lvpp_problem.py --alpha_0=0.005 --degree=2 --disp=-0.3 --n-max-itera
 
 # Example 3: Variational Fracture
 
-This example (cf. Figure 4) can be run from within both the `DOLFINx` and the `Firedrake` Docker containers.
-The `DOLFINx` code can be executed within `examples/fracture`
+This example (cf. Figure 4) can be run from within `examples/fracture` using both the `DOLFINx` and the `Firedrake` Docker containers.
+The `DOLFINx` code can be executed with
 
 ```bash
 python3 script.py
@@ -107,7 +107,7 @@ while the `Firedrake` code can be executed with:
 
 # Example 4: Four-Phase Cahn–Hilliard Gradient Flow
 
-Deploy the `DOLFINx` Docker container to reproduce the results in Figure 5.
+To reproduce the results in Figure 5, first deploy the `DOLFINx` Docker container.
 Then run
 
 ```bash
@@ -120,8 +120,8 @@ from within `examples/cahn-hilliard`.
 
 # Example 5: Thermoforming Quasi-Variational Inequality
 
-This example requires the `julia:1.10.8` Docker container to reproduce the results in Figure 6.
-The code can be executed by running
+Reproducing the results in Figure 6 requires the `julia:1.10.8` Docker container.
+Once this container is deployed, the code can be executed by running
 
 ```bash
 julia theroforming_lvpp.jl
@@ -152,6 +152,7 @@ python3 script.py -N 80 -M 80 --alpha_scheme=doubling
 ```
 
 > [!WARNING]  
+> Add instructions 
 
 ## Example 8: Intersections of Constraints
 
@@ -159,6 +160,7 @@ Deploy the `Firedrake` Docker container to reproduce the results in Figure 9.
 Then run the following command within `examples/[TODO]`:
 
 > [!WARNING]  
+> Add instructions 
 
 ## Example 9: Harmonic Maps to the Sphere
 
@@ -176,17 +178,24 @@ Note that there is no numerical example for this setting because the derived var
 
 We have provided code for this example for both the `MFEM` and `DOLFINx` Docker containers.
 
-To reproduce the Möbius strip solution in Figure 11, first copy [./examples/eikonal/ex40.cpp](./examples/eikonal/ex40.cpp) into the `mfem` examples folder and then call `make ex40`. The code can then be executed with:
+To reproduce the Möbius strip solution in Figure 11, you first need to copy [./examples/eikonal/ex40.cpp](./examples/eikonal/ex40.cpp) into the `MFEM` examples folder (`/home/euler/mfem/examples/`) and then calling `make ex40` and `./ex40 -step 10.0 -mi 10`. This following code will execute to entire process:
 
 ```bash
 docker run -it --rm -v ./examples/eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
 cp /home/euler/shared/ex40.cpp /home/euler/mfem/examples/
 cd examples && make ex40
-./ex40 -mi 10
+./ex40 -step 10.0 -mi 10
 ```
 
-For the other two geometries (i.e., the [Star](https://github.com/mfem/mfem/blob/master/data/star.mesh)
-and [Ball](https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh)) in Figure 11, you should compile the [official examples](https://mfem.org/examples/) `ex40.cpp` or `ex40p.cpp` without copying any files from this repository.
+To reproduce the results in Figure 11 for the two geometries (i.e., the [Star](https://github.com/mfem/mfem/blob/master/data/star.mesh)
+and [Ball](https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh)), you should compile the [official examples](https://mfem.org/examples/) `ex40.cpp` or `ex40p.cpp` without copying any files from this repository
+```bash
+cd examples && make ex40
+# Star Geometry
+./ex40 -step 10.0 -mi 10
+# Ball Geometry
+./ex40 -step 10.0 -mi 10 -m ../data/ball-nurbs.mesh
+```
 
 The `DOLFINx` implementation, found in [./examples/eikonal/script.py](./examples/eikonal/script.py) requires first converting the `MFEM` Möbius strip mesh [mobius-strip.mesh](https://github.com/mfem/mfem/blob/master/data/mobius-strip.mesh).
 To this end, run the following commands from the root of this repository:
@@ -199,7 +208,7 @@ cd examples && make convert_mesh
 cp -r  mobius-strip.mesh/ ../../shared/
 ```
 
-The `DOLFINx` code is then run by calling:
+The `DOLFINx` code is then executed by calling:
 
 ```bash
 python3 script.py
@@ -211,7 +220,7 @@ from within `examples/eikonal`.
 
 # Monge-Ampere
 
-This example (cf. Figure 4) can be run from within `examples/monge_ampere` using both the `DOLFINx` and the `Firedrake` Docker containers.
+This example (cf. Figure 12) can be run from within `examples/monge_ampere` using both the `DOLFINx` and the `Firedrake` Docker containers.
 
 The `Firedrake` code can be run with the command
 
