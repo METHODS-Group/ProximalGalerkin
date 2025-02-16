@@ -40,7 +40,7 @@ The following table associates each implementation to the examples and figures i
 |   8    |                                               ?                                               |    Firedrake     |                                  |
 |   9    |                                               ?                                               |    Firedrake     |                                  |
 |   10   |            [harmonic_maps/harmonic_1d.py](./examples/harmonic_maps/harmonic_1d.py)            |      FEniCS      | [Harmonic map](#harmonic)        |
-|   11   |                        [eikonal/ex40.cpp](./examples/eikonal/ex40.cpp)                        |       MFEM       | [Eikonal](#eikonal)              |
+|   11   |                        [eikonal/ex40.cpp](./examples/eikonal/ex40.cpp)                        |       MFEM/FEniCS       | [Eikonal](#eikonal)              |
 |   12   |                [monge_ampere/cg_cg_dg.py](./examples/monge_ampere/cg_cg_dg.py)                | Firedrake/FEniCS | [Monge-Ampere](#monge)           |
 
 ## Example 1 (Figure 2): The Obstacle Problem
