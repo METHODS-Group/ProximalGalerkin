@@ -23,7 +23,7 @@ from ufl import (
 from lvpp import SNESProblem, SNESSolver
 
 # Define domain
-M = 300
+M = 150
 mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, M, M)
 
 # Define finite element spaces, the unknown solution and the test functions
