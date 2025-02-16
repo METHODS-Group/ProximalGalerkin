@@ -1,25 +1,28 @@
 from mpi4py import MPI
-import numpy as np
-import dolfinx.fem.petsc, dolfinx.nls.petsc
+
 import basix.ufl
+import dolfinx.fem.petsc
+import dolfinx.nls.petsc
+import numpy as np
 from ufl import (
-    inner,
-    grad,
-    dx,
-    exp,
-    split,
+    SpatialCoordinate,
     TestFunctions,
     conditional,
-    lt,
-    sin,
-    pi,
-    SpatialCoordinate,
-    max_value,
     derivative,
+    dx,
+    exp,
+    grad,
+    inner,
+    lt,
+    max_value,
+    pi,
+    sin,
+    split,
 )
+
 from lvpp import SNESProblem, SNESSolver
 
-M = 150
+M = 300
 mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, M, M)
 el = basix.ufl.element("Lagrange", mesh.basix_cell(), 1)
 me = basix.ufl.mixed_element([el, el, el])
@@ -107,12 +110,13 @@ solver = SNESSolver(problem, sp)
 
 num_iterations = []
 for i in range(1, max_lvpp_iterations + 1):
-    print(f"LVPP iteration: {i} Alpha: {float(alpha)}")
+    if mesh.comm.rank == 0:
+        print(f"LVPP iteration: {i} Alpha: {float(alpha)}", flush=True)
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
     converged_reason, num_its = solver.solve()
-    assert converged_reason > 0, f"Solver did not converge with {converged_reason}"
-
+    error_msg = f"Solver did not converge with {converged_reason}"
+    assert converged_reason > 0, error_msg
     # Output
     u_out.x.array[:] = s.x.array[sub0_to_parent]
     T_out.x.array[:] = s.x.array[sub1_to_parent]
@@ -120,19 +124,23 @@ for i in range(1, max_lvpp_iterations + 1):
     vtx_T.write(i)
     diff_local = dolfinx.fem.assemble_scalar(u_diff_H1)
     normed_diff = np.sqrt(mesh.comm.allreduce(diff_local, op=MPI.SUM))
-    print(
-        f"LVPP iteration {i}, Converged reason {converged_reason}",
-        f" Newton iterations {num_its} ||u-u_prev||_L2={normed_diff}",
-    )
+    if mesh.comm.rank == 0:
+        print(
+            f"LVPP iteration {i}, Converged reason {converged_reason}",
+            f" Newton iterations {num_its} ||u-u_prev||_L2={normed_diff}",
+            flush=True,
+        )
     num_iterations.append(num_its)
     if normed_diff < termination_tol:
-        print(f"Solver converged after {i} iterations")
+        if mesh.comm.rank == 0:
+            print(f"Solver converged after {i} iterations", flush=True)
         break
     s_prev.x.array[:] = s.x.array
     alpha.value *= 4
 
-print(f"Total number of LVPP iterations: {i}")
-print(f"Total number of Newton iterations: {sum(num_iterations)}")
+if mesh.comm.rank == 0:
+    print(f"Total number of LVPP iterations: {i}", flush=True)
+    print(f"Total number of Newton iterations: {sum(num_iterations)}", flush=True)
 
 vtx_u.close()
 vtx_T.close()
@@ -143,7 +151,5 @@ original_mould.name = "OriginalMould"
 mould = dolfinx.fem.Function(V0)
 mould.interpolate(dolfinx.fem.Expression(Phi0 + xi * T, V0.element.interpolation_points()))
 mould.name = "Mould"
-
-
-with dolfinx.io.VTXWriter(mesh.comm, "original_mould.bp", [original_mould, mould]) as bp:
+with dolfinx.io.VTXWriter(mesh.comm, "mould.bp", [original_mould, mould]) as bp:
     bp.write(0.0)
