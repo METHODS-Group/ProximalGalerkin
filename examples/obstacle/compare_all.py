@@ -1,5 +1,5 @@
 """
-Solve obstacle problem with DOLFINx (LVPP), Galahad and IPOPT and compare the results
+Solve obstacle problem with Proximal Galerkin, Galahad, and IPOPT and compare the results
 
 Author: Jørgen S. Dokken
 SPDX-License-Identifier: MIT
