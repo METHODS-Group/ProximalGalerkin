@@ -67,7 +67,7 @@ within `examples/obstacle`.
 
 <a name="signorini"></a>
 
-# Example 2/Figure 3: The Signorini Problem
+# Example 2(Figure 3): The Signorini Problem
 
 Deploy the `DOLFINx` Docker container to reproduce the results in this example.
 Then call
@@ -85,7 +85,7 @@ python3 run_lvpp_problem.py --alpha_0=0.005 --degree=2 --disp=-0.3 --n-max-itera
 
 <a name="fracture"></a>
 
-# Example 3/Figure 4: Variational Fracture
+# Example 3(Figure 4): Variational Fracture
 
 This example can be run from within `examples/fracture` using both the `DOLFINx` and the `Firedrake` Docker containers.
 The `DOLFINx` code can be executed with
@@ -105,7 +105,7 @@ while the `Firedrake` code can be executed with:
 
 <a name="ch"></a>
 
-# Example 4/Figure 5: Four-Phase Cahn–Hilliard Gradient Flow
+# Example 4(Figure 5): Four-Phase Cahn–Hilliard Gradient Flow
 
 To reproduce the results in this example, first deploy the `DOLFINx` Docker container.
 Then run
@@ -118,7 +118,7 @@ from within `examples/cahn-hilliard`.
 
 <a name="qvi"></a>
 
-# Example 5/Figure 6: Thermoforming Quasi-Variational Inequality
+# Example 5(Figure 6): Thermoforming Quasi-Variational Inequality
 
 Reproducing the results in this example requires the `julia:1.10.8` Docker container.
 Once this container is deployed, the code can be executed by running
@@ -131,7 +131,7 @@ from within `examples/thermoforming_qvi`.
 
 <a name="gradient"></a>
 
-# Example 6/Figure 7: Gradient Norm Constraints.
+# Example 6(Figure 7): Gradient Norm Constraints.
 
 Deploy the `DOLFINx` Docker container to reproduce the results in this example.
 Then run `script.py` within `examples/gradient_constraint` with the following input parameters:
@@ -142,7 +142,7 @@ python3 script.py -N 80 -M 80 --alpha_scheme=doubling
 
 <a name="harmonic"></a>
 
-# Example 7/Figure 8: Eigenvalue Constraints
+# Example 7(Figure 8): Eigenvalue Constraints
 
 Deploy the `Firedrake` Docker container to reproduce the results in this example.
 Then run the following command within `examples/[TODO]`:
@@ -154,7 +154,7 @@ python3 script.py -N 80 -M 80 --alpha_scheme=doubling
 > [!WARNING]  
 > Add instructions 
 
-# Example 8/Figure 9: Intersections of Constraints
+# Example 8(Figure 9): Intersections of Constraints
 
 Deploy the `Firedrake` Docker container to reproduce the results in this example.
 Then run the following command within `examples/[TODO]`:
@@ -162,7 +162,7 @@ Then run the following command within `examples/[TODO]`:
 > [!WARNING]  
 > Add instructions 
 
-# Example 9/Figure 10: Harmonic Maps to the Sphere
+# Example 9(Figure 10): Harmonic Maps to the Sphere
 
 Deploy the `DOLFINx` Docker container to reproduce the results in this example.
 Then run the following command within `examples/harmonic_maps`:
@@ -174,7 +174,7 @@ python3 harmonic_1D.py
 # Example 10: Linear Equality Constraints
 Note that there is no numerical example for this setting because the derived variational formulation is equivalent to the standard Lagrange multiplier formulation for this class of problems.
 
-# Example 11/Figure 11: The Eikonal Equation
+# Example 11(Figure 11): The Eikonal Equation
 
 We have provided code for this example for both the `MFEM` and `DOLFINx` Docker containers.
 
@@ -218,7 +218,7 @@ from within `examples/eikonal`.
 
 <a name="monge"></a>
 
-# Example 12/Figure 12: The Monge–Ampere Equation
+# Example 12(Figure 12): The Monge–Ampere Equation
 
 This example can be run from within `examples/monge_ampere` using both the `DOLFINx` and the `Firedrake` Docker containers.
 
