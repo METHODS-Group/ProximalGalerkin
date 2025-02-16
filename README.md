@@ -131,7 +131,7 @@ from within `examples/thermoforming_qvi`.
 
 <a name="gradient"></a>
 
-## Example 6 (Figure 7): Gradient Norm Constraints.
+## Example 6 (Figure 7): Gradient Norm Constraints
 
 Deploy the `DOLFINx` Docker container to reproduce the results in this example.
 Then run `script.py` within `examples/gradient_constraint` with the following input parameters:
