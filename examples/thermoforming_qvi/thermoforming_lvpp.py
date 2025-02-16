@@ -76,7 +76,7 @@ bc = dolfinx.fem.dirichletbc(dolfinx.default_scalar_type(0.0), boundary_dofs, V.
 
 u_diff = u - u_prev
 u_diff_H1 = dolfinx.fem.form(inner(u_diff, u_diff) * dx + inner(grad(u_diff), grad(u_diff)) * dx)
-termination_tol = 1e-8
+termination_tol = 1e-9
 s.sub(1).interpolate(lambda x: np.ones_like(x[1]))
 
 sp = {
@@ -86,9 +86,9 @@ sp = {
     "pc_factor_mat_solver_type": "mumps",
     "pc_svd_monitor": None,
     "mat_mumps_icntl_14": 1000,
-    "snes_atol": 1e-8,
-    "snes_rtol": 1e-6,
-    "snes_linesearch_damping": 0.5,
+    "snes_atol": 1e-5,
+    "snes_rtol": 1e-5,
+    "snes_linesearch_damping": 1e3,
 }
 
 max_lvpp_iterations = 100
@@ -126,13 +126,13 @@ for i in range(1, max_lvpp_iterations + 1):
     )
     num_iterations.append(num_its)
     if normed_diff < termination_tol:
-        print("Solver converged after {i} iterations")
+        print(f"Solver converged after {i} iterations")
         break
     s_prev.x.array[:] = s.x.array
     alpha.value *= 4
 
-print("Total number of LVPP iterations:", i)
-print("Total number of Newton iterations:", sum(num_iterations))
+print(f"Total number of LVPP iterations: {i}")
+print(f"Total number of Newton iterations: {sum(num_iterations)}")
 
 vtx_u.close()
 vtx_T.close()
@@ -147,4 +147,3 @@ mould.name = "Mould"
 
 with dolfinx.io.VTXWriter(mesh.comm, "original_mould.bp", [original_mould, mould]) as bp:
     bp.write(0.0)
-exit()
