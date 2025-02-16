@@ -12,7 +12,7 @@ This repository contains implementations of the proximal Galerkin finite element
 
 Please cite the aforementioned manuscript if using the code in this repository.
 
-# Instructions
+## Instructions
 
 We encourage using following Docker containers to run the  codes described below:
 
@@ -25,7 +25,7 @@ We encourage using following Docker containers to run the  codes described below
 
 ## Table of Examples and Figures
 
-The following table associates each implementation to the examples and figures in the paper. Further information to run the codes is provided below.
+The following table associates each implementation to the examples and figures in the paper. Further information to run the codes is provided for each specific example.
 
 | Figure |                                        File: examples/                                        |     Backend      | Instructions                     |
 | :----: | :-------------------------------------------------------------------------------------------: | :--------------: | -------------------------------- |
