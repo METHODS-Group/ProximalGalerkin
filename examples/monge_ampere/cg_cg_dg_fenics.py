@@ -174,4 +174,4 @@ for j in range(3,15):
 #     return np.log2(np.array(x)[:-1] / np.array(x)[1:])
 
 print("Errors", errors, flush=True)
-print("Convergence orders: ", convergence_orders(errors), flush=True)
+# print("Convergence orders: ", convergence_orders(errors), flush=True)
