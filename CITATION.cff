@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: If you use this software, please cite both the article from preferred-citation and the software itself.
+authors:
+  - family-names: Dokken
+    given-names: Jørgen S.
+  - family-names: Farrell
+    given-names: Patrick~E.
+  - family-names: Keith
+    given-names: Brendan
+  - family-names: Papadopoulos
+    given-names: Ioannis~P.A.
+  - family-names: Surowiec
+    given-names: Thomas~M.
+title: The latent variable proximal point algorithm for variational problems with constraints
+version: 1.0.0
+date-released: "2025-02-17"
+preferred-citation:
+  authors:
+    - family-names: Dokken
+      given-names: Jørgen S.
+    - family-names: Farrell
+      given-names: Patrick~E.
+    - family-names: Keith
+      given-names: Brendan
+    - family-names: Papadopoulos
+      given-names: Ioannis~P.A.
+    - family-names: Surowiec
+      given-names: Thomas~M.
+  title: The latent variable proximal point algorithm for variational problems with constraints
+  type: generic
+  year: "2025"
+  conference: {}
+  publisher: {}
