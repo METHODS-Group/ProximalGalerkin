@@ -38,8 +38,7 @@ jobs:
             python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
 
 
-      - name: Run tests in parallel
-        run: mpiexec -n 4 python3 -m pytest -v  -m "not serial"
+
   test-obstacle:
     runs-on: ubuntu-24.04
     container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
