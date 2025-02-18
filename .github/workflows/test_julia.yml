@@ -34,4 +34,4 @@ jobs:
 
       - name: Run thermoform
         working-directory: ./examples/thermoforming_qvi
-        run: julia thermoform.jl
+        run: julia thermoforming_lvpp.jl
