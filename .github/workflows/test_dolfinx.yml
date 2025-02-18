@@ -38,12 +38,6 @@ jobs:
             python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
             python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
 
-      - name: Run example 3
-        if: steps.install.conclusion == 'success'
-        working-directory: ./examples/03_fracture
-        run: |
-          python3 fracture_dolfinx.py
-
       - name: Run example 4
         if: steps.install.conclusion == 'success'
         working-directory: ./examples/04_multiphase
@@ -94,6 +88,12 @@ jobs:
           python3 monge_ampere_cg_cg_dg_dolfinx.py.py
 
 
+      - name: Run example 3
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/03_fracture
+        run: |
+          python3 fracture_dolfinx.py
+  
   test-obstacle:
     runs-on: ubuntu-24.04
     container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
