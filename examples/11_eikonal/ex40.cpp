@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// This is a modified version of example 40 from MFEM library.
+// It has been modified to use Taylor-Hood elements, instead of using an H-div based element.
+// The license can be found at:
+// [../../licenses/LICENSE.MFEM](../../licenses/LICENSE.mfem)
+//
 //                            MFEM Example 40 (Taylor–Hood version)
 //
 // Compile with: make ex40
