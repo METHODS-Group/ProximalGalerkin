@@ -60,7 +60,7 @@ jobs:
         if: steps.install.conclusion == 'success'
         working-directory: ./examples/07_eigenvalue_constraints
         run: |
-          python3 07_eigenvalue_constraints.py
+          python3 eigenvalue_constraints_dolfinx.py
 
       - name: Run example 8
         if: steps.install.conclusion == 'success'
@@ -94,7 +94,7 @@ jobs:
         run: |
           python3 fracture_dolfinx.py
   
-  obstacle-comparison:
+  obstacle:
     runs-on: ubuntu-24.04
     container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
 
