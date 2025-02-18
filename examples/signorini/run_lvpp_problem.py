@@ -252,7 +252,7 @@ def solve_contact_problem(
     residual = alpha * ufl.inner(sigma(u, mu, lmbda), epsilon(v)) * ufl.dx(
         domain=mesh
     ) - alpha * ufl.inner(f, v) * ufl.dx(domain=mesh)
-    residual += -ufl.inner(psi - psi_k, ufl.dot(v, n)) * ds
+    residual += -ufl.inner(psi - psi_k, ufl.dot(v, n_g)) * ds
     residual += ufl.inner(ufl.dot(u, n_g), w) * ds
     residual += ufl.inner(ufl.exp(psi), w) * ds - ufl.inner(g, w) * ds
 
