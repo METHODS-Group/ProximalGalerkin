@@ -3,10 +3,10 @@ on:
   push:
     tags:
       - "v*"
-  pull_request:
-    branches:
-      - release
-      - main
+  # pull_request:
+  #   branches:
+  #     - release
+  #     - main
   workflow_dispatch:
 
 env:
@@ -17,10 +17,10 @@ jobs:
   build-image:
     strategy:
       matrix:
-        backend: ["firedrake", "dolfinx", "mfem"]
+        backend: ["firedrake", "dolfinx", "mfem", "julia"]
         platform: [
             { runner: "ubuntu-24.04", platform: amd64 },
-            #{ runner: "ubuntu-24.04-arm", platform: arm64 }, # NOTE: Skip arm until repo is public
+            { runner: "ubuntu-24.04-arm", platform: arm64 }
           ]
     runs-on: ${{ matrix.platform.runner }}
     permissions:
@@ -79,7 +79,7 @@ jobs:
           retention-days: 1
 
   merge-and-publish:
-    #if: github.event_name == 'push'
+    if: github.event_name == 'push'
     strategy:
       matrix:
         backend: ["firedrake", "dolfinx", "mfem"]
