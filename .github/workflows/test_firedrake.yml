@@ -16,7 +16,11 @@ jobs:
 
     steps:
         - uses: actions/checkout@v4
-    
+        
+        - name: Activate Firedrake virtual environment
+          run: |
+              . /home/firedrake/firedrake/bin/activate
+              echo PATH=$PATH >> $GITHUB_ENV
         - name: Run example 12
           working-directory: ./examples/monge_ampere
           run: |
