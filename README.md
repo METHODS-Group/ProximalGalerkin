@@ -4,7 +4,7 @@ This repository contains implementations of the proximal Galerkin finite element
 
 ```bibtex
 @misc{dokken2025latent,
-      title={The latent variable proximal point algorithm for variational problems with constraints}, 
+      title={The latent variable proximal point algorithm for variational problems with constraints},
       author={Dokken, {J\o rgen} S. and Farrell, Patrick~E. and Keith, Brendan and Papadopoulos, Ioannis~P.A. and Surowiec, Thomas~M.},
       year={2025},
 }
@@ -14,7 +14,7 @@ Please cite the aforementioned manuscript if using the code in this repository.
 
 ## Instructions
 
-We encourage using following Docker containers to run the  codes described below:
+We encourage using following Docker containers to run the codes described below:
 
 - DOLFINx: [ghcr.io/methods-group/proximalgalerkin-dolfinx:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-dolfinx)
 - MFEM: [ghcr.io/methods-group/proximalgalerkin-mfem:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-mfem)
@@ -27,21 +27,21 @@ We encourage using following Docker containers to run the  codes described below
 
 The following table associates each implementation to the examples and figures in the paper. Further information to run the codes is provided for each specific example.
 
-| Figure |                                        File: examples/                                        |     Backend      | Instructions                     |
-| :----: | :-------------------------------------------------------------------------------------------: | :--------------: | -------------------------------- |
-|   2b   |                 [obstacle/compare_all.py](./examples/obstacle/compare_all.py)                 |      FEniCS      | [Obstacle problem](#obstacle)    |
-| 2c(i)  |           [obstacle/finite_difference.jl](./examples/obstacle/finite_difference.jl)           |      Julia       | [Obstacle problem](#obstacle)    |
-| 2c(ii) |                    [obstacle/spectral.jl](./examples/obstacle/spectral.jl)                    |      Julia       | [Obstacle problem](#obstacle)    |
-|   3    |                     [signorini/script.py](./examples/signorini/script.py)                     |      FEniCS      | [Signorini problem](#signorini)  |
-|   4    |                                               ?                                               | Firedrake/FEniCS | [Fracture](#fracture)            |
-|   5    |                [cahn-hilliard/problem.py](./examples/cahn-hilliard/problem.py)                |      FEniCS      | [Cahn-Hilliard](#ch)             |
-|   6    | [thermoforming_qvi/thermoforming_lvpp.jl](./examples/thermoforming_qvi/thermoforming_lvpp.jl) |      Julia       | [Thermoforming QVI](#qvi)        |
-|   7    |           [gradient_constraint/script.py](./examples/gradient_constraint/script.py)           |      FEniCS      | [Gradient constraint](#gradient) |
-|   8    |                                               ?                                               |    Firedrake     |                                  |
-|   9    |                                               ?                                               |    Firedrake     |                                  |
-|   10   |            [harmonic_maps/harmonic_1d.py](./examples/harmonic_maps/harmonic_1d.py)            |      FEniCS      | [Harmonic map](#harmonic)        |
-|   11   |                        [eikonal/ex40.cpp](./examples/eikonal/ex40.cpp)                        |       MFEM/FEniCS       | [Eikonal](#eikonal)              |
-|   12   |                [monge_ampere/cg_cg_dg.py](./examples/monge_ampere/cg_cg_dg.py)                | Firedrake/FEniCS | [Monge-Ampere](#monge)           |
+| Figure |                                Folder                                |              Backend              | Problem Type type            |
+| :----: | :------------------------------------------------------------------: | :-------------------------------: | ---------------------------- |
+|   2b   |       [1_obstacle_problem_fem](./examples/1_obstacle_problem/)       |              FEniCS               | Obstacle problem             |
+| 2c(i)  |       [1_obstacle_problem_fd](./examples/1_obstacle_problem/)        |               Julia               | Obstacle problem             |
+| 2c(ii) |    [1_obstacle_problem_spectral](./examples/1_obstacle_problem/)     | MultivariateOrthogonalPolynomials | Obstacle problem             |
+|   3    |                [2_signorini](./examples/2_signorini)                 |              FEniCS               | Signorini                    |
+|   4    |                 [3_fracture](./examples/3_fracture/)                 |         Firedrake/FEniCS          | Fracture                     |
+|   5    |               [4_multiphase](./examples/4_multiphase)                |              FEniCS               | Cahn-Hilliard                |
+|   6    |        [5_thermoforming_qvi](./examples/5_obstacle_type_qvi/)        |         Gridap.jl/FEniCS          | Thermoforming QVI            |
+|   7    |     [6_gradient_constraints](./examples/6_gradient_constraints)      |              FEniCS               | Gradient constraint          |
+|   8    |   [7_eigenvalue_constraints](./examples/7_eigenvalue_constraints)    |         Firedrake/FEniCS          | Landau–de Gennes             |
+|   9    | [8_intersecting_constraints](./examples/8_intersecting_constraints/) |         Firedrake/FEniCS          | Intersections of constraints |
+|   10   |     [9_equality_constraints](./examples/9_equality_constraints)      |              FEniCS               | Harmonic map                 |
+|   11   |       [11_nonlinear_eikonal](./examples/11_nonlinear_eikonal)        |            MFEM/FEniCS            | Eikonal equation             |
+|   12   |  [12_nonlinear_monge_ampere](./examples/12_nonlinear_monge_ampere)   |         Firedrake/FEniCS          | Monge-Ampere                 |
 
 ## Example 1 (Figure 2): The Obstacle Problem
 
@@ -140,7 +140,7 @@ Then run `script.py` within `examples/gradient_constraint` with the following in
 python3 script.py -N 80 -M 80 --alpha_scheme=doubling
 ```
 
-<a name="harmonic"></a>
+<a name="eigenvalue"></a>
 
 ## Example 7 (Figure 8): Eigenvalue Constraints
 
@@ -148,7 +148,16 @@ Deploy the `Firedrake` Docker container to reproduce the results in this example
 Then run the following command within `examples/[TODO]`:
 
 > [!WARNING]  
-> Add instructions 
+> Add instructions
+
+Deploy the `DOLFINx` Docker container to reproduce the results in this example.
+Then run the following command within [examples/7_Landau_de_Gennes](./examples/7_Landau_de_Gennes/):
+
+```bash
+python3 dolfinx_implementation.py
+```
+
+<a name="intersections"></a>
 
 ## Example 8 (Figure 9): Intersections of Constraints
 
@@ -156,7 +165,16 @@ Deploy the `Firedrake` Docker container to reproduce the results in this example
 Then run the following command within `examples/[TODO]`:
 
 > [!WARNING]  
-> Add instructions 
+> Add instructions
+
+Deploy the `DOLFINx` Docker container to reproduce the results in this example.
+Then run the following command within [examples/8_intersecting_constraints](./examples/8_intersecting_constraints/):
+
+```bash
+python3 dolfinx_implementation.py
+```
+
+<a name="harmonic"></a>
 
 ## Example 9 (Figure 10): Harmonic Maps to the Sphere
 
@@ -168,7 +186,10 @@ python3 harmonic_1D.py
 ```
 
 ## Example 10: Linear Equality Constraints
+
 Note that there is no numerical example for this setting because the derived variational formulation is equivalent to the standard Lagrange multiplier formulation for this class of problems.
+
+<a name=eikonal></a>
 
 ## Example 11 (Figure 11): The Eikonal Equation
 
@@ -185,6 +206,7 @@ cd examples && make ex40
 
 To reproduce the results in Figure 11 for the two geometries (i.e., the [Star](https://github.com/mfem/mfem/blob/master/data/star.mesh)
 and [Ball](https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh)), you should compile the [official examples](https://mfem.org/examples/) `ex40.cpp` or `ex40p.cpp` without copying any files from this repository
+
 ```bash
 cd examples && make ex40
 # Star Geometry
