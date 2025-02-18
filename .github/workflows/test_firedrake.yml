@@ -1,0 +1,22 @@
+name: Test Firedrake examples
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+
+  test-obstacle:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/methods-group/proximalgalerkin-firedrake:main
+
+    steps:
+        - uses: actions/checkout@v4
+    
+        - name: Run example 12
+          working-directory: ./examples/monge_ampere
+          run: |
+            python3 cg_cg_dg.py
+    
