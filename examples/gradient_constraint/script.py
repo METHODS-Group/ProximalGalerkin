@@ -214,7 +214,7 @@ def main(
     element_options.add_argument(
         "--latent_space",
         type=str,
-        default="RT",
+        default="Lagrange",
         choices=get_args(latent_spaces),
         help="Finite element family for auxiliary variable",
     )

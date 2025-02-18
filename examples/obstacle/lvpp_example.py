@@ -1,20 +1,17 @@
 """
 
-Obstacle problem based of example 3 (P3) in Hintermüller and Kunisch [1].
+Obstacle problem based on experiment 4 in [2].
 
-FEniCSx code solve this problem is based of the paper [2,3]:
+The FEniCSx code solve this problem is based on [3]:
 
 SPXD License: MIT License
 
 Original license file [../../licenses/LICENSE.surowiec](../../licenses/LICENSE.surowiec)
 is included in the repository.
 
-[1] Hintermüller, M. and Kunisch K., Path-following Methods for a Class of
-    Constrained Minimization Problems in Function Space, SIAM Journal on Optimization 2006,
-    https://doi.org/10.1137/040611598
-[2] Keith, B. and Surowiec, T.M., Proximal Galerkin: A Structure-Preserving Finite Element Method
+[1] Keith, B. and Surowiec, T.M., Proximal Galerkin: A Structure-Preserving Finite Element Method
 for Pointwise Bound Constraints. Found Comput Math (2024). https://doi.org/10.1007/s10208-024-09681-8
-[3] Keith, B., Surowiec, T. M., & Dokken, J. S. (2023). Examples for the Proximal Galerkin Method
+[2] Keith, B., Surowiec, T. M., & Dokken, J. S. (2023). Examples for the Proximal Galerkin Method
     (Version 0.1.0) [Computer software]. https://github.com/thomas-surowiec/proximal-galerkin-examples
 """
 

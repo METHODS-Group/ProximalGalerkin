@@ -29,7 +29,7 @@ def extract_num_dofs(V: dolfinx.fem.FunctionSpace):
 
 
 errors = []
-for i in range(4):
+for j in range(3,15):
     X = (x, y) = ufl.SpatialCoordinate(mesh)
     gdim = mesh.geometry.dim
 
@@ -48,10 +48,10 @@ for i in range(4):
     rho = ufl.det(hessian(u_exact))  # forcing term
     g = u_exact  # boundary data
 
-    k = 6
+    k = j
     el_V = basix.ufl.element("Lagrange", mesh.basix_cell(), k)
     el_U = basix.ufl.element("Lagrange", mesh.basix_cell(), k + 1, shape=(gdim,))
-    el_W = basix.ufl.element("Discontinuous Lagrange", mesh.basix_cell(), k, shape=(3,))
+    el_W = basix.ufl.element("Lagrange", mesh.basix_cell(), k, shape=(3,))
     me = basix.ufl.mixed_element([el_V, el_U, el_W])
     Z = dolfinx.fem.functionspace(mesh, me)
 
@@ -163,21 +163,15 @@ for i in range(4):
     global_error = np.sqrt(mesh.comm.allreduce(local_error, op=MPI.SUM))
     errors.append(global_error)
 
-    skew = 0.5 * (psi - psi.T)
-    skew_psi = ufl.inner(skew, skew) * dx
-    skew_local = dolfinx.fem.assemble_scalar(dolfinx.fem.form(skew_psi))
-    skew_global = np.sqrt(mesh.comm.allreduce(skew_local, op=MPI.SUM))
-    print("||skew(psi)||_L2: ", skew_global, flush=True)
-
-    with dolfinx.io.VTXWriter(mesh.comm, f"output/solution_{i}.bp", [z.sub(0).collapse()]) as vtx:
+    with dolfinx.io.VTXWriter(mesh.comm, f"output/solution_{j}.bp", [z.sub(0).collapse()]) as vtx:
         vtx.write(0.0)
 
-    mesh, _, _ = dolfinx.mesh.refine(mesh)
+    # mesh, _, _ = dolfinx.mesh.refine(mesh)
 
 
-def convergence_orders(x):
-    return np.log2(np.array(x)[:-1] / np.array(x)[1:])
-
+# Not relevant for p-refinement
+# def convergence_orders(x):
+#     return np.log2(np.array(x)[:-1] / np.array(x)[1:])
 
 print("Errors", errors, flush=True)
-print("Convergence orders: ", convergence_orders(errors), flush=True)
+# print("Convergence orders: ", convergence_orders(errors), flush=True)
