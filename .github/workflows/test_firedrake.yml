@@ -10,7 +10,9 @@ jobs:
 
   test-obstacle:
     runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin-firedrake:main
+    container: 
+        image: ghcr.io/methods-group/proximalgalerkin-firedrake:main
+        options: --user root
 
     steps:
         - uses: actions/checkout@v4
