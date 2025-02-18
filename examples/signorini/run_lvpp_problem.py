@@ -59,17 +59,17 @@ physical_parameters = parser.add_argument_group("Physical parameters")
 physical_parameters.add_argument("--E", dest="E", type=float, default=2.0e4, help="Young's modulus")
 physical_parameters.add_argument("--nu", dest="nu", type=float, default=0.3, help="Poisson's ratio")
 physical_parameters.add_argument(
-    "--disp", type=float, default=-0.2, help="Displacement in the y/z direction (2D/3D)"
+    "--disp", type=float, default=-0.25, help="Displacement in the y/z direction (2D/3D)"
 )
 physical_parameters.add_argument(
-    "--gap", type=float, default=-0.05, help="y/z coordinate of rigid surface (2D/3D)"
+    "--gap", type=float, default=-0.00, help="y/z coordinate of rigid surface (2D/3D)"
 )
 fem_parameters = parser.add_argument_group("FEM parameters")
 fem_parameters.add_argument(
     "--degree",
     dest="degree",
     type=int,
-    default=1,
+    default=2,
     help="Degree of primal and latent space",
 )
 fem_parameters.add_argument(
@@ -81,7 +81,7 @@ newton_parameters.add_argument(
     "--n-max-iterations",
     dest="newton_max_iterations",
     type=int,
-    default=25,
+    default=250,
     help="Maximum number of iterations of Newton iteration",
 )
 newton_parameters.add_argument(
@@ -113,7 +113,7 @@ alpha_options = parser.add_argument_group(
 alpha_options.add_argument(
     "--alpha_scheme",
     type=str,
-    default="constant",
+    default="doubling",
     choices=typing.get_args(AlphaScheme),
     help="Scheme for updating alpha",
 )
@@ -240,7 +240,6 @@ def solve_contact_problem(
     # Define problem specific parameters
     mu = E / (2.0 * (1.0 + nu))
     lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
-    n = ufl.FacetNormal(mesh)
     n_g = dolfinx.fem.Constant(mesh, np.zeros(gdim, dtype=dst))
     n_g.value[-1] = -1
     alpha = dolfinx.fem.Constant(mesh, dst(alpha_0))
@@ -371,7 +370,6 @@ def solve_contact_problem(
     return it, iterations
 
 
-# python3 script.py --alpha_0=0.1 --degree=2 file --filename=sphere.xdmf
 if __name__ == "__main__":
     args = parser.parse_args()
     if args.mesh == "native":
