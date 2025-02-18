@@ -74,8 +74,10 @@ Then call
 
 ```bash
 python3 generate_mesh.py
+python3 run_lvpp_problem.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
+python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
+python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
 ```
-
 from within `examples/signorini` to generate the mesh file `"meshes/half_sphere.xdmf"`.
 Next, run the proximal Galerkin method with
 

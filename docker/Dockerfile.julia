@@ -1,0 +1,8 @@
+FROM julia:1.10.8
+
+RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "MultivariateOrthogonalPolynomials", "Plots", "LaTeXStrings", "IterativeSolvers", "LinearMaps", "MatrixFactorizations", "Gridap", "LineSearches"])'
+
+WORKDIR /root/examples
+ADD . .
+
+ENTRYPOINT [ "/bin/bash" ]
