@@ -1,0 +1,29 @@
+name: Test Firedrake examples
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+
+  test-obstacle:
+    runs-on: ubuntu-24.04
+    container: 
+        image: ghcr.io/methods-group/proximalgalerkin-firedrake:main
+        options: --user root
+
+    steps:
+        - uses: actions/checkout@v4
+        
+        - name: Activate Firedrake virtual environment
+          run: |
+              . /home/firedrake/firedrake/bin/activate
+              echo PATH=$PATH >> $GITHUB_ENV
+
+        - name: Run example 12
+          working-directory: ./examples/12_monge_ampere
+          run: |
+            python3 monge_ampere_cg_cg_dg_firedrake.py
+    

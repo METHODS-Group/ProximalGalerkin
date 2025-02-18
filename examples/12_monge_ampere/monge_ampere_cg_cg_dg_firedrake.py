@@ -30,7 +30,7 @@ for mesh in mh:
     rho = det(hessian(u_exact))  # forcing term
     g = u_exact  # boundary data
 
-    k = 6
+    k = 4
     V = FunctionSpace(mesh, "CG", k)
     U = VectorFunctionSpace(mesh, "CG", k + 1)
     W = VectorFunctionSpace(mesh, "DG", k, dim=3)
