@@ -1,19 +1,19 @@
 name: Run Julia scripts
 
 on:
-  #   push:
-  #     # The CI is executed on every push on to main
-  #     branches:
-  #       - main
-  #   pull_request:
-  #     # The CI is executed on every pull request to the main branch
-  #     branches:
-  #       - main
+    push:
+      # The CI is executed on every push on to main
+      branches:
+        - main
+    pull_request:
+      # The CI is executed on every pull request to the main branch
+      branches:
+        - main
 
-  #   schedule:
-  #     # The CI is executed every day at 8am
-  #     - cron: "0 8 * * *"
-  workflow_dispatch:
+    schedule:
+      # The CI is executed every day at 8am
+      - cron: "0 8 * * *"
+    workflow_dispatch:
     # The CI is executed manually
 jobs:
   run-script:
@@ -34,4 +34,4 @@ jobs:
 
       - name: Run thermoform
         working-directory: ./examples/thermoforming_qvi
-        run: julia thermoform.jl
+        run: julia thermoforming_lvpp.jl

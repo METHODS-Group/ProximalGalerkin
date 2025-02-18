@@ -21,7 +21,6 @@ We encourage using following Docker containers to run the codes described below:
 - Firedrake: [ghcr.io/methods-group/proximalgalerkin-firedrake:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-firedrake)
 - Julia/GridAP: [julia:1.10.8](https://hub.docker.com/layers/library/julia/1.10.8/images/sha256-66656909ed7b5e75f4208631b01fc585372f906d68353d97cc06b40a8028c437)
 
-<a name="obstacle"></a>
 
 ## Table of Examples and Figures
 
@@ -43,7 +42,6 @@ The following table associates each implementation to the examples and figures i
 |   11   |       [11_nonlinear_eikonal](./examples/11_nonlinear_eikonal)        |            MFEM/FEniCS            | Eikonal equation             |
 |   12   |  [12_nonlinear_monge_ampere](./examples/12_nonlinear_monge_ampere)   |         Firedrake/FEniCS          | Monge-Ampere                 |
 
-<a name="ch"></a>
 
 ## Example 4 (Figure 5): Four-Phase Cahn–Hilliard Gradient Flow
 
