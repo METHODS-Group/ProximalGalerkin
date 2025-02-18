@@ -1,4 +1,4 @@
-name: Test package
+name: Test DOLFINx/FEniCS examples
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test-code:
+  standard-examples:
     name: Test on ${{ matrix.container }}
     runs-on: ubuntu-24.04
     container: ${{ matrix.container }}
@@ -94,7 +94,7 @@ jobs:
         run: |
           python3 fracture_dolfinx.py
   
-  test-obstacle:
+  obstacle-comparison:
     runs-on: ubuntu-24.04
     container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
 
