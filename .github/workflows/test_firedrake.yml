@@ -21,8 +21,9 @@ jobs:
           run: |
               . /home/firedrake/firedrake/bin/activate
               echo PATH=$PATH >> $GITHUB_ENV
+
         - name: Run example 12
-          working-directory: ./examples/monge_ampere
+          working-directory: ./examples/12_monge_ampere
           run: |
-            python3 cg_cg_dg.py
+            python3 monge_ampere_cg_cg_dg_firedrake.py
     
