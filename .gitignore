@@ -175,3 +175,7 @@ ALIVE.d
 *.vtu
 *.pdf
 *.zip
+*.pvd
+.vscode
+build
+build-dir

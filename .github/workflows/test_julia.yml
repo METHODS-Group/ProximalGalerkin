@@ -25,13 +25,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Finite Difference
-        working-directory: ./examples/obstacle
+        working-directory: ./examples/01_obstacle_problem
         run: julia finite_difference.jl
 
       - name: Run Spectral method
-        working-directory: ./examples/obstacle
+        working-directory: ./examples/01_obstacle_problem
         run: julia spectral.jl
 
       - name: Run thermoform
-        working-directory: ./examples/thermoforming_qvi
+        working-directory: ./examples/05_obstacle_type_qvi
         run: julia thermoforming_lvpp.jl

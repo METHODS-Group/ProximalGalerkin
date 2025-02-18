@@ -29,7 +29,7 @@ def extract_num_dofs(V: dolfinx.fem.FunctionSpace):
 
 
 errors = []
-for j in range(3,15):
+for j in range(3, 15):
     X = (x, y) = ufl.SpatialCoordinate(mesh)
     gdim = mesh.geometry.dim
 
