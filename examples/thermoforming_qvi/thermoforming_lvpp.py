@@ -100,15 +100,19 @@ vtx_T = dolfinx.io.VTXWriter(mesh.comm, "T.bp", [T_out])
 termination_tol = 1e-9
 max_lvpp_iterations = 100
 sp = {
+    "snes_type": "newtonls",
     "snes_monitor": None,
     "snes_linesearch_type": "bt",
     "pc_type": "lu",
     "pc_factor_mat_solver_type": "mumps",
     "pc_svd_monitor": None,
     "mat_mumps_icntl_14": 1000,
-    "snes_atol": 1e-5,
-    "snes_rtol": 1e-5,
-    "snes_linesearch_damping": 1e3,
+    "snes_atol": 1e-6,
+    "snes_rtol": 1e-6,
+    "snes_stol": 10 * np.finfo(dolfinx.default_scalar_type).eps,
+    "snes_linesearch_damping": 1e4,
+    "snes_linesearch_order": 2,
+    "snes_linesearch_monitor": None,
 }
 problem = SNESProblem(F, s, bcs=[bc])
 solver = SNESSolver(problem, sp)
