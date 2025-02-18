@@ -43,66 +43,6 @@ The following table associates each implementation to the examples and figures i
 |   11   |       [11_nonlinear_eikonal](./examples/11_nonlinear_eikonal)        |            MFEM/FEniCS            | Eikonal equation             |
 |   12   |  [12_nonlinear_monge_ampere](./examples/12_nonlinear_monge_ampere)   |         Firedrake/FEniCS          | Monge-Ampere                 |
 
-## Example 1 (Figure 2): The Obstacle Problem
-
-Figures 2 (a) and (b) are generated with `DOLFINx`.
-
-To reproduce the results in Figures 2 (a) (the comparison between Proximal Galerkin, SNES, Galahad, and IPOPT), first deploy the `DOLFINx` Docker container. Then run the following commands within `examples/obstacle`:
-
-```bash
-python3 generate_mesh_gmsh.py
-python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
-python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
-python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
-```
-
-To reproduce the finite difference and spectral element method results in Figure 2 (c), deploy the `julia:1.10.8` Docker container and call
-
-```bash
-julia finite_difference.jl
-julia spectral.jl
-```
-
-within `examples/obstacle`.
-
-<a name="signorini"></a>
-
-## Example 2 (Figure 3): The Signorini Problem
-
-Deploy the `DOLFINx` Docker container to reproduce the results in this example.
-Then call
-
-```bash
-python3 generate_mesh.py
-```
-
-from within `examples/signorini` to generate the mesh file `"meshes/half_sphere.xdmf"`.
-Next, run the proximal Galerkin method with
-
-```bash
-python3 run_lvpp_problem.py --alpha_0=0.005 --degree=2 --disp=-0.3 --n-max-iterations=250 --alpha_scheme=doubling  --output output_lvpp file --filename=meshes/half_sphere.xdmf
-```
-
-<a name="fracture"></a>
-
-## Example 3 (Figure 4): Variational Fracture
-
-This example can be run from within `examples/fracture` using both the `DOLFINx` and the `Firedrake` Docker containers.
-The `DOLFINx` code can be executed with
-
-```bash
-python3 script.py
-```
-
-while the `Firedrake` code can be executed with:
-
-> [!WARNING]  
-> Add instructions
-
-```bash
-
-```
-
 <a name="ch"></a>
 
 ## Example 4 (Figure 5): Four-Phase Cahn–Hilliard Gradient Flow
