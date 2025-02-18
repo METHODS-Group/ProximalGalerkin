@@ -27,6 +27,7 @@ def solve_problem(
     max_iterations: int,
     stopping_tol: float,
     result_dir: Path,
+    write_frequency: int,
     tau0: float,
     T: float,
 ):
@@ -144,7 +145,7 @@ def solve_problem(
     opts[f"{prefix}pc_factor_mat_solver_type"] = "mumps"
     opts[f"{prefix}ksp_error_if_not_converged"] = True
     # Increase MUMPS working memory
-    opts[f"{prefix}mat_mumps_icntl_14"] = 500
+    opts[f"{prefix}mat_mumps_icntl_14"] = 600
     # opts[f"{prefix}mat_mumps_icntl_4"] = 3
     opts[f"{prefix}mat_mumps_icntl_24"] = 1
     if dolfinx.log.get_log_level() == dolfinx.log.LogLevel.INFO:
@@ -211,7 +212,7 @@ def solve_problem(
                 alpha.value = min(alpha_0 * 2**i, alpha_max)
             num_newton_iterations, converged = solver.solve(sol)
 
-            newton_iterations[j] += num_newton_iterations
+            newton_iterations[j - 1] += num_newton_iterations
             local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
             global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
             if mesh.comm.rank == 0:
@@ -233,10 +234,12 @@ def solve_problem(
                 break
 
         u_prev.x.array[:] = sol.x.array[c_to_V]
-        bp_c.write(t)
         psi_out.x.array[:] = sol.x.array[psi_to_V]
-        bp_psi.write(t)
-        lvpp_iterations[j] += i
+        if j % write_frequency == 0:
+            bp_c.write(t)
+            bp_psi.write(t)
+
+        lvpp_iterations[j - 1] += i
     bp_c.close()
     bp_psi.close()
     print("Newton iterations:", newton_iterations)
@@ -254,8 +257,8 @@ def main(argv: Optional[list[str]] = None):
     parser.add_argument("--T", dest="T", type=float, default=7e-3, help="End time")
     parser.add_argument("-l", "--logging", action="store_true", help="Enable logging")
     mesh_options = parser.add_argument_group("Mesh options")
-    mesh_options.add_argument("-N", type=int, default=200, help="Number of elements in x-direction")
-    mesh_options.add_argument("-M", type=int, default=200, help="Number of elements in y-direction")
+    mesh_options.add_argument("-N", type=int, default=50, help="Number of elements in x-direction")
+    mesh_options.add_argument("-M", type=int, default=50, help="Number of elements in y-direction")
     mesh_options.add_argument(
         "--cell_type",
         "-c",
@@ -301,6 +304,7 @@ def main(argv: Optional[list[str]] = None):
         help="Stopping tolerance between two successive PG iterations (L2-difference)",
     )
     result_options = parser.add_argument_group("Output options")
+    result_options.add_argument("--write_frequency", type=int, default=25, help="Write frequency")
     result_options.add_argument(
         "--result_dir", type=Path, default=Path("results"), help="Directory to store results"
     )
@@ -320,6 +324,7 @@ def main(argv: Optional[list[str]] = None):
         alpha_c=parsed_args.alpha_c,
         max_iterations=parsed_args.max_iterations,
         result_dir=parsed_args.result_dir,
+        write_frequency=parsed_args.write_frequency,
         stopping_tol=parsed_args.stopping_tol,
         tau0=parsed_args.tau0,
         T=parsed_args.T,

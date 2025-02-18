@@ -42,7 +42,7 @@ jobs:
         if: steps.install.conclusion == 'success'
         working-directory: ./examples/04_multiphase
         run: |
-          python3 multiphase_dolfinx.py
+          python3 multiphase_dolfinx.py -N 30 -M 30 --dt 1e-4 --T 1e-3 --write_frequency=25
 
       - name: Run example 5
         if: steps.install.conclusion == 'success'
