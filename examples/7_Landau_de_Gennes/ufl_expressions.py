@@ -1,15 +1,15 @@
 from ufl import (
     as_tensor,
-    exp,
-    eq,
-    sqrt,
-    cosh,
-    sinh,
-    cos,
-    sin,
     conditional,
+    cos,
+    cosh,
+    eq,
+    exp,
     gt,
     lt,
+    sin,
+    sinh,
+    sqrt,
 )
 
 

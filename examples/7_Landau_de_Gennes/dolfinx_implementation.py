@@ -1,23 +1,24 @@
 from mpi4py import MPI
-from ufl_expressions import expm2
-from lvpp import SNESProblem, SNESSolver
-import numpy as np
-import dolfinx
-from ufl import (
-    inv,
-    Identity,
-    split,
-    as_tensor,
-    TestFunction,
-    inner,
-    grad,
-    Measure,
-    tr,
-    derivative,
-)
-import basix.ufl
 
+import basix.ufl
+import dolfinx
+import numpy as np
 import numpy.linalg
+from ufl import (
+    Identity,
+    Measure,
+    TestFunction,
+    as_tensor,
+    derivative,
+    grad,
+    inner,
+    inv,
+    split,
+    tr,
+)
+from ufl_expressions import expm2
+
+from lvpp import SNESProblem, SNESSolver
 
 
 class NotConvergedError(Exception):
@@ -25,15 +26,14 @@ class NotConvergedError(Exception):
 
 
 def tanh(M):
-    return 2 * inv(expm2(2 * M) + I) * (expm2(2 * M) - I)
+    Id = Identity(2)
+    return 2 * inv(expm2(2 * M) + Id) * (expm2(2 * M) - Id)
 
 
 class Constant(dolfinx.fem.Constant):
     def __init__(self, mesh, value):
         super().__init__(mesh, dolfinx.default_scalar_type(value))
 
-
-I = Identity(2)
 
 N = 100
 mesh = dolfinx.mesh.create_unit_square(
@@ -192,6 +192,8 @@ while nfail < NFAIL_MAX and nlvpp < NLVVP_MAX:
         else:
             continue
     num_newton_iterations.append(num_iterations)
+    nlvpp += 1
+
     # Termination
     nrm = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(L2_Q), op=MPI.SUM))
     if mesh.comm.rank == 0:
@@ -212,13 +214,13 @@ while nfail < NFAIL_MAX and nlvpp < NLVVP_MAX:
     z_iter.interpolate(z)
     q_out.interpolate(expr)
     vtx.write(nlvpp)
-    nlvpp += 1
 
 vtx.close()
 if mesh.comm.rank == 0:
     assert nlvpp == len(num_newton_iterations)
     print(
-        f"#LVPP iterations {len(num_newton_iterations)}, #Newton iterations {sum(num_newton_iterations)}",
+        f"#LVPP iterations {len(num_newton_iterations)}",
+        f"#Newton iterations {sum(num_newton_iterations)}",
         flush=True,
     )
     print(
