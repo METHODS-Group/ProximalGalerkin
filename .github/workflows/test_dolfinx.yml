@@ -111,7 +111,9 @@ jobs:
 
       - name: Copy mesh-creation script
         run: |
-          cp ./examples/11_eikonal/convert_mesh.cpp ./  mfem/examples
+          ls
+          echo $(pwd)
+          cp ./examples/11_eikonal/convert_mesh.cpp ./  ./mfem/examples
 
       - name: Compile mesh-creation script
         run: |
