@@ -1,0 +1,23 @@
+name: Test MFEM example
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  eikonal:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/methods-group/proximalgalerkin-mfem:main
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy mesh-creation script
+        run: |
+          cp ./examples/11_eikonal/ex40.cpp /home/euler/mfem/examples
+      - name: Compile mesh-creation script
+        working-directory: /home/euler/mfem/examples
+        run: |
+          make ex40
+          ./ex40 -step 10.0 -mi 10
