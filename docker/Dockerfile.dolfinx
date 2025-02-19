@@ -14,35 +14,27 @@ RUN meson setup ${MESON_DIR} -Dpythoniface=true -Dpython.install_env=auto && \
     meson compile -C ${MESON_DIR} && \
     meson install -C ${MESON_DIR} && \
     meson test -C ${MESON_DIR} --suite=Python
+
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
-
-RUN python3 -m pip install scipy
-
-WORKDIR /ipopt
-
 ARG IPOPT_VERSION=3.14.11
-
 ENV DEBIAN_FRONTEND=noninteractive
 
-
 # Pull MUMPS 
+WORKDIR /ipopt
 RUN git clone https://github.com/coin-or-tools/ThirdParty-Mumps --single-branch --branch stable/3.0
 
 
 # Build MUMPS for correct architecture
 WORKDIR /ipopt/ThirdParty-Mumps
+RUN ./get.Mumps;
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
-    then ./get.Mumps; \
-    ./ThirdParty-Mumps/configure --build=aarch64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local"; \
-    make :\
-    make install; \
+    then ./configure --build=aarch64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local"; \
     elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
-    then ./get.Mumps; \
-    ./configure --build=amd64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local"  ; \
-    make; \
-    make install; \
+    then ./configure --build=amd64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local"  ; \
     else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
     fi
+RUN make && \
+    make install
 
 
 WORKDIR /ipopt
@@ -50,27 +42,21 @@ WORKDIR /ipopt
 # Pull IPOPT 
 RUN git clone https://github.com/coin-or/Ipopt --single-branch --branch releases/${IPOPT_VERSION}
 
-
 # Build Ipopt for correct architecture
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
     then ./Ipopt/configure --build=aarch64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local" --enable-debug --enable-shared --with-mumps-cflags="-I/usr/local/include/coin-or/mumps" --with-mumps-lflags="-L/usr/local/lib -lcoinmumps" ; \
-    make install; \
     elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
     then ./Ipopt/configure --build=amd64-unknown-linux-gnu --with-lapack-lflags="-llapack -lblas" --prefix="/usr/local" --enable-debug --enable-shared --with-mumps-cflags="-I/usr/local/include/coin-or/mumps" --with-mumps-lflags="-L/usr/local/lib -lcoinmumps" ; \
-    make install; \
     else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
     fi
-
+RUN make install
 
 
 # Build pyipopt
 ARG CYIPOPT_VERSION=1.5.0
 RUN python3 -m pip install --no-cache git+https://github.com/mechmotum/cyipopt.git@v${CYIPOPT_VERSION}
 
-# Install scipy
-RUN python3 -m pip install scipy
-
-ARG PYVISTA_VERSION=0.44.1
+ARG PYVISTA_VERSION=0.44.2
 ARG DOLFINX_VERSION=v0.9.0.post1
 ARG BASIX_VERSION=v0.9.0
 ARG UFL_VERSION=2024.2.0
@@ -166,8 +152,6 @@ COPY --from=intermediate /dolfinx-env /dolfinx-env
 COPY --from=intermediate /src /src
 
 
-
-
 ENV PKG_CONFIG_PATH=/usr/local/dolfinx-real/lib/pkgconfig:$PKG_CONFIG_PATH \
     CMAKE_PREFIX_PATH=/usr/local/dolfinx-real/lib/cmake:$CMAKE_PREFIX_PATH \
     PETSC_ARCH=linux-gnu-real64-32 \
@@ -193,11 +177,11 @@ RUN apt-get -qq update && \
 RUN dpkgArch="$(dpkg --print-architecture)"; \
     pip install matplotlib; \
     case "$dpkgArch" in amd64) \
-    pip install --no-cache-dir pyvista[trame]==${PYVISTA_VERSION} ;; \
+    pip install --no-cache-dir pyvista[jupyter]==${PYVISTA_VERSION} ;; \
     esac; \
     case "$dpkgArch" in arm64) \
-    pip install --no-cache-dir https://github.com/finsberg/vtk-aarch64/releases/download/vtk-9.3.0-cp312/vtk-9.3.0.dev0-cp312-cp312-linux_aarch64.whl && \
-    pip install --no-cache-dir pyvista[trame]==${PYVISTA_VERSION} ;; \
+    pip install --no-cache-dir https://github.com/scientificcomputing/vtk-aarch64/releases/download/v9.4.1-py3.12/vtk-9.4.1.dev0-cp312-cp312-linux_aarch64.whl && \
+    pip install --no-cache-dir pyvista[jupyter]==${PYVISTA_VERSION} ;; \
     esac; \
     pip cache purge
 
@@ -217,3 +201,54 @@ EXPOSE 8888/tcp
 ENV SHELL /bin/bash
 
 WORKDIR /root
+
+FROM dolfinx as mfem
+
+ARG HYPRE_VERSION=2.32.0
+ARG METIS_VERSION=4.0.3
+# WORKAROUND until: https://github.com/mfem/mfem/pull/4702 is merged
+ARG MFEM_BRANCH=VectorDiffusionIntegrator
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get -qq update && \
+    apt-get -y install wget git cmake build-essential mpich libmpich-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+WORKDIR /root/LVPP
+
+# Buld hypre
+RUN wget https://github.com/hypre-space/hypre/archive/refs/tags/v${HYPRE_VERSION}.tar.gz
+RUN tar -xvf v${HYPRE_VERSION}.tar.gz
+
+RUN cd hypre-${HYPRE_VERSION}/src/ && \
+    ./configure --disable-fortran && \
+    make -j 2 && \
+    cd ../.. && \
+    ln -s hypre-${HYPRE_VERSION} hypre
+
+# Build metis
+RUN wget https://github.com/mfem/tpls/raw/gh-pages/metis-${METIS_VERSION}.tar.gz
+RUN ls
+RUN tar -xvf metis-${METIS_VERSION}.tar.gz
+RUN cd metis-${METIS_VERSION} && \
+    make OPTFLAGS=-Wno-error=implicit-function-declaration && \
+    cd .. && \
+    ln -s metis-${METIS_VERSION} metis-4.0
+
+# Build mfem
+RUN git clone --branch=${MFEM_BRANCH} --single-branch https://github.com/mfem/mfem.git
+RUN cd mfem && \
+    make parallel -j 2
+
+WORKDIR /root/LVPP/mfem/examples
+ADD ./examples/11_eikonal/ex40.cpp ex40_taylor_hood.cpp
+
+ADD ./examples /root/LVPP/examples
+
+FROM mfem as julia
+
+RUN apt-get update && apt-get install -y curl
+RUN curl -fsSL https://install.julialang.org | sh  -s -- --yes
+ENV PATH=/root/.juliaup/bin:$PATH
+RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "MultivariateOrthogonalPolynomials", "Plots", "LaTeXStrings", "IterativeSolvers", "LinearMaps", "MatrixFactorizations", "Gridap", "LineSearches"])'
