@@ -1,1 +1,40 @@
-FROM  ghcr.io/mfem/containers/developer-cpu:latest
+FROM ubuntu:24.04
+ARG HYPRE_VERSION=2.32.0
+ARG METIS_VERSION=4.0.3
+# WORKAROUND until: https://github.com/mfem/mfem/pull/4702 is merged
+ARG MFEM_BRANCH=VectorDiffusionIntegrator
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get -qq update && \
+    apt-get -y install wget git cmake build-essential mpich libmpich-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+WORKDIR /root/LVPP
+
+# Buld hypre
+RUN wget https://github.com/hypre-space/hypre/archive/refs/tags/v${HYPRE_VERSION}.tar.gz
+RUN tar -xvf v${HYPRE_VERSION}.tar.gz
+
+RUN cd hypre-${HYPRE_VERSION}/src/ && \
+    ./configure --disable-fortran && \
+    make -j 2 && \
+    cd ../.. && \
+    ln -s hypre-${HYPRE_VERSION} hypre
+
+# Build metis
+RUN wget https://github.com/mfem/tpls/raw/gh-pages/metis-${METIS_VERSION}.tar.gz
+RUN ls
+RUN tar -xvf metis-${METIS_VERSION}.tar.gz
+RUN cd metis-${METIS_VERSION} && \
+    make OPTFLAGS=-Wno-error=implicit-function-declaration && \
+    cd .. && \
+    ln -s metis-4.0.3 metis-4.0
+
+# Build mfem
+RUN git clone --branch=${MFEM_BRANCH} --single-branch https://github.com/mfem/mfem.git
+RUN cd mfem && \
+    make parallel -j 2
+
+WORKDIR /root/LVPP/mfem/examples
+ADD ./examples/11_eikonal/ex40.cpp ex40_taylor_hood.cpp
