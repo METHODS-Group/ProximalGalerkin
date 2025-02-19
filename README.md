@@ -25,7 +25,7 @@ We encourage using following Docker containers to run the codes described below:
 
 The following table associates each implementation to the examples and figures in the paper. Further information to run the codes is provided for each specific example can be found in the corresponding folder.
 
-| Figure |                                 Folder                                 |              Backend              | Problem Type type            |
+| Figure |                                 Folder                                 |              Backend              | Problem Type            |
 | :----: | :--------------------------------------------------------------------: | :-------------------------------: | ---------------------------- |
 |   2b   |         [01_obstacle_problem](./examples/01_obstacle_problem/)         |              FEniCS               | Obstacle problem (FEM)       |
 | 2c(i)  |         [01_obstacle_problem](./examples/01_obstacle_problem/)         |               Julia               | Obstacle problem (FD)        |
