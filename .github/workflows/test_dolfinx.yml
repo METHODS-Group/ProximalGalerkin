@@ -118,6 +118,8 @@ jobs:
         working-directory: /home/euler/mfem/examples
         run: |
           make convert_mesh
+          ./convert_mesh --mesh ../data/mobius-strip.mesh
+
       - name: Upload mesh as artifact
         uses: actions/upload-artifact@v4
         with:
