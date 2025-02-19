@@ -115,8 +115,8 @@ jobs:
           cp ./examples/11_eikonal/convert_mesh.cpp /home/euler/mfem/examples
 
       - name: Compile mesh-creation script
+        working-directory: /home/euler/mfem/examples
         run: |
-          cd ./home/euler/mfem/examples
           make convert_mesh
       - name: Upload mesh as artifact
         uses: actions/upload-artifact@v4
