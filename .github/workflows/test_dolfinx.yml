@@ -111,11 +111,8 @@ jobs:
 
       - name: Copy mesh-creation script
         run: |
-          ls /home
-          cd /home/
-          find -iname "libmfem.so.4.6.1"
-          echo $(pwd)
-          cp ./examples/11_eikonal/convert_mesh.cpp ./  ./mfem/examples
+          ls /home/euler/mfem/examples
+          cp ./examples/11_eikonal/convert_mesh.cpp ./  /home/euler/mfem/examples
 
       - name: Compile mesh-creation script
         run: |
