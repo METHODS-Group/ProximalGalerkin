@@ -189,13 +189,7 @@ RUN dpkgArch="$(dpkg --print-architecture)"; \
 RUN mkdir -p /usr/local/share/jupyter/kernels/python3-complex/
 RUN cp /src/dolfinx/docker/complex-kernel.json /usr/local/share/jupyter/kernels/python3-complex/kernel.json
 
-# Add scifem
-RUN python3 -m pip install git+https://github.com/scientificcomputing/scifem.git
 
-# Copy over examples and source code
-ADD . /root/src/
-WORKDIR /root/src/
-RUN python3 -m pip install -e .[examples]
 
 EXPOSE 8888/tcp
 ENV SHELL /bin/bash
