@@ -9,7 +9,7 @@ on:
 jobs:
   eikonal:
     runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin-mfem:main
+    container: ghcr.io/mfem/containers/developer-cpu:latest
     steps:
       - uses: actions/checkout@v4
 
