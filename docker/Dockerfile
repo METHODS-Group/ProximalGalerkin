@@ -202,4 +202,81 @@ ENV SHELL /bin/bash
 
 WORKDIR /root
 
-RUN python3 -m pip install scifem scipy
+FROM dolfinx AS mfem
+
+ARG HYPRE_VERSION=2.32.0
+ARG METIS_VERSION=4.0.3
+# WORKAROUND until: https://github.com/mfem/mfem/pull/4702 is merged
+ARG MFEM_BRANCH=VectorDiffusionIntegrator
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get -qq update && \
+    apt-get -y install wget git cmake build-essential mpich libmpich-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+WORKDIR /root/LVPP
+
+# Buld hypre
+RUN wget https://github.com/hypre-space/hypre/archive/refs/tags/v${HYPRE_VERSION}.tar.gz
+RUN tar -xvf v${HYPRE_VERSION}.tar.gz
+
+RUN cd hypre-${HYPRE_VERSION}/src/ && \
+    ./configure --disable-fortran && \
+    make -j 2 && \
+    cd ../.. && \
+    ln -s hypre-${HYPRE_VERSION} hypre
+
+# Build metis
+RUN wget https://github.com/mfem/tpls/raw/gh-pages/metis-${METIS_VERSION}.tar.gz
+RUN ls
+RUN tar -xvf metis-${METIS_VERSION}.tar.gz
+RUN cd metis-${METIS_VERSION} && \
+    make OPTFLAGS=-Wno-error=implicit-function-declaration && \
+    cd .. && \
+    ln -s metis-${METIS_VERSION} metis-4.0
+
+# Build mfem
+RUN git clone --branch=${MFEM_BRANCH} --single-branch https://github.com/mfem/mfem.git
+RUN cd mfem && \
+    make parallel -j 2
+
+FROM mfem AS julia
+
+RUN apt-get update && apt-get install -y curl
+RUN curl -fsSL https://install.julialang.org | sh  -s -- --yes
+ENV PATH=/root/.juliaup/bin:$PATH
+RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "MultivariateOrthogonalPolynomials", "Plots", "LaTeXStrings", "IterativeSolvers", "LinearMaps", "MatrixFactorizations", "Gridap", "LineSearches"])'
+
+
+RUN julia as firedrake
+
+RUN apt-get update && apt-get install -y curl sudo
+RUN curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
+
+ENV TMP_PYTHON_PATH=${PYTHONPATH}
+ENV TMP_PETSC_DIR=${PETSC_DIR}
+ENV TMP_PETSC_ARCH=${PETSC_ARCH}
+RUN unset PYTHONPATH && unset PETSC_DIR && unset PETSC_ARCH && python3 firedrake-install
+ENV PYTHONPATH=${TMP_PYTHON_PATH}
+ENV PETSC_DIR=${TMP_PETSC_DIR}
+ENV PETSC_ARCH=${TMP_PETSC_ARCH}
+
+# Add all examples in repository
+WORKDIR /root/LVPP/mfem/examples
+ADD ./examples/11_eikonal/ex40.cpp ex40_taylor_hood.cpp
+ADD ./examples/11_eikonal/convert_mesh.cpp convert_mesh.cpp
+WORKDIR /root/LVPP
+ADD . .
+
+# Build DOLFINx dependencies
+# netgen-mesher does not have a linux/arm build
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
+    then RUN python3 -m pip install -e .[obstacle,signorini,eikonal,monge_ampere]; \
+    elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
+    then RUN python3 -m pip install -e .[examples]  ; \
+    else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
+    fi
+
+WORKDIR /root/LVPP
+
