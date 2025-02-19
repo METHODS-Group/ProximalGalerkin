@@ -111,7 +111,6 @@ jobs:
 
       - name: Copy mesh-creation script
         run: |
-          ls /home/euler/mfem/examples
           cp ./examples/11_eikonal/convert_mesh.cpp /home/euler/mfem/examples
 
       - name: Compile mesh-creation script
@@ -140,10 +139,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: mobius-strip
-          path: ./examples/11_eikonal
+          path: ./examples/11_eikonal/mobius-strip
 
       - name: Run example 11
         working-directory: ./examples/11_eikonal
         run: |
-          ls .
           python3 eikonal_dolfinx.py --mesh-dir=./mobius-strip
