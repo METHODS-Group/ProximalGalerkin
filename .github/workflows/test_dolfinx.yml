@@ -17,10 +17,9 @@ jobs:
       fail-fast: false
       matrix:
         container: [
-          "ghcr.io/fenics/dolfinx/dolfinx:stable",
-          #"ghcr.io/fenics/dolfinx/dolfinx:nightly"
-        ]
-
+            "ghcr.io/fenics/dolfinx/dolfinx:stable",
+            #"ghcr.io/fenics/dolfinx/dolfinx:nightly"
+          ]
 
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +32,10 @@ jobs:
       - name: Run example 2
         working-directory: ./examples/02_signorini
         run: |
-            python3 generate_mesh.py
-            python3 run_lvpp_problem.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
-            python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
-            python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
+          python3 generate_mesh.py
+          python3 run_lvpp_problem.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
+          python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
+          python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
 
       - name: Run example 4
         if: steps.install.conclusion == 'success'
@@ -80,36 +79,32 @@ jobs:
       #   run: |
       #     python3 fracture_dolfinx.py
 
-
       - name: Run example 12
         if: steps.install.conclusion == 'success'
         working-directory: ./examples/12_monge_ampere
         run: |
-          python3 monge_ampere_cg_cg_dg_dolfinx.py.py
-
+          python3 monge_ampere_cg_cg_dg_dolfinx.py
 
       - name: Run example 3
         if: steps.install.conclusion == 'success'
         working-directory: ./examples/03_fracture
         run: |
-          python3 fracture_dolfinx.py
-  
+          python3 fracture_dolfinx.py --Tmin=0 --Tmax=2 --num-load-steps=10 --write-frequency=9
   obstacle:
     runs-on: ubuntu-24.04
     container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
 
     steps:
-        - uses: actions/checkout@v4
-    
-        - name: Install package
-          run: |
-            python3 -m pip install -e .[examples]
-    
-        - name: Run example 1
-          working-directory: ./examples/01_obstacle_problem
-          run: |
-              python3 generate_mesh_gmsh.py
-              python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
-              python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
-              python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
+      - uses: actions/checkout@v4
 
+      - name: Install package
+        run: |
+          python3 -m pip install -e .[examples]
+
+      - name: Run example 1
+        working-directory: ./examples/01_obstacle_problem
+        run: |
+          python3 generate_mesh_gmsh.py
+          python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
+          python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
+          python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
