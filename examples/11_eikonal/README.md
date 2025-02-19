@@ -7,7 +7,7 @@ We have provided code for this example for both the `MFEM` and `DOLFINx` Docker 
 To reproduce the Möbius strip solution in Figure 11, you first need to copy [./examples/eikonal/ex40.cpp](./examples/eikonal/ex40.cpp) into the `MFEM` examples folder (`/home/euler/mfem/examples/`) and then calling `make ex40` and `./ex40 -step 10.0 -mi 10`. This following code will execute to entire process:
 
 ```bash
-docker run -it --rm -v ./examples/eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
+docker run -it --rm -v ./examples/11_eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
 cp /home/euler/shared/ex40.cpp /home/euler/mfem/examples/
 cd examples && make ex40
 ./ex40 -step 10.0 -mi 10
@@ -30,7 +30,7 @@ The `DOLFINx` implementation requires converting the `MFEM` Möbius strip mesh [
 To this end, run the following commands from the root of this repository:
 
 ```bash
-docker run -it --rm -v ./examples/eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
+docker run -it --rm -v ./examples/11_eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
 cp /home/euler/shared/convert_mesh.cpp /home/euler/mfem/examples/
 cd examples && make convert_mesh
 ./convert_mesh --mesh ../data/mobius-strip.mesh

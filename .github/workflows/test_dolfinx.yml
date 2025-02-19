@@ -36,6 +36,11 @@ jobs:
           python3 run_lvpp_problem.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
           python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
           python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
+      - name: Run example 3
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/03_fracture
+        run: |
+          python3 fracture_dolfinx.py --Tmin=0 --Tmax=2 --num-load-steps=10 --write-frequency=9
 
       - name: Run example 4
         if: steps.install.conclusion == 'success'
@@ -73,23 +78,12 @@ jobs:
         run: |
           python3 harmonic_map_dolfinx.py
 
-      # - name: Run example 11
-      #   if: steps.install.conclusion == 'success'
-      #   working-directory: ./examples/11_eikonal
-      #   run: |
-      #     python3 fracture_dolfinx.py
-
       - name: Run example 12
         if: steps.install.conclusion == 'success'
         working-directory: ./examples/12_monge_ampere
         run: |
           python3 monge_ampere_cg_cg_dg_dolfinx.py
 
-      - name: Run example 3
-        if: steps.install.conclusion == 'success'
-        working-directory: ./examples/03_fracture
-        run: |
-          python3 fracture_dolfinx.py --Tmin=0 --Tmax=2 --num-load-steps=10 --write-frequency=9
   obstacle:
     runs-on: ubuntu-24.04
     container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
@@ -108,3 +102,37 @@ jobs:
           python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
           python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
           python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
+
+  create-mobius:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/methods-group/proximalgalerkin-mfem:main
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy mesh-creation script
+        run: |
+          cp ./examples/11_eikonal/convert_mesh.cpp ./home/euler/mfem/examples
+
+      - name: Compile mesh-creation script
+        run: |
+          cd ./home/euler/mfem/examples
+          make convert_mesh
+      - name: Upload mesh as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobius-strip
+          path: /home/euler/mfem/examples/mobius-strip.mesh
+
+  run-mobius:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/fenics/dolfinx/dolfinx:stable
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobius-strip
+          path: ./examples/11_eikonal
+
+      - name: Run example 11
+        working-directory: ./examples/11_eikonal
+        run: |
+          python3 eikonal_dolfinx.py --mesh-dir=./mobius-strip
