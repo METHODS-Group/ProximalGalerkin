@@ -9,15 +9,22 @@ on:
 jobs:
   eikonal:
     runs-on: ubuntu-24.04
-    container: ghcr.io/mfem/containers/developer-cpu:latest
+    container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy mesh-creation script
+      - name: Copy eikonal script from repository
         run: |
-          cp ./examples/11_eikonal/ex40.cpp /home/euler/mfem/examples
+          cp ./examples/11_eikonal/ex40.cpp /root/LVPP/mfem/examples
+
       - name: Compile mesh-creation script
-        working-directory: /home/euler/mfem/examples
+        working-directory: /root/LVPP/mfem/examples
         run: |
           make ex40
           ./ex40 -step 10.0 -mi 10
+      - name: Run parallel script on star and ball
+        working-directory: /root/LVPP/mfem/examples
+        run: |
+          make ex40p
+          ./ex40p -step 10.0 -mi 10
+          ./ex40p -step 10.0 -mi 10 -m ../data/ball-nurbs.mesh
