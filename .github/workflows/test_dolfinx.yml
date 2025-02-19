@@ -131,6 +131,8 @@ jobs:
     needs: create-mobius
     container: ghcr.io/fenics/dolfinx/dolfinx:stable
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: mobius-strip
