@@ -1,3 +1,5 @@
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+
 from mpi4py import MPI
 
 import basix.ufl
@@ -18,10 +20,61 @@ from ufl import (
 
 from lvpp import SNESProblem, SNESSolver
 
+_RED = "\033[31m"
+_BLUE = "\033[34m"
+_GREEN = "\033[32m"
+_color_reset = "\033[0m"
+
 
 class NotConvergedError(Exception):
     pass
 
+
+parser = ArgumentParser(
+    description="Solve the obstacle problem on a unit square using Galahad.",
+    formatter_class=ArgumentDefaultsHelpFormatter,
+)
+parser.add_argument(
+    "--res",
+    "-r",
+    dest="res",
+    type=float,
+    default=0.0125,
+    help="Resolution of the mesh",
+)
+parser.add_argument(
+    "--max-fail-iter",
+    type=int,
+    default=50,
+    dest="NFAIL_MAX",
+    help="Maximum number of iterations of the LVPP that can fail before termination",
+)
+parser.add_argument(
+    "--write-frequency",
+    type=int,
+    default=25,
+    dest="write_frequency",
+    help="Frequency of writing output to XDMFFile",
+)
+parser.add_argument(
+    "--num-load-steps",
+    type=int,
+    default=1001,
+    dest="num_load_steps",
+    help="Number of load steps",
+)
+parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output from PETSc SNES")
+parser.add_argument("--Tmin", type=float, default=0.0, help="Minimum load")
+parser.add_argument("--Tmax", type=float, default=5.0, help="Maximum load")
+
+args = parser.parse_args()
+res = args.res
+NFAIL_MAX = args.NFAIL_MAX
+write_frequency = args.write_frequency
+num_load_steps = args.num_load_steps
+Tmin = args.Tmin
+Tmax = args.Tmax
+verbose = args.verbose
 
 st = dolfinx.default_scalar_type
 mesh, ft, material_map = create_crack_mesh(MPI.COMM_WORLD, max_res=0.0125)
@@ -77,14 +130,20 @@ F = (
     + inner(c, phi) * dx
     - inner(c_conform, phi) * dx
 )
-F_compiled = dolfinx.fem.form(F)
+cffi_options = ["-Ofast", "-march=native"]
+jit_options = {
+    "cffi_extra_compile_args": cffi_options,
+    "cffi_libraries": ["m"],
+}
+F_compiled = dolfinx.fem.form(F, jit_options=jit_options)
 
 reps = dolfinx.fem.Constant(mesh, 1.0e-3)
 J_reg = dolfinx.fem.form(
     derivative(F, z, z_trial)
     + reps * inner(v, v_trial) * dx
     + reps * inner(d, d_trial) * dx
-    - reps * inner(phi, phi_trial) * dx
+    - reps * inner(phi, phi_trial) * dx,
+    jit_options=jit_options,
 )
 
 # Right side of crack (4), left crack (7)
@@ -111,19 +170,23 @@ bcs = [
 
 
 sp = {
-    "snes_monitor": None,
-    "snes_converged_reason": None,
     "snes_linesearch_type": "l2",
     "snes_linesearch_maxstep": 1,
     "snes_atol": 1.0e-6,
-    "snes_linesearch_monitor": None,
     "ksp_type": "preonly",
     "pc_type": "lu",
     "pc_factor_mat_solver_type": "mumps",
     "mat_mumps_icntl_14": 500,
-    "ksp_monitor": None,
 }
-NFAIL_MAX = 50
+if verbose:
+    sp.update(
+        {
+            "snes_monitor": None,
+            "snes_converged_reason": None,
+            "snes_linesearch_monitor": None,
+            "ksp_monitor": None,
+        }
+    )
 
 
 xdmf_file = dolfinx.io.XDMFFile(mesh.comm, "solution.xdmf", "w")
@@ -144,9 +207,12 @@ num_iterations = -1
 
 
 problem = SNESProblem(F_compiled, z, bcs=bcs, J=J_reg)
-for step, T in enumerate(np.linspace(0, 5, 1001)[1:]):
+for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
     if mesh.comm.rank == 0:
-        print(f"Solving for T = {float(T)}", flush=True)
+        print(
+            f"{_BLUE} Solving for T = {float(T)} ({step / num_load_steps * 100:.1f}%){_color_reset}",
+            flush=True,
+        )
     bcminus.value = -T
     bcplus.value = T
     alpha.value = 1
@@ -161,7 +227,6 @@ for step, T in enumerate(np.linspace(0, 5, 1001)[1:]):
             solver = SNESSolver(problem, sp)
             converged_reason, num_iterations = solver.solve()
 
-            print(converged_reason, num_iterations)
             if num_iterations == 0 and converged_reason > 0:
                 # solver didn't actually get to do any work,
                 # we've just reduced alpha so much that the initial guess
@@ -172,7 +237,11 @@ for step, T in enumerate(np.linspace(0, 5, 1001)[1:]):
         except NotConvergedError:
             nfail += 1
             if mesh.comm.rank == 0:
-                print(f"Failed to converge, {k=} alpha={float(alpha)}", flush=True)
+                print(
+                    f"{_RED}Failed to converge ({converged_reason})",
+                    f", {k=} alpha={float(alpha)}{_color_reset}",
+                    flush=True,
+                )
             alpha.value /= 2
             if k == 1:
                 z.interpolate(z_prev)
@@ -181,7 +250,9 @@ for step, T in enumerate(np.linspace(0, 5, 1001)[1:]):
 
             if nfail >= NFAIL_MAX:
                 if mesh.comm.rank == 0:
-                    print(f"Giving up. {T=} alpha={float(alpha)} {k=}", flush=True)
+                    print(
+                        f"{_RED}Giving up. {T=} alpha={float(alpha)} {k=}{_color_reset}", flush=True
+                    )
                 break
             else:
                 continue
@@ -190,7 +261,8 @@ for step, T in enumerate(np.linspace(0, 5, 1001)[1:]):
         nrm = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(L2_c), op=MPI.SUM))
         if mesh.comm.rank == 0:
             print(
-                f"Solved {k=} alpha={float(alpha)} ||c_{k} - c_{k - 1}|| = {nrm}",
+                f"{_GREEN}Solved {k=} {num_iterations=} alpha={float(alpha)},"
+                f"||c_{k} - c_{k - 1}|| = {nrm}{_color_reset}",
                 flush=True,
             )
         if nrm < 1.0e-4:
@@ -219,7 +291,7 @@ for step, T in enumerate(np.linspace(0, 5, 1001)[1:]):
         break
     c_conform_out.interpolate(c_conform_expr)
 
-    if step % 1 == 0:
+    if step % write_frequency == 0:
         with dolfinx.io.XDMFFile(mesh.comm, "solution.xdmf", "a") as xdmf_file:
             u_out.x.array[:] = z.x.array[U_to_Z]
             c_out.x.array[:] = z.x.array[C_to_Z]
