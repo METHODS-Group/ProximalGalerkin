@@ -111,7 +111,7 @@ jobs:
 
       - name: Copy mesh-creation script
         run: |
-          cp ./examples/11_eikonal/convert_mesh.cpp ./home/euler/mfem/examples
+          cp ./examples/11_eikonal/convert_mesh.cpp ./  mfem/examples
 
       - name: Compile mesh-creation script
         run: |
@@ -125,6 +125,7 @@ jobs:
 
   run-mobius:
     runs-on: ubuntu-24.04
+    needs: create-mobius
     container: ghcr.io/fenics/dolfinx/dolfinx:stable
     steps:
       - uses: actions/download-artifact@v4
