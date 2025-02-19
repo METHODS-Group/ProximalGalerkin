@@ -14,14 +14,14 @@ cd examples && make ex40
 ```
 
 To reproduce the results in Figure 11 for the two geometries (i.e., the [Star](https://github.com/mfem/mfem/blob/master/data/star.mesh)
-and [Ball](https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh)), you should compile the [official examples](https://mfem.org/examples/) `ex40.cpp` or `ex40p.cpp` without copying any files from this repository
+and [Ball](https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh)), you should compile the [official examples](https://mfem.org/examples/) `ex40p.cpp` without copying any files from this repository
 
 ```bash
-cd examples && make ex40
+cd examples && make ex40p
 # Star Geometry
-./ex40 -step 10.0 -mi 10
+./ex40p -step 10.0 -mi 10
 # Ball Geometry
-./ex40 -step 10.0 -mi 10 -m ../data/ball-nurbs.mesh
+./ex40p -step 10.0 -mi 10 -m ../data/ball-nurbs.mesh
 ```
 
 ## DOLFINx
