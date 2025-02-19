@@ -21,16 +21,15 @@ We encourage using following Docker containers to run the codes described below:
 - Firedrake: [ghcr.io/methods-group/proximalgalerkin-firedrake:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-firedrake)
 - Julia/GridAP: [julia:1.10.8](https://hub.docker.com/layers/library/julia/1.10.8/images/sha256-66656909ed7b5e75f4208631b01fc585372f906d68353d97cc06b40a8028c437)
 
-
 ## Table of Examples and Figures
 
 The following table associates each implementation to the examples and figures in the paper. Further information to run the codes is provided for each specific example can be found in the corresponding folder.
 
-| Figure |                                Folder                                |              Backend              | Problem Type type            |
-| :----: | :------------------------------------------------------------------: | :-------------------------------: | ---------------------------- |
-|   2b   |       [01_obstacle_problem](./examples/01_obstacle_problem/)       |              FEniCS               | Obstacle problem (FEM)        |
-| 2c(i)  |       [01_obstacle_problem](./examples/01_obstacle_problem/)        |               Julia               | Obstacle problem (FD)         |
-| 2c(ii) |    [01_obstacle_problem](./examples/01_obstacle_problem/)     | MultivariateOrthogonalPolynomials | Obstacle problem (Spectral)  |
+| Figure |                                 Folder                                 |              Backend              | Problem Type type            |
+| :----: | :--------------------------------------------------------------------: | :-------------------------------: | ---------------------------- |
+|   2b   |         [01_obstacle_problem](./examples/01_obstacle_problem/)         |              FEniCS               | Obstacle problem (FEM)       |
+| 2c(i)  |         [01_obstacle_problem](./examples/01_obstacle_problem/)         |               Julia               | Obstacle problem (FD)        |
+| 2c(ii) |         [01_obstacle_problem](./examples/01_obstacle_problem/)         | MultivariateOrthogonalPolynomials | Obstacle problem (Spectral)  |
 |   3    |                [02_signorini](./examples/02_signorini)                 |              FEniCS               | Signorini                    |
 |   4    |                 [03_fracture](./examples/03_fracture/)                 |         Firedrake/FEniCS          | Fracture                     |
 |   5    |               [04_multiphase](./examples/04_multiphase)                |              FEniCS               | Cahn-Hilliard                |
@@ -39,11 +38,9 @@ The following table associates each implementation to the examples and figures i
 |   8    |   [07_eigenvalue_constraints](./examples/07_eigenvalue_constraints)    |         Firedrake/FEniCS          | Landau–de Gennes             |
 |   9    | [08_intersecting_constraints](./examples/08_intersecting_constraints/) |         Firedrake/FEniCS          | Intersections of constraints |
 |   10   |     [09_equality_constraints](./examples/09_equality_constraints)      |              FEniCS               | Harmonic map                 |
-|   11   |       [11_eikonal](./examples/11_eikonal)        |            MFEM/FEniCS            | Eikonal equation             |
-|   12   |  [12_monge_ampere](./examples/12_monge_ampere)   |         Firedrake/FEniCS          | Monge-Ampere                 |
-
+|   11   |                  [11_eikonal](./examples/11_eikonal)                   |            MFEM/FEniCS            | Eikonal equation             |
+|   12   |             [12_monge_ampere](./examples/12_monge_ampere)              |         Firedrake/FEniCS          | Monge-Ampere                 |
 
 ## Example 10: Linear Equality Constraints
 
 Note that there is no numerical example for this setting because the derived variational formulation is equivalent to the standard Lagrange multiplier formulation for this class of problems.
-
