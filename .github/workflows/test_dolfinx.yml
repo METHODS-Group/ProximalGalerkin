@@ -145,4 +145,5 @@ jobs:
       - name: Run example 11
         working-directory: ./examples/11_eikonal
         run: |
+          ls .
           python3 eikonal_dolfinx.py --mesh-dir=./mobius-strip
