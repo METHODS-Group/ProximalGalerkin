@@ -13,7 +13,12 @@ dependencies = ["fenics-dolfinx>=0.9.0"]
 [project.optional-dependencies]
 dev = ["pdbpp", "ipython", "mypy", "ruff"]
 docs = []
-examples = ["pandas", "scifem", "scipy", "netgen-mesher"]
+obstacle = ["pandas", "scipy"]
+fracture = ["netgen-mesher"]
+signorini = ["scifem", "scipy"]
+eikonal = ["scifem", "meshio"]
+monge_ampere = ["scipy"]
+examples = ["lvpp[obstacle,fracture,signorini,eikonal,monge_ampere]"]
 all = ["lvpp[dev,examples]"]
 
 [tool.pytest.ini_options]
@@ -56,6 +61,7 @@ known-third-party = [
     "cyipopt",
     "galahad",
     "pandas",
+    "meshio",
 ]
 section-order = [
     "future",

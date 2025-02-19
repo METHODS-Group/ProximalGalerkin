@@ -1,0 +1,147 @@
+name: Test DOLFINx/FEniCS examples
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  standard-examples:
+    name: Test on ${{ matrix.container }}
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.container }}
+    env:
+      DEB_PYTHON_INSTALL_LAYOUT: deb_system
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [
+            "ghcr.io/fenics/dolfinx/dolfinx:stable",
+            #"ghcr.io/fenics/dolfinx/dolfinx:nightly"
+          ]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install package
+        id: install
+        run: |
+          python3 -m pip install -e .[examples]
+
+      - name: Run example 2
+        working-directory: ./examples/02_signorini
+        run: |
+          python3 generate_mesh.py
+          python3 run_lvpp_problem.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
+          python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
+          python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
+      - name: Run example 3
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/03_fracture
+        run: |
+          python3 fracture_dolfinx.py --Tmin=0 --Tmax=2 --num-load-steps=10 --write-frequency=9
+
+      - name: Run example 4
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/04_multiphase
+        run: |
+          python3 multiphase_dolfinx.py -N 30 -M 30 --dt 1e-4 --T 1e-3 --write_frequency=25
+
+      - name: Run example 5
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/05_obstacle_type_qvi
+        run: |
+          python3 thermoforming_lvpp.py
+
+      - name: Run example 6
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/06_gradient_constraints
+        run: |
+          python3 gradient_constraint_dolfinx.py
+
+      - name: Run example 7
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/07_eigenvalue_constraints
+        run: |
+          python3 eigenvalue_constraints_dolfinx.py
+
+      - name: Run example 8
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/08_intersecting_constraints
+        run: |
+          python3 intersecting_constraints_dolfinx.py
+
+      - name: Run example 9
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/09_equality_constraints
+        run: |
+          python3 harmonic_map_dolfinx.py
+
+      - name: Run example 12
+        if: steps.install.conclusion == 'success'
+        working-directory: ./examples/12_monge_ampere
+        run: |
+          python3 monge_ampere_cg_cg_dg_dolfinx.py
+
+  obstacle:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install package
+        run: |
+          python3 -m pip install -e .[examples]
+
+      - name: Run example 1
+        working-directory: ./examples/01_obstacle_problem
+        run: |
+          python3 generate_mesh_gmsh.py
+          python3 compare_all.py -P ./meshes/disk_1.xdmf -O coarse
+          python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
+          python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
+
+  create-mobius:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/methods-group/proximalgalerkin-mfem:main
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy mesh-creation script
+        run: |
+          cp ./examples/11_eikonal/convert_mesh.cpp /home/euler/mfem/examples
+
+      - name: Compile mesh-creation script
+        working-directory: /home/euler/mfem/examples
+        run: |
+          make convert_mesh
+          ./convert_mesh --mesh ../data/mobius-strip.mesh
+
+      - name: Upload mesh as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobius-strip
+          path: /home/euler/mfem/examples/mobius-strip.mesh
+
+  run-mobius:
+    runs-on: ubuntu-24.04
+    needs: create-mobius
+    container: ghcr.io/fenics/dolfinx/dolfinx:stable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install -e .[eikonal]
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobius-strip
+          path: ./examples/11_eikonal/mobius-strip
+
+      - name: Run example 11
+        working-directory: ./examples/11_eikonal
+        run: |
+          python3 eikonal_dolfinx.py --mesh-dir=./mobius-strip

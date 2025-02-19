@@ -20,6 +20,11 @@ from ufl_expressions import expm2
 
 from lvpp import SNESProblem, SNESSolver
 
+_RED = "\033[31m"
+_BLUE = "\033[34m"
+_GREEN = "\033[32m"
+_color_reset = "\033[0m"
+
 
 class NotConvergedError(Exception):
     pass
@@ -164,7 +169,7 @@ nlvpp = 0
 num_newton_iterations = []
 while nfail < NFAIL_MAX and nlvpp < NLVVP_MAX:
     if mesh.comm.rank == 0:
-        print(f"Attempting {nlvpp=} alpha={float(alpha)}", flush=True)
+        print(f"{_BLUE}Attempting {nlvpp=} alpha={float(alpha)}{_color_reset}", flush=True)
     try:
         solver = SNESSolver(problem, sp)
         converged_reason, num_iterations = solver.solve()
@@ -178,7 +183,9 @@ while nfail < NFAIL_MAX and nlvpp < NLVVP_MAX:
     except NotConvergedError:
         nfail += 1
         if mesh.comm.rank == 0:
-            print(f"Failed to converge, {nlvpp=} alpha={float(alpha)}", flush=True)
+            print(
+                f"{_RED}Failed to converge, {nlvpp=} alpha={float(alpha)}{_color_reset}", flush=True
+            )
         alpha.value /= 2
         if nlvpp == 0:
             z.interpolate(z_prev)
@@ -187,7 +194,9 @@ while nfail < NFAIL_MAX and nlvpp < NLVVP_MAX:
 
         if nfail >= NFAIL_MAX:
             if mesh.comm.rank == 0:
-                print(f"Giving up. {T=} alpha={float(alpha)} {nlvpp=}", flush=True)
+                print(
+                    f"{_RED}Giving up. {T=} alpha={float(alpha)} {nlvpp=}{_color_reset}", flush=True
+                )
                 break
         else:
             continue
@@ -198,7 +207,7 @@ while nfail < NFAIL_MAX and nlvpp < NLVVP_MAX:
     nrm = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(L2_Q), op=MPI.SUM))
     if mesh.comm.rank == 0:
         print(
-            f"Solved {nlvpp=} alpha={float(alpha)} ||Q_{nlvpp} - Q_{nlvpp - 1}|| = {nrm}",
+            f"{_GREEN}Solved {nlvpp=} alpha={float(alpha)} ||Q_{nlvpp} - Q_{nlvpp - 1}|| = {nrm}{_color_reset}",
             flush=True,
         )
     if nrm < 1.0e-10:

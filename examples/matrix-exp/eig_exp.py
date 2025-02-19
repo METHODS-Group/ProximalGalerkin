@@ -13,9 +13,7 @@ import dolfinx.fem.petsc
 import numpy as np
 import ufl
 from matrix_exp import expm
-
 from scifem import BlockedNewtonSolver
-
 
 AlphaScheme = typing.Literal["constant", "linear", "doubling"]
 

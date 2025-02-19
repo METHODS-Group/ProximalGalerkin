@@ -1,3 +1,6 @@
+import argparse
+from pathlib import Path
+
 from mpi4py import MPI
 from petsc4py import PETSc
 
@@ -5,13 +8,25 @@ import basix.ufl
 import dolfinx
 import dolfinx.fem.petsc
 import numpy as np
+import scifem
 import ufl
 from dolfinx.fem.petsc import NonlinearProblem
 from dolfinx.nls.petsc import NewtonSolver
 from read_mobius_dolfinx import read_mobius_strip
 
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--mesh-dir",
+    dest="mesh_dir",
+    type=Path,
+    default="mobius-strip.mesh",
+    help="Path to input MFEM mesh directory",
+)
+
+args = parser.parse_args()
+mesh_dir = args.mesh_dir
 # Mesh generated with MFEM, see: convert_mesh.cpp for instructions
-mesh = read_mobius_strip("./mobius-strip.mesh/Cycle000000/proc000000.vtu")
+mesh = read_mobius_strip(mesh_dir / "Cycle000000/proc000000.vtu")
 
 el_0 = basix.ufl.element("P", mesh.topology.cell_name(), 1)
 el_1 = basix.ufl.element("P", mesh.topology.cell_name(), 2, shape=(3,))
@@ -104,7 +119,6 @@ for facet in entity_map:
 values = expr.eval(mesh, np.asarray(ie, dtype=np.int32))
 qq = dolfinx.fem.Function(Q)
 qq.x.array[:] = values.flatten()
-import scifem
 
 scifem.xdmf.create_pointcloud("data.xdmf", [qq])
 Q_out = dolfinx.fem.functionspace(mesh, ("DG", mesh.geometry.cmap.degree, (mesh.geometry.dim,)))
