@@ -17,7 +17,7 @@ jobs:
         run: |
           cp ./examples/11_eikonal/ex40.cpp /root/LVPP/mfem/examples
 
-      - name: Compile mesh-creation script
+      - name: Run Eikonal on Mobius strip
         working-directory: /root/LVPP/mfem/examples
         run: |
           make ex40
