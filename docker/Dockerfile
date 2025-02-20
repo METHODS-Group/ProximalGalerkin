@@ -140,7 +140,7 @@ ONBUILD WORKDIR /root
 FROM dolfinx-onbuild AS intermediate
 
 
-FROM optimization AS dolfinx
+FROM optimization AS dolfinx-user-env
 LABEL description="DOLFINx in 32-bit real and complex modes"
 
 ########################################
@@ -196,7 +196,7 @@ ENV SHELL /bin/bash
 
 WORKDIR /root
 
-FROM dolfinx AS mfem
+FROM dolfinx-user-env AS mfem-user-env
 
 ARG HYPRE_VERSION=2.32.0
 ARG METIS_VERSION=4.0.3
@@ -235,7 +235,7 @@ RUN git clone --branch=${MFEM_BRANCH} --single-branch https://github.com/mfem/mf
 RUN cd mfem && \
     make parallel -j 2
 
-FROM mfem AS julia
+FROM mfem-user-env AS julia-user-env
 
 RUN apt-get update && apt-get install -y curl
 RUN curl -fsSL https://install.julialang.org | sh  -s -- --yes
@@ -243,7 +243,7 @@ ENV PATH=/root/.juliaup/bin:$PATH
 RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "MultivariateOrthogonalPolynomials", "Plots", "LaTeXStrings", "IterativeSolvers", "LinearMaps", "MatrixFactorizations", "Gridap", "LineSearches"])'
 
 
-RUN julia as firedrake
+FROM julia-user-env as firedrake-user-env
 
 RUN apt-get update && apt-get install -y curl sudo
 RUN curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
