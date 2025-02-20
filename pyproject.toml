@@ -8,7 +8,7 @@ description = "Tools for the Latent Variable Proximal Point method"
 authors = [{ name = "Jørgen S. Dokken", email = "dokken@simula.no" }]
 license = { file = "LICENSE" }
 readme = "README.md"
-dependencies = ["fenics-dolfinx>=0.9.0"]
+dependencies = ["fenics-dolfinx>=0.9.0", "gmsh"]
 
 [project.optional-dependencies]
 dev = ["pdbpp", "ipython", "mypy", "ruff"]

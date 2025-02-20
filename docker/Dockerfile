@@ -253,15 +253,18 @@ ENV TMP_PETSC_DIR=${PETSC_DIR}
 ENV TMP_PETSC_ARCH=${PETSC_ARCH}
 
 # NetGen only works on AMD, VTK wheels in firedrake install is only AMD
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
-    then unset PYTHONPATH && unset PETSC_DIR && unset PETSC_ARCH && python3 firedrake-install --no-vtk ; \
-    elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
-    then  unset PYTHONPATH && unset PETSC_DIR && unset PETSC_ARCH && python3 firedrake-install --netgen ; \
-    else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
-    fi
-ENV PYTHONPATH=${TMP_PYTHON_PATH}
-ENV PETSC_DIR=${TMP_PETSC_DIR}
-ENV PETSC_ARCH=${TMP_PETSC_ARCH}
+ENV HDF5_DIR="/usr/local"
+ENV HDF5_MPI="ON"
+# ENV PETSC_CONFIGURE_OPTIONS="--with-hdf5-dir=$HDF5_DIR"
+# RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
+#     then unset PYTHONPATH && unset PETSC_DIR && unset PETSC_ARCH && python3 firedrake-install --no-vtk ; \
+#     elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
+#     then  unset PYTHONPATH && unset PETSC_DIR && unset PETSC_ARCH && python3 firedrake-install --netgen --minimal-petsc ; \
+#     else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
+#     fi
+# ENV PYTHONPATH=${TMP_PYTHON_PATH}
+# ENV PETSC_DIR=${TMP_PETSC_DIR}
+# ENV PETSC_ARCH=${TMP_PETSC_ARCH}
 
 # Add all examples in repository
 WORKDIR /root/LVPP/mfem/examples

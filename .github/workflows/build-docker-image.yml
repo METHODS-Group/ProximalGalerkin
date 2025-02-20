@@ -82,7 +82,7 @@ jobs:
           retention-days: 1
 
   merge-and-publish:
-    if: github.event_name == 'push'
+    # if: github.event_name == 'push'
     # strategy:
     #   matrix:
     #     backend: ["firedrake", "dolfinx", "mfem"]

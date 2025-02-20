@@ -1,8 +1,15 @@
 # Example 3 (Figure 4): Variational Fracture
 
-This example can be run from within `examples/fracture` using both the `DOLFINx` and the `Firedrake` Docker containers.
+This example can be executed using either FEniCS (DOLFINx) or Firedrake.
+
+> [!NOTE]
+> This demo requires [NetGen](https://github.com/NGSolve/netgen) and
+> specifically [netgen-mesher](https://pypi.org/project/netgen-mesher/).
+> Unfortunately, netgen-mesher does not supply `linux/arm64` wheels, and thus
+> are not available within `ghcr.io/methods-group/proximalgalerkin` on `arm` machines.
 
 ## DOLFINx
+
 The `DOLFINx` code can be executed with
 
 ```bash

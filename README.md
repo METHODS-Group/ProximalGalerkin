@@ -12,14 +12,25 @@ This repository contains implementations of the proximal Galerkin finite element
 
 Please cite the aforementioned manuscript if using the code in this repository.
 
-## Instructions
+## Installation instructions
 
-We encourage using following Docker containers to run the codes described below:
+We provide a single docker container `ghcr.io/methods-group/proximalgalerkin` from [Proximal Galerkin Docker container registry](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin) that provides an installation of all dependencies used in the examples of this paper.
 
-- DOLFINx: [ghcr.io/methods-group/proximalgalerkin-dolfinx:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-dolfinx)
-- MFEM: [ghcr.io/methods-group/proximalgalerkin-mfem:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-mfem)
-- Firedrake: [ghcr.io/methods-group/proximalgalerkin-firedrake:main](https://github.com/METHODS-Group/ProximalGalerkin/pkgs/container/proximalgalerkin-firedrake)
-- Julia/GridAP: [julia:1.10.8](https://hub.docker.com/layers/library/julia/1.10.8/images/sha256-66656909ed7b5e75f4208631b01fc585372f906d68353d97cc06b40a8028c437)
+One can start the image with 
+```bash
+docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin
+```
+Within this installation you find all examples under `/root/LVPP`.
+
+> [!NOTE]
+> When wanting to run [MFEM](https://mfem.org/)-examples, one has to navigate to
+> `/root/LVPP/mfem/examples` and call `make name_of_example` to compile the corresponding demo.
+
+> [!NOTE]
+> When wanting to run [Firedrake](https://www.firedrakeproject.org/)-examples, one has to navigate to
+> activate the Firedrake Python environment with `source /root/LVPP/firedrake/bin/activate`.
+> To deactivate this environment, and return to a [FEniCS](https://fenicsproject.org/) environment call `deactivate` in the terminal.
+
 
 ## Table of Examples and Figures
 
