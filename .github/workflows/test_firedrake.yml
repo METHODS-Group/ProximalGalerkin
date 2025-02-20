@@ -19,7 +19,7 @@ jobs:
         
         - name: Activate Firedrake virtual environment
           run: |
-              . /home/firedrake/firedrake/bin/activate
+              . /root/LVPP/firedrake/bin/activate
               echo PATH=$PATH >> $GITHUB_ENV
 
         - name: Run example 12

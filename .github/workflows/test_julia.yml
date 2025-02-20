@@ -18,9 +18,14 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/methods-group/proximalgalerkin@sha256:9dc54d705a963b647f238e1f469f9bc07ee4ab9612da2a2f6111ddcd60c733ad
-
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [
+            "ghcr.io/methods-group/proximalgalerkin@sha256:9dc54d705a963b647f238e1f469f9bc07ee4ab9612da2a2f6111ddcd60c733ad",
+            "julia:latest"
+          ]
     steps:
       - uses: actions/checkout@v4
 
