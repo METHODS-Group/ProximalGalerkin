@@ -9,7 +9,7 @@ on:
 jobs:
   eikonal:
     runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
+    container: ghcr.io/methods-group/proximalgalerkin@sha256:9dc54d705a963b647f238e1f469f9bc07ee4ab9612da2a2f6111ddcd60c733ad
     steps:
       - uses: actions/checkout@v4
 

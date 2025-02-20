@@ -19,6 +19,7 @@ jobs:
         container: [
             "ghcr.io/fenics/dolfinx/dolfinx:stable",
             #"ghcr.io/fenics/dolfinx/dolfinx:nightly"
+            "ghcr.io/methods-group/proximalgalerkin@sha256:9dc54d705a963b647f238e1f469f9bc07ee4ab9612da2a2f6111ddcd60c733ad"
           ]
 
     steps:
@@ -86,7 +87,7 @@ jobs:
 
   obstacle:
     runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
+    container: ghcr.io/methods-group/proximalgalerkin@sha256:9dc54d705a963b647f238e1f469f9bc07ee4ab9612da2a2f6111ddcd60c733ad
 
     steps:
       - uses: actions/checkout@v4
@@ -103,45 +104,21 @@ jobs:
           python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
           python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
 
-  create-mobius:
-    runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin-mfem:main
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Copy mesh-creation script
         run: |
-          cp ./examples/11_eikonal/convert_mesh.cpp /home/euler/mfem/examples
+          cp ./examples/11_eikonal/convert_mesh.cpp /root/LVPP/mfem/examples
 
       - name: Compile mesh-creation script
-        working-directory: /home/euler/mfem/examples
+        working-directory: /root/LVPP/mfem/examples
         run: |
           make convert_mesh
           ./convert_mesh --mesh ../data/mobius-strip.mesh
-
-      - name: Upload mesh as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mobius-strip
-          path: /home/euler/mfem/examples/mobius-strip.mesh
-
-  run-mobius:
-    runs-on: ubuntu-24.04
-    needs: create-mobius
-    container: ghcr.io/fenics/dolfinx/dolfinx:stable
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           python3 -m pip install -e .[eikonal]
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: mobius-strip
-          path: ./examples/11_eikonal/mobius-strip
-
       - name: Run example 11
         working-directory: ./examples/11_eikonal
         run: |
-          python3 eikonal_dolfinx.py --mesh-dir=./mobius-strip
+          python3 eikonal_dolfinx.py --mesh-dir=/root/LVPP/mfem/examples/mobius-strip.mesh
