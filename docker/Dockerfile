@@ -273,9 +273,9 @@ ADD . .
 # Build DOLFINx dependencies
 # netgen-mesher does not have a linux/arm build
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
-    then RUN python3 -m pip install -e .[obstacle,signorini,eikonal,monge_ampere]; \
+    then python3 -m pip install -e .[obstacle,signorini,eikonal,monge_ampere]; \
     elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
-    then RUN python3 -m pip install -e .[examples]  ; \
+    then python3 -m pip install -e .[examples]  ; \
     else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
     fi
 
