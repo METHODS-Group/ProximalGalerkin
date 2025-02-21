@@ -1,0 +1,3 @@
+export PATH=/dolfinx-env/bin:${PATH}
+source dolfinx-real-mode
+source /dolfinx/bin/activate
