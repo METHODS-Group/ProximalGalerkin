@@ -205,13 +205,13 @@ ARG MFEM_BRANCH=VectorDiffusionIntegrator
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get -qq update && \
-    apt-get -y install wget git cmake build-essential mpich libmpich-dev && \
+    apt-get -y install wget git cmake build-essential && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 WORKDIR /root/LVPP
 
-# Buld hypre
+# Build hypre
 RUN wget https://github.com/hypre-space/hypre/archive/refs/tags/v${HYPRE_VERSION}.tar.gz
 RUN tar -xvf v${HYPRE_VERSION}.tar.gz
 
@@ -279,6 +279,7 @@ FROM firedrake-petsc-env AS firedrake-env
 
 # INSTALL Firedrake
 WORKDIR ${FIREDRAKE_PYTHON}/firedrake
+RUN python3 -m pip install --no-cache-dir mpi4py petsc4py -v
 RUN python3 -m pip install --no-binary h5py . -v
 # Install ngs-petsc and vtk on amd, only vtk on arm
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
@@ -293,7 +294,7 @@ RUN chmod +x /usr/local/bin/firedrake-mode
 
 # Revert to DOLFINx environment
 ENV PYTHONPATH=${TMP_PYTHON_PATH}
-ENV PETSC_DIR=${TMP_PETSC_DIR}
+ENV PETSC_DIR=${TMP_PETSC_DIR}firedrake-mode
 ENV PETSC_ARCH=${TMP_PETSC_ARCH}
 
 # Add all examples in repository
@@ -302,9 +303,12 @@ ADD ./examples/11_eikonal/ex40.cpp ex40_taylor_hood.cpp
 ADD ./examples/11_eikonal/convert_mesh.cpp convert_mesh.cpp
 WORKDIR /root/LVPP
 ADD . .
+ADD docker/dolfinx-mode /usr/local/bin/dolfinx-mode
+RUN chmod +x /usr/local/bin/dolfinx-mode
 
 # Build DOLFINx dependencies
 # netgen-mesher does not have a linux/arm build
+ENV PATH=/dolfinx-env/bin:$PATH
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
     then python3 -m pip install -e .[obstacle,signorini,eikonal,monge_ampere]; \
     elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
