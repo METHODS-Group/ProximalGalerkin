@@ -1,8 +1,61 @@
-FROM firedrakeproject/firedrake
+FROM ubuntu:24.04 AS tmp
 
-RUN echo "source /home/firedrake/firedrake/bin/activate" >> /home/firedrake/.bashrc
-RUN ./firedrake/bin/python3 -m pip install siphash24
+# Install build requirements
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -y bison build-essential cmake flex git ninja-build pkg-config libfftw3-dev libfftw3-mpi-dev libhwloc-dev liblapack-dev python3-dev wget \
+    python3-pip \
+    python3-venv \
+    gfortran \
+    g++ \
+    libopenblas-dev
 
-# Copy over examples and source code
-ADD . /home/firedrake/lvpp_code/
-WORKDIR /home/firedrake/lvpp_code
+
+FROM tmp AS mpi
+ARG OPENMPI_SERIES=5.0
+ARG OPENMPI_PATCH=6
+RUN wget https://download.open-mpi.org/release/open-mpi/v${OPENMPI_SERIES}/openmpi-${OPENMPI_SERIES}.${OPENMPI_PATCH}.tar.gz && \
+    tar xfz openmpi-${OPENMPI_SERIES}.${OPENMPI_PATCH}.tar.gz  && \
+    cd openmpi-${OPENMPI_SERIES}.${OPENMPI_PATCH} && \
+    ./configure  && \
+    make -j${BUILD_NP} install; \
+    ldconfig && \
+    rm -rf /tmp/*
+
+FROM mpi AS hdf5
+ARG HDF5_VERSION=1.14.5
+RUN wget -nc --quiet https://github.com/HDFGroup/hdf5/archive/refs/tags/hdf5_${HDF5_VERSION}.tar.gz && \
+    tar xfz hdf5_${HDF5_VERSION}.tar.gz && \
+    cmake -G Ninja -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DHDF5_ENABLE_PARALLEL=on -DHDF5_ENABLE_Z_LIB_SUPPORT=on -B build-dir -S hdf5-hdf5_${HDF5_VERSION} && \
+    cmake --build build-dir && \
+    cmake --install build-dir && \
+    rm -rf /tmp/*
+
+
+FROM hdf5 AS intermediate
+
+ENV HDF5_DIR="/usr/local"
+ENV HDF5_MPI="ON"
+ENV FIREDRAKE_PYTHON=/firedrake-env
+RUN python3 -m venv ${FIREDRAKE_PYTHON}
+WORKDIR ${FIREDRAKE_PYTHON}
+RUN git clone --branch=connorjward/pip-install --single-branch  https://github.com/firedrakeproject/firedrake
+ENV PATH=${FIREDRAKE_PYTHON}/bin:$PATH
+
+
+# Install firedrake-dependent PETSc
+RUN git clone https://github.com/firedrakeproject/petsc.git
+WORKDIR ${FIREDRAKE_PYTHON}/petsc
+ENV PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
+ENV PETSC_ARCH=arch-firedrake-default
+RUN echo $PWD
+
+RUN ./configure  --with-c2html=0 --with-debugging=0 --with-fortran-bindings=0 --with-shared-libraries=1 \
+    --with-strict-petscerrorcode --COPTFLAGS=-O3 -march=native -mtune=native --CXXOPTFLAGS=-O3 -march=native -mtune=native --FOPTFLAGS=-O3 -march=native \
+    -mtune=native --with-bison --with-fftw --with-hdf5-lib=${HDF5_DIR}/lib/libhdf5.a --with-hdf5-include=${HDF5_DIR}/include --with-hwloc --download-metis --download-mumps \
+    --download-netcdf --download-pastix --download-pnetcdf --download-ptscotch --download-scalapack --download-suitesparse --download-superlu_dist --with-zlib --download-hypre
+RUN make
+
+# INSTALL Firedrake
+WORKDIR ${FIREDRAKE_PYTHON}/firedrake
+RUN python3 -m pip install --no-binary h5py . -v

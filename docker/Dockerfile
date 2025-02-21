@@ -243,25 +243,55 @@ ENV PATH=/root/.juliaup/bin:$PATH
 RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "MultivariateOrthogonalPolynomials", "Plots", "LaTeXStrings", "IterativeSolvers", "LinearMaps", "MatrixFactorizations", "Gridap", "LineSearches"])'
 
 
-FROM julia-user-env as firedrake-user-env
+FROM julia-user-env as firedrake-petsc-env
 
 RUN apt-get update && apt-get install -y curl sudo
-RUN curl -O https://raw.githubusercontent.com/firedrakeproject/firedrake/master/scripts/firedrake-install
 
 ENV TMP_PYTHON_PATH=${PYTHONPATH}
 ENV TMP_PETSC_DIR=${PETSC_DIR}
 ENV TMP_PETSC_ARCH=${PETSC_ARCH}
 
-# NetGen only works on AMD, VTK wheels in firedrake install is only AMD
+
 ENV HDF5_DIR="/usr/local"
 ENV HDF5_MPI="ON"
-ENV PETSC_CONFIGURE_OPTIONS="--with-hdf5-dir=$HDF5_DIR"
+
+# Setup firedrake virtual env
+ENV FIREDRAKE_PYTHON=/firedrake-env
+RUN python3 -m venv ${FIREDRAKE_PYTHON}
+WORKDIR ${FIREDRAKE_PYTHON}
+# FIXME: Change when this is merged
+RUN git clone --branch=connorjward/pip-install --single-branch  https://github.com/firedrakeproject/firedrake
+ENV PATH=${FIREDRAKE_PYTHON}/bin:$PATH
+
+# Install firedrake-dependent PETSc
+RUN git clone https://github.com/firedrakeproject/petsc.git
+WORKDIR ${FIREDRAKE_PYTHON}/petsc
+ENV PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
+ENV PETSC_ARCH=arch-firedrake-default
+RUN apt-get install -y autoconf libtool flex bison libfftw3-dev libfftw3-mpi-dev libhwloc-dev
+RUN ./configure  --with-c2html=0 --with-debugging=0 --with-fortran-bindings=0 --with-shared-libraries=1 \
+    --with-strict-petscerrorcode --COPTFLAGS=-O3 -march=native -mtune=native --CXXOPTFLAGS=-O3 -march=native -mtune=native --FOPTFLAGS=-O3 -march=native \
+    -mtune=native --with-bison --with-fftw --with-hdf5-lib=${HDF5_DIR}/lib/libhdf5.a --with-hdf5-include=${HDF5_DIR}/include --with-hwloc --download-metis --download-mumps \
+    --download-netcdf --download-pastix --download-pnetcdf --download-ptscotch --download-scalapack --download-suitesparse --download-superlu_dist --with-zlib --download-hypre
+RUN make
+
+FROM firedrake-petsc-env AS firedrake-env
+
+# INSTALL Firedrake
+WORKDIR ${FIREDRAKE_PYTHON}/firedrake
+RUN python3 -m pip install --no-binary h5py . -v
+# Install ngs-petsc and vtk on amd, only vtk on arm
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
-    then unset PYTHONPATH && unset PETSC_DIR && unset PETSC_ARCH && python3 firedrake-install --no-vtk ; \
+    then python3 -m pip install --no-cache-dir https://github.com/scientificcomputing/vtk-aarch64/releases/download/v9.4.1-py3.12/vtk-9.4.1.dev0-cp312-cp312-linux_aarch64.whl; \
     elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
-    then  unset PYTHONPATH && unset PETSC_DIR && unset PETSC_ARCH && python3 firedrake-install --netgen ; \
+    then python3 -m pip install ngspetsc netgen-mesher vtk ; \
     else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
     fi
+
+ADD docker/firedrake-mode /usr/local/bin/firedrake-mode
+RUN chmod +x /usr/local/bin/firedrake-mode
+
+# Revert to DOLFINx environment
 ENV PYTHONPATH=${TMP_PYTHON_PATH}
 ENV PETSC_DIR=${TMP_PETSC_DIR}
 ENV PETSC_ARCH=${TMP_PETSC_ARCH}
