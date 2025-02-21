@@ -1,6 +1,5 @@
 #!/bin/bash
 source ${FIREDRAKE_PYTHON}/bin/activate
-PYV=`python3 -c "import sys;t='{v[0]}.{v[1]}'.format(v=list(sys.version_info[:2]));sys.stdout.write(t)";`
 export PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
 export PETSC_ARCH=arch-firedrake-default
 export LD_LIBRARY_PATH=${FIREDRAKE_PYTHON}/lib:$LD_LIBRARY_PATH

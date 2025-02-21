@@ -243,7 +243,7 @@ ENV PATH=/root/.juliaup/bin:$PATH
 RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "MultivariateOrthogonalPolynomials", "Plots", "LaTeXStrings", "IterativeSolvers", "LinearMaps", "MatrixFactorizations", "Gridap", "LineSearches"])'
 
 
-FROM julia-user-env as firedrake-petsc-env
+FROM julia-user-env AS firedrake-petsc-env
 
 RUN apt-get update && apt-get install -y curl sudo
 
