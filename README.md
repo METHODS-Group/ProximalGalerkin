@@ -20,16 +20,32 @@ One can start the image with
 ```bash
 docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin@sha256:360a5f7bc991157d146cccab764e5d24a0953ba8c838291c92e20fa3391c5eb6
 ```
+This shares the current directory with the docker container under the location `/root/shared`.
+To restart this container at a later instance call
+```bash
+docker container start -i proxmial-examples
+```
+
 Within this installation you find all examples under `/root/LVPP`.
 
-> [!NOTE]
-> When wanting to run [MFEM](https://mfem.org/)-examples, one has to navigate to
-> `/root/LVPP/mfem/examples` and call `make name_of_example` to compile the corresponding demo.
+### MFEM
+When wanting to run [MFEM](https://mfem.org/)-examples, one has to navigate to
+ `/root/LVPP/mfem/examples` and call `make name_of_example` to compile the corresponding demo.
 
-> [!NOTE]
-> When wanting to run [Firedrake](https://www.firedrakeproject.org/)-examples, one has to navigate to
-> activate the Firedrake Python environment with `source /root/LVPP/firedrake/bin/activate`.
-> To deactivate this environment, and return to a [FEniCS](https://fenicsproject.org/) environment call `deactivate` in the terminal.
+The MFEM scripts from this paper are already placed in this location in the container.
+
+### FEniCS/Firedrake compatibility
+FEniCS and Firedrake are installed in separate virtual environments within the container.
+At launch, the user gets to use `FEniCS` by default.
+To change to `Firedrake`, call
+```bash
+source firedrake-mode
+```
+To change back to `FEniCS` call
+```bash
+source dolfinx-mode
+```
+
 
 
 ## Table of Examples and Figures
