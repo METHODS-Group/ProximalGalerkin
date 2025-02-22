@@ -103,7 +103,7 @@ jobs:
 
       - name: Install package
         run: |
-          python3 -m pip install -e .[examples]
+          python3 -m pip install -e .[obstacle]
 
       - name: Run example 1
         working-directory: ./examples/01_obstacle_problem
