@@ -1,8 +1,9 @@
-FROM ghcr.io/fenics/dolfinx/dev-env:v0.9.0-openmpi AS optimization
+FROM ghcr.io/fenics/dolfinx/dev-env:v0.9.0-openmpi AS galahad
 ARG TARGETPLATFORM
-
+ENV DEBIAN_FRONTEND=noninteractive
 ENV OMPI_ALLOW_RUN_AS_ROOT=1
 ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 
 WORKDIR /galahad
 RUN python3 -m pip install meson
@@ -15,9 +16,7 @@ RUN meson setup ${MESON_DIR} -Dpythoniface=true -Dpython.install_env=auto && \
     meson install -C ${MESON_DIR} && \
     meson test -C ${MESON_DIR} --suite=Python
 
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 ARG IPOPT_VERSION=3.14.11
-ENV DEBIAN_FRONTEND=noninteractive
 
 # Pull MUMPS 
 WORKDIR /ipopt
@@ -36,7 +35,7 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
 RUN make && \
     make install
 
-
+FROM galahad AS optimization
 WORKDIR /ipopt
 
 # Pull IPOPT 
@@ -196,7 +195,58 @@ ENV SHELL /bin/bash
 
 WORKDIR /root
 
-FROM dolfinx-user-env AS mfem-user-env
+FROM dolfinx-user-env AS firedrake-petsc-env
+RUN apt-get update && apt-get install -y curl sudo
+
+ENV TMP_PYTHON_PATH=${PYTHONPATH}
+ENV TMP_PETSC_DIR=${PETSC_DIR}
+ENV TMP_PETSC_ARCH=${PETSC_ARCH}
+
+ENV PYTHONPATH=""
+ENV HDF5_DIR="/usr/local"
+ENV HDF5_MPI="ON"
+
+# Setup firedrake virtual env
+ENV FIREDRAKE_PYTHON=/firedrake-env
+RUN python3 -m venv ${FIREDRAKE_PYTHON}
+WORKDIR ${FIREDRAKE_PYTHON}
+# FIXME: Change when this is merged
+RUN git clone --branch=connorjward/pip-install --single-branch  https://github.com/firedrakeproject/firedrake
+ENV PATH=${FIREDRAKE_PYTHON}/bin:$PATH
+
+# Install firedrake-dependent PETSc
+RUN git clone https://github.com/firedrakeproject/petsc.git
+WORKDIR ${FIREDRAKE_PYTHON}/petsc
+ENV PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
+ENV PETSC_ARCH=arch-firedrake-default
+RUN apt-get install -y autoconf libtool flex bison libhwloc-dev
+RUN ./configure  --with-c2html=0 --with-debugging=0 --with-fortran-bindings=0 --with-shared-libraries=1 \
+    --with-strict-petscerrorcode --COPTFLAGS=-O3 -march=native -mtune=native --CXXOPTFLAGS=-O3 -march=native -mtune=native --FOPTFLAGS=-O3 -march=native \
+    -mtune=native --with-bison --with-hdf5-lib=${HDF5_DIR}/lib/libhdf5.a --with-hdf5-include=${HDF5_DIR}/include --with-hwloc --download-metis --download-mumps \
+    --download-netcdf --download-pastix --download-pnetcdf --download-ptscotch --download-scalapack --download-suitesparse --download-superlu_dist --with-zlib --download-hypre
+RUN make
+
+FROM firedrake-petsc-env AS firedrake-env
+
+# INSTALL Firedrake
+WORKDIR ${FIREDRAKE_PYTHON}/firedrake
+RUN python3 -m pip install --no-cache-dir mpi4py petsc4py -v
+RUN python3 -m pip install --no-binary h5py . -v
+# Install ngs-petsc and vtk on amd, only vtk on arm
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
+    then python3 -m pip install --no-cache-dir https://github.com/scientificcomputing/vtk-aarch64/releases/download/v9.4.1-py3.12/vtk-9.4.1.dev0-cp312-cp312-linux_aarch64.whl; \
+    elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
+    then python3 -m pip install ngspetsc netgen-mesher vtk ; \
+    else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
+    fi
+
+# Revert to DOLFINx environment
+ENV PYTHONPATH=${TMP_PYTHON_PATH}
+ENV PETSC_DIR=${TMP_PETSC_DIR}
+ENV PETSC_ARCH=${TMP_PETSC_ARCH}
+
+FROM firedrake-env AS mfem-user-env
+WORKDIR /root/LVPP
 
 ARG HYPRE_VERSION=2.32.0
 ARG METIS_VERSION=4.0.3
@@ -243,78 +293,29 @@ ENV PATH=/root/.juliaup/bin:$PATH
 RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "MultivariateOrthogonalPolynomials", "Plots", "LaTeXStrings", "IterativeSolvers", "LinearMaps", "MatrixFactorizations", "Gridap", "LineSearches"])'
 
 
-FROM julia-user-env AS firedrake-petsc-env
 
-RUN apt-get update && apt-get install -y curl sudo
-
-ENV TMP_PYTHON_PATH=${PYTHONPATH}
-ENV TMP_PETSC_DIR=${PETSC_DIR}
-ENV TMP_PETSC_ARCH=${PETSC_ARCH}
-
-
-ENV HDF5_DIR="/usr/local"
-ENV HDF5_MPI="ON"
-
-# Setup firedrake virtual env
-ENV FIREDRAKE_PYTHON=/firedrake-env
-RUN python3 -m venv ${FIREDRAKE_PYTHON}
-WORKDIR ${FIREDRAKE_PYTHON}
-# FIXME: Change when this is merged
-RUN git clone --branch=connorjward/pip-install --single-branch  https://github.com/firedrakeproject/firedrake
-ENV PATH=${FIREDRAKE_PYTHON}/bin:$PATH
-
-# Install firedrake-dependent PETSc
-RUN git clone https://github.com/firedrakeproject/petsc.git
-WORKDIR ${FIREDRAKE_PYTHON}/petsc
-ENV PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
-ENV PETSC_ARCH=arch-firedrake-default
-RUN apt-get install -y autoconf libtool flex bison libfftw3-dev libfftw3-mpi-dev libhwloc-dev
-RUN ./configure  --with-c2html=0 --with-debugging=0 --with-fortran-bindings=0 --with-shared-libraries=1 \
-    --with-strict-petscerrorcode --COPTFLAGS=-O3 -march=native -mtune=native --CXXOPTFLAGS=-O3 -march=native -mtune=native --FOPTFLAGS=-O3 -march=native \
-    -mtune=native --with-bison --with-fftw --with-hdf5-lib=${HDF5_DIR}/lib/libhdf5.a --with-hdf5-include=${HDF5_DIR}/include --with-hwloc --download-metis --download-mumps \
-    --download-netcdf --download-pastix --download-pnetcdf --download-ptscotch --download-scalapack --download-suitesparse --download-superlu_dist --with-zlib --download-hypre
-RUN make
-
-FROM firedrake-petsc-env AS firedrake-env
-
-# INSTALL Firedrake
-WORKDIR ${FIREDRAKE_PYTHON}/firedrake
-RUN python3 -m pip install --no-cache-dir mpi4py petsc4py -v
-RUN python3 -m pip install --no-binary h5py . -v
-# Install ngs-petsc and vtk on amd, only vtk on arm
-RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
-    then python3 -m pip install --no-cache-dir https://github.com/scientificcomputing/vtk-aarch64/releases/download/v9.4.1-py3.12/vtk-9.4.1.dev0-cp312-cp312-linux_aarch64.whl; \
-    elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
-    then python3 -m pip install ngspetsc netgen-mesher vtk ; \
-    else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
-    fi
-
-ADD docker/firedrake-mode /usr/local/bin/firedrake-mode
-RUN chmod +x /usr/local/bin/firedrake-mode
-
-# Revert to DOLFINx environment
-ENV PYTHONPATH=${TMP_PYTHON_PATH}
-ENV PETSC_DIR=${TMP_PETSC_DIR}firedrake-mode
-ENV PETSC_ARCH=${TMP_PETSC_ARCH}
-
-# Add all examples in repository
+# ADD various files to the docker container for easy switching between environments
 WORKDIR /root/LVPP/mfem/examples
 ADD ./examples/11_eikonal/ex40.cpp ex40_taylor_hood.cpp
 ADD ./examples/11_eikonal/convert_mesh.cpp convert_mesh.cpp
-WORKDIR /root/LVPP
-ADD . .
+ADD docker/firedrake-mode /usr/local/bin/firedrake-mode
+RUN chmod +x /usr/local/bin/firedrake-mode
 ADD docker/dolfinx-mode /usr/local/bin/dolfinx-mode
 RUN chmod +x /usr/local/bin/dolfinx-mode
+
+# Add all examples in repository
+WORKDIR /root/LVPP
+ADD . .
 
 # Build DOLFINx dependencies
 # netgen-mesher does not have a linux/arm build
 ENV PATH=/dolfinx-env/bin:$PATH
+WORKDIR /root/LVPP
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
     then python3 -m pip install -e .[obstacle,signorini,eikonal,monge_ampere]; \
     elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
     then python3 -m pip install -e .[examples]  ; \
     else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
     fi
-
-WORKDIR /root/LVPP
+ENV OMP_NUM_THREADS=1
 
