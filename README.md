@@ -18,7 +18,7 @@ We provide a single docker container `ghcr.io/methods-group/proximalgalerkin` fr
 
 One can start the image with 
 ```bash
-docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin
+docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin@sha256:360a5f7bc991157d146cccab764e5d24a0953ba8c838291c92e20fa3391c5eb6@sha256:dd41c6afdf8bf3ae54d719fa281c5db3412d69df27f13c374a20b6d35b8aa14b
 ```
 Within this installation you find all examples under `/root/LVPP`.
 

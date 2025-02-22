@@ -11,7 +11,7 @@ jobs:
   test-examples:
     runs-on: ubuntu-24.04
     container: 
-        image: ghcr.io/methods-group/proximalgalerkin@sha256:9dc54d705a963b647f238e1f469f9bc07ee4ab9612da2a2f6111ddcd60c733ad
+        image: ghcr.io/methods-group/proximalgalerkin@sha256:360a5f7bc991157d146cccab764e5d24a0953ba8c838291c92e20fa3391c5eb6@sha256:dd41c6afdf8bf3ae54d719fa281c5db3412d69df27f13c374a20b6d35b8aa14b
         options: --user root
 
     steps:
@@ -19,11 +19,12 @@ jobs:
         
         - name: Activate Firedrake virtual environment
           run: |
-              . /root/LVPP/firedrake/bin/activate
+              . /firedrake-env/bin/activate
               echo PATH=$PATH >> $GITHUB_ENV
 
         - name: Run example 12
           working-directory: ./examples/12_monge_ampere
           run: |
+            source firedrake-mode
             python3 monge_ampere_cg_cg_dg_firedrake.py
     

@@ -23,8 +23,8 @@ jobs:
       fail-fast: false
       matrix:
         container: [
-            "ghcr.io/methods-group/proximalgalerkin@sha256:9dc54d705a963b647f238e1f469f9bc07ee4ab9612da2a2f6111ddcd60c733ad",
-            "julia:latest"
+          "ghcr.io/methods-group/proximalgalerkin@sha256:360a5f7bc991157d146cccab764e5d24a0953ba8c838291c92e20fa3391c5eb6@sha256:dd41c6afdf8bf3ae54d719fa281c5db3412d69df27f13c374a20b6d35b8aa14b",
+          "julia:latest"
           ]
     steps:
       - uses: actions/checkout@v4
