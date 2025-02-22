@@ -1,8 +1,7 @@
 name: Create docker images for the various packages used in this paper
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*", "stable"]
   # pull_request:
   #   branches:
   #     - release
@@ -17,7 +16,7 @@ jobs:
   build-image:
     strategy:
       matrix:
-        backend: ["firedrake", "dolfinx", "mfem", "julia"]
+        #["firedrake", "dolfinx", "mfem", "julia"]
         platform: [
             { runner: "ubuntu-24.04", platform: amd64 },
             { runner: "ubuntu-24.04-arm", platform: arm64 }
@@ -45,7 +44,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.backend }}
+          # images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.backend }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Split metadata
         id: split
@@ -58,7 +58,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/Dockerfile.${{ matrix.backend }}
+          # file: docker/Dockerfile.${{ matrix.backend }}
+          file: docker/Dockerfile
           platforms: linux/${{ matrix.platform.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,"name=${{ steps.split.outputs.image }}",push-by-digest=true,name-canonical=true,push=true
@@ -73,16 +74,18 @@ jobs:
         #if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.backend }}-${{ matrix.platform.platform }}
+          # name: digests-${{ matrix.backend }}-${{ matrix.platform.platform }}
+          name: digests-${{ matrix.platform.platform }}
+
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
 
   merge-and-publish:
-    if: github.event_name == 'push'
-    strategy:
-      matrix:
-        backend: ["firedrake", "dolfinx", "mfem"]
+    # if: github.event_name == 'push'
+    # strategy:
+    #   matrix:
+    #     backend: ["firedrake", "dolfinx", "mfem"]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,7 +98,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-${{ matrix.backend }}*
+          # pattern: digests-${{ matrix.backend }}*
+          pattern: digests-*
           merge-multiple: true
 
       - name: Log in to the Container registry
@@ -109,7 +113,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.backend }}
+          # images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.backend }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Split metadata
         id: split

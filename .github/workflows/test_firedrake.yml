@@ -8,18 +8,25 @@ on:
 
 jobs:
 
-  test-obstacle:
-    runs-on: ubuntu-24.04
-    container: 
-        image: ghcr.io/methods-group/proximalgalerkin-firedrake:main
-        options: --user root
+  test-examples:
+    runs-on: ${{ matrix.platform }}
+    container: ${{ matrix.container }}
+    env:
+      DEB_PYTHON_INSTALL_LAYOUT: deb_system
+    strategy:
+      fail-fast: true
+      matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
+        container: [
+            "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env"
+          ]
 
     steps:
         - uses: actions/checkout@v4
         
         - name: Activate Firedrake virtual environment
           run: |
-              . /home/firedrake/firedrake/bin/activate
+              . /firedrake-env/bin/activate
               echo PATH=$PATH >> $GITHUB_ENV
 
         - name: Run example 12

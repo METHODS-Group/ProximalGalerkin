@@ -1,13 +1,21 @@
 ## Example 2 (Figure 3): The Signorini Problem
 
-Deploy the `DOLFINx` Docker container to reproduce the results in this example.
-Then call
+This demo requires:
+- DOLFINx
+- GMSH
+- The LVPP package from this repository.
 
+These are all installed in `ghcr.io/methods-group/proximalgalerkin`.
+One can also use `conda`, or other DOLFINx docker images, and install the `LVPP`-package with
+```bash
+python3 -m pip install git+https://https://github.com/METHODS-Group/ProximalGalerkin
+```
+
+The mesh can be generated with
 ```bash
 python3 generate_mesh.py
 ```
-
-from within `examples/signorini` to generate the mesh file `"meshes/half_sphere.xdmf"`.
+and is placed in `"meshes/half_sphere.xdmf"`.
 Next, run the proximal Galerkin method with
 
 ```bash

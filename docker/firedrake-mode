@@ -1,0 +1,5 @@
+#!/bin/bash
+source ${FIREDRAKE_PYTHON}/bin/activate
+export PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
+export PETSC_ARCH=arch-firedrake-default
+export LD_LIBRARY_PATH=${FIREDRAKE_PYTHON}/lib:$LD_LIBRARY_PATH

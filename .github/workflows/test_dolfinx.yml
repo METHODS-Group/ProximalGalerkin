@@ -9,16 +9,18 @@ on:
 jobs:
   standard-examples:
     name: Test on ${{ matrix.container }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.platform }}
     container: ${{ matrix.container }}
     env:
       DEB_PYTHON_INSTALL_LAYOUT: deb_system
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
         container: [
             "ghcr.io/fenics/dolfinx/dolfinx:stable",
             #"ghcr.io/fenics/dolfinx/dolfinx:nightly"
+            "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env"
           ]
 
     steps:
@@ -27,7 +29,7 @@ jobs:
       - name: Install package
         id: install
         run: |
-          python3 -m pip install -e .[examples]
+          python3 -m pip install -e .[obstacle,signorini,eikonal,monge_ampere]
 
       - name: Run example 2
         working-directory: ./examples/02_signorini
@@ -36,10 +38,12 @@ jobs:
           python3 run_lvpp_problem.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
           python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
           python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
+
       - name: Run example 3
-        if: steps.install.conclusion == 'success'
+        if: (steps.install.conclusion == 'success') && (matrix.platform == 'ubuntu-24.04')
         working-directory: ./examples/03_fracture
         run: |
+          python3 -m pip install -e ../../[fracture]
           python3 fracture_dolfinx.py --Tmin=0 --Tmax=2 --num-load-steps=10 --write-frequency=9
 
       - name: Run example 4
@@ -85,15 +89,21 @@ jobs:
           python3 monge_ampere_cg_cg_dg_dolfinx.py
 
   obstacle:
-    runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
+    runs-on: ${{ matrix.platform }}
+    container: ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
+    env:
+      DEB_PYTHON_INSTALL_LAYOUT: deb_system
+    strategy:
+      fail-fast: true
+      matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install package
         run: |
-          python3 -m pip install -e .[examples]
+          python3 -m pip install -e .[obstacle]
 
       - name: Run example 1
         working-directory: ./examples/01_obstacle_problem
@@ -103,45 +113,21 @@ jobs:
           python3 compare_all.py -P ./meshes/disk_2.xdmf -O medium
           python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
 
-  create-mobius:
-    runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin-mfem:main
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Copy mesh-creation script
         run: |
-          cp ./examples/11_eikonal/convert_mesh.cpp /home/euler/mfem/examples
+          cp ./examples/11_eikonal/convert_mesh.cpp /root/LVPP/mfem/examples
 
       - name: Compile mesh-creation script
-        working-directory: /home/euler/mfem/examples
+        working-directory: /root/LVPP/mfem/examples
         run: |
           make convert_mesh
           ./convert_mesh --mesh ../data/mobius-strip.mesh
-
-      - name: Upload mesh as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mobius-strip
-          path: /home/euler/mfem/examples/mobius-strip.mesh
-
-  run-mobius:
-    runs-on: ubuntu-24.04
-    needs: create-mobius
-    container: ghcr.io/fenics/dolfinx/dolfinx:stable
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           python3 -m pip install -e .[eikonal]
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: mobius-strip
-          path: ./examples/11_eikonal/mobius-strip
-
       - name: Run example 11
         working-directory: ./examples/11_eikonal
         run: |
-          python3 eikonal_dolfinx.py --mesh-dir=./mobius-strip
+          python3 eikonal_dolfinx.py --mesh-dir=/root/LVPP/mfem/examples/mobius-strip.mesh

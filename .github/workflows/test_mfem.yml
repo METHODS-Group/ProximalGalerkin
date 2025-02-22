@@ -8,8 +8,16 @@ on:
 
 jobs:
   eikonal:
-    runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin-dolfinx:main
+    runs-on: ${{ matrix.platform }}
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: true
+      matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
+        container: [
+            "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env"
+          ]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -17,7 +25,7 @@ jobs:
         run: |
           cp ./examples/11_eikonal/ex40.cpp /root/LVPP/mfem/examples
 
-      - name: Compile mesh-creation script
+      - name: Run Eikonal on Mobius strip
         working-directory: /root/LVPP/mfem/examples
         run: |
           make ex40

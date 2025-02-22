@@ -1,8 +1,9 @@
-FROM ghcr.io/fenics/dolfinx/dev-env:v0.9.0-openmpi AS optimization
+FROM ghcr.io/fenics/dolfinx/dev-env:v0.9.0-openmpi AS galahad
 ARG TARGETPLATFORM
-
+ENV DEBIAN_FRONTEND=noninteractive
 ENV OMPI_ALLOW_RUN_AS_ROOT=1
 ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 
 WORKDIR /galahad
 RUN python3 -m pip install meson
@@ -15,9 +16,7 @@ RUN meson setup ${MESON_DIR} -Dpythoniface=true -Dpython.install_env=auto && \
     meson install -C ${MESON_DIR} && \
     meson test -C ${MESON_DIR} --suite=Python
 
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 ARG IPOPT_VERSION=3.14.11
-ENV DEBIAN_FRONTEND=noninteractive
 
 # Pull MUMPS 
 WORKDIR /ipopt
@@ -36,7 +35,7 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
 RUN make && \
     make install
 
-
+FROM galahad AS optimization
 WORKDIR /ipopt
 
 # Pull IPOPT 
@@ -140,7 +139,7 @@ ONBUILD WORKDIR /root
 FROM dolfinx-onbuild AS intermediate
 
 
-FROM optimization AS dolfinx
+FROM optimization AS dolfinx-user-env
 LABEL description="DOLFINx in 32-bit real and complex modes"
 
 ########################################
@@ -189,17 +188,134 @@ RUN dpkgArch="$(dpkg --print-architecture)"; \
 RUN mkdir -p /usr/local/share/jupyter/kernels/python3-complex/
 RUN cp /src/dolfinx/docker/complex-kernel.json /usr/local/share/jupyter/kernels/python3-complex/kernel.json
 
-# Add scifem
-RUN python3 -m pip install git+https://github.com/scientificcomputing/scifem.git
 
-# Copy over examples and source code
-ADD . /root/src/
-WORKDIR /root/src/
-RUN python3 -m pip install -e .[examples]
 
 EXPOSE 8888/tcp
 ENV SHELL /bin/bash
 
 WORKDIR /root
 
-RUN python3 -m pip install scifem scipy
+FROM dolfinx-user-env AS firedrake-petsc-env
+RUN apt-get update && apt-get install -y curl sudo
+
+ENV TMP_PYTHON_PATH=${PYTHONPATH}
+ENV TMP_PETSC_DIR=${PETSC_DIR}
+ENV TMP_PETSC_ARCH=${PETSC_ARCH}
+
+ENV PYTHONPATH=""
+ENV HDF5_DIR="/usr/local"
+ENV HDF5_MPI="ON"
+
+# Setup firedrake virtual env
+ENV FIREDRAKE_PYTHON=/firedrake-env
+RUN python3 -m venv ${FIREDRAKE_PYTHON}
+WORKDIR ${FIREDRAKE_PYTHON}
+# FIXME: Change when this is merged
+RUN git clone --branch=connorjward/pip-install --single-branch  https://github.com/firedrakeproject/firedrake
+ENV PATH=${FIREDRAKE_PYTHON}/bin:$PATH
+
+# Install firedrake-dependent PETSc
+RUN git clone https://github.com/firedrakeproject/petsc.git
+WORKDIR ${FIREDRAKE_PYTHON}/petsc
+ENV PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
+ENV PETSC_ARCH=arch-firedrake-default
+RUN apt-get install -y autoconf libtool flex bison libhwloc-dev
+RUN ./configure  --with-c2html=0 --with-debugging=0 --with-fortran-bindings=0 --with-shared-libraries=1 \
+    --with-strict-petscerrorcode --COPTFLAGS=-O3 -march=native -mtune=native --CXXOPTFLAGS=-O3 -march=native -mtune=native --FOPTFLAGS=-O3 -march=native \
+    -mtune=native --with-bison --with-hdf5-lib=${HDF5_DIR}/lib/libhdf5.a --with-hdf5-include=${HDF5_DIR}/include --with-hwloc --download-metis --download-mumps \
+    --download-netcdf --download-pastix --download-pnetcdf --download-ptscotch --download-scalapack --download-suitesparse --download-superlu_dist --with-zlib --download-hypre
+RUN make
+
+FROM firedrake-petsc-env AS firedrake-env
+
+# INSTALL Firedrake
+WORKDIR ${FIREDRAKE_PYTHON}/firedrake
+RUN python3 -m pip install --no-cache-dir mpi4py petsc4py -v
+RUN python3 -m pip install --no-binary h5py . -v
+# Install ngs-petsc and vtk on amd, only vtk on arm
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
+    then python3 -m pip install --no-cache-dir https://github.com/scientificcomputing/vtk-aarch64/releases/download/v9.4.1-py3.12/vtk-9.4.1.dev0-cp312-cp312-linux_aarch64.whl; \
+    elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
+    then python3 -m pip install ngspetsc netgen-mesher vtk ; \
+    else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
+    fi
+
+# Revert to DOLFINx environment
+ENV PYTHONPATH=${TMP_PYTHON_PATH}
+ENV PETSC_DIR=${TMP_PETSC_DIR}
+ENV PETSC_ARCH=${TMP_PETSC_ARCH}
+
+FROM firedrake-env AS mfem-user-env
+WORKDIR /root/LVPP
+
+ARG HYPRE_VERSION=2.32.0
+ARG METIS_VERSION=4.0.3
+# WORKAROUND until: https://github.com/mfem/mfem/pull/4702 is merged
+ARG MFEM_BRANCH=VectorDiffusionIntegrator
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get -qq update && \
+    apt-get -y install wget git cmake build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+WORKDIR /root/LVPP
+
+# Build hypre
+RUN wget https://github.com/hypre-space/hypre/archive/refs/tags/v${HYPRE_VERSION}.tar.gz
+RUN tar -xvf v${HYPRE_VERSION}.tar.gz
+
+RUN cd hypre-${HYPRE_VERSION}/src/ && \
+    ./configure --disable-fortran && \
+    make -j 2 && \
+    cd ../.. && \
+    ln -s hypre-${HYPRE_VERSION} hypre
+
+# Build metis
+RUN wget https://github.com/mfem/tpls/raw/gh-pages/metis-${METIS_VERSION}.tar.gz
+RUN ls
+RUN tar -xvf metis-${METIS_VERSION}.tar.gz
+RUN cd metis-${METIS_VERSION} && \
+    make OPTFLAGS=-Wno-error=implicit-function-declaration && \
+    cd .. && \
+    ln -s metis-${METIS_VERSION} metis-4.0
+
+# Build mfem
+RUN git clone --branch=${MFEM_BRANCH} --single-branch https://github.com/mfem/mfem.git
+RUN cd mfem && \
+    make parallel -j 2
+
+FROM mfem-user-env AS julia-user-env
+
+RUN apt-get update && apt-get install -y curl
+RUN curl -fsSL https://install.julialang.org | sh  -s -- --yes
+ENV PATH=/root/.juliaup/bin:$PATH
+RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "MultivariateOrthogonalPolynomials", "Plots", "LaTeXStrings", "IterativeSolvers", "LinearMaps", "MatrixFactorizations", "Gridap", "LineSearches"])'
+
+
+
+# ADD various files to the docker container for easy switching between environments
+WORKDIR /root/LVPP/mfem/examples
+ADD ./examples/11_eikonal/ex40.cpp ex40_taylor_hood.cpp
+ADD ./examples/11_eikonal/convert_mesh.cpp convert_mesh.cpp
+ADD docker/firedrake-mode /usr/local/bin/firedrake-mode
+RUN chmod +x /usr/local/bin/firedrake-mode
+ADD docker/dolfinx-mode /usr/local/bin/dolfinx-mode
+RUN chmod +x /usr/local/bin/dolfinx-mode
+
+# Add all examples in repository
+WORKDIR /root/LVPP
+ADD . .
+
+# Build DOLFINx dependencies
+# netgen-mesher does not have a linux/arm build
+ENV PATH=/dolfinx-env/bin:$PATH
+WORKDIR /root/LVPP
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
+    then python3 -m pip install -e .[obstacle,signorini,eikonal,monge_ampere]; \
+    elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
+    then python3 -m pip install -e .[examples]  ; \
+    else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
+    fi
+ENV OMP_NUM_THREADS=1
+
