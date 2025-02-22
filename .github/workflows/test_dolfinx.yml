@@ -43,7 +43,7 @@ jobs:
         if: (steps.install.conclusion == 'success') && (matrix.platform == 'ubuntu-24.04')
         working-directory: ./examples/03_fracture
         run: |
-          python3 -m pip install -e .[fracture]
+          python3 -m pip install -e ../../[fracture]
           python3 fracture_dolfinx.py --Tmin=0 --Tmax=2 --num-load-steps=10 --write-frequency=9
 
       - name: Run example 4
