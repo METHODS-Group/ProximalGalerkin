@@ -25,6 +25,5 @@ jobs:
         - name: Run example 12
           working-directory: ./examples/12_monge_ampere
           run: |
-            source firedrake-mode
             python3 monge_ampere_cg_cg_dg_firedrake.py
     
