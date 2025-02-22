@@ -18,7 +18,7 @@ We provide a single docker container `ghcr.io/methods-group/proximalgalerkin` fr
 
 One can start the image with 
 ```bash
-docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin@sha256:360a5f7bc991157d146cccab764e5d24a0953ba8c838291c92e20fa3391c5eb6
+docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
 ```
 This shares the current directory with the docker container under the location `/root/shared`.
 To restart this container at a later instance call

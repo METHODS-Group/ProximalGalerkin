@@ -11,7 +11,7 @@ jobs:
   test-examples:
     runs-on: ubuntu-24.04
     container: 
-        image: ghcr.io/methods-group/proximalgalerkin@sha256:360a5f7bc991157d146cccab764e5d24a0953ba8c838291c92e20fa3391c5eb6
+        image: ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
         options: --user root
 
     steps:

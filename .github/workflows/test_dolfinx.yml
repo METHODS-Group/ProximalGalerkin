@@ -9,17 +9,18 @@ on:
 jobs:
   standard-examples:
     name: Test on ${{ matrix.container }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.platform }}
     container: ${{ matrix.container }}
     env:
       DEB_PYTHON_INSTALL_LAYOUT: deb_system
     strategy:
       fail-fast: false
       matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
         container: [
             "ghcr.io/fenics/dolfinx/dolfinx:stable",
             #"ghcr.io/fenics/dolfinx/dolfinx:nightly"
-            "ghcr.io/methods-group/proximalgalerkin@sha256:360a5f7bc991157d146cccab764e5d24a0953ba8c838291c92e20fa3391c5eb6"
+            "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env"
           ]
 
     steps:
@@ -37,8 +38,9 @@ jobs:
           python3 run_lvpp_problem.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
           python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
           python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
+
       - name: Run example 3
-        if: steps.install.conclusion == 'success'
+        if: (steps.install.conclusion == 'success') && (matrix.platform == 'ubuntu-24.04')
         working-directory: ./examples/03_fracture
         run: |
           python3 fracture_dolfinx.py --Tmin=0 --Tmax=2 --num-load-steps=10 --write-frequency=9
@@ -87,7 +89,7 @@ jobs:
 
   obstacle:
     runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin@sha256:360a5f7bc991157d146cccab764e5d24a0953ba8c838291c92e20fa3391c5eb6
+    container: ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
 
     steps:
       - uses: actions/checkout@v4
