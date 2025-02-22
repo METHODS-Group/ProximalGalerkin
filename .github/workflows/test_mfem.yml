@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     container: ${{ matrix.container }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
         container: [
