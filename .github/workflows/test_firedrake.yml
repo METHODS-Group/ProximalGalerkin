@@ -9,10 +9,17 @@ on:
 jobs:
 
   test-examples:
-    runs-on: ubuntu-24.04
-    container: 
-        image: ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
-        options: --user root
+    runs-on: ${{ matrix.platform }}
+    container: ${{ matrix.container }}
+    env:
+      DEB_PYTHON_INSTALL_LAYOUT: deb_system
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
+        container: [
+            "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env"
+          ]
 
     steps:
         - uses: actions/checkout@v4

@@ -8,8 +8,15 @@ on:
 
 jobs:
   eikonal:
-    runs-on: ubuntu-24.04
-    container: ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
+    runs-on: ${{ matrix.platform }}
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
+        container: [
+            "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env"
+          ]
 
     steps:
       - uses: actions/checkout@v4

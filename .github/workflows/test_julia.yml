@@ -17,11 +17,12 @@ on:
     # The CI is executed manually
 jobs:
   run-script:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform }}
     container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
         container: [
           "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env",
           "julia:latest"
