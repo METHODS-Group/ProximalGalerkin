@@ -89,8 +89,14 @@ jobs:
           python3 monge_ampere_cg_cg_dg_dolfinx.py
 
   obstacle:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.platform }}
     container: ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
+    env:
+      DEB_PYTHON_INSTALL_LAYOUT: deb_system
+    strategy:
+      fail-fast: true
+      matrix:
+        platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
 
     steps:
       - uses: actions/checkout@v4
