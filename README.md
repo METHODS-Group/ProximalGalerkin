@@ -1,4 +1,5 @@
 # ProximalGalerkin
+[![Launch on Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/METHODS-Group/ProximalGalerkin/HEAD)
 
 This repository contains implementations of the proximal Galerkin finite element method and other proximal numerical methods for variational problems with inequality constraints derived in
 
