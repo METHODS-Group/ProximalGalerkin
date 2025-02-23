@@ -259,12 +259,10 @@ def solve_contact_problem(
     F = dolfinx.fem.form(ufl.extract_blocks(residual), entity_maps=entity_maps)
 
     # Set up Jacobian
-    du, dpsi = ufl.TrialFunctions(Q)
-    jac = ufl.derivative(residual, u, du) + ufl.derivative(residual, psi, dpsi)
+    jac = ufl.derivative(residual, [u, psi], ufl.TrialFunctions(Q))
 
     # Compile Jacobian
     J = dolfinx.fem.form(ufl.extract_blocks(jac), entity_maps=entity_maps)
-
     u_bc = dolfinx.fem.Function(V)
 
     def disp_func(x):
