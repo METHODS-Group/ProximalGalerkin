@@ -15,6 +15,14 @@ RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} /dolfinx-env
 RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} /firedrake-env
 RUN cp -r /root/LVPP ${HOME}/LVPP
 RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} ${HOME}/LVPP
+
+# Copy over julia-env
+RUN cp -r /root/.juliaup ${HOME}/.juliaup
+RUN ln -sf ${HOME}/.juliaup/bin/julialauncher ${HOME}/.juliaup/bin/julia
+RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} ${HOME}/.juliaup
+ENV PATH=${HOME}/.juliaup/bin:${PATH}
+
+#
 # Copy home directory for usage in binder
 WORKDIR ${HOME}
 COPY --chown=${NB_UID} . ${HOME}
