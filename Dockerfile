@@ -21,8 +21,9 @@ RUN cp -r /root/.juliaup ${HOME}/.juliaup
 RUN ln -sf ${HOME}/.juliaup/bin/julialauncher ${HOME}/.juliaup/bin/julia
 RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} ${HOME}/.juliaup
 ENV PATH=${HOME}/.juliaup/bin:${PATH}
+RUN cp -r /root/.julia ${HOME}/.julia
+RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} ${HOME}/.julia
 
-#
 # Copy home directory for usage in binder
 WORKDIR ${HOME}
 COPY --chown=${NB_UID} . ${HOME}

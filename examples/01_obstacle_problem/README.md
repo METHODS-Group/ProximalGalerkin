@@ -27,3 +27,9 @@ To reproduce the finite difference and spectral element method results in Figure
 julia finite_difference.jl
 julia spectral.jl
 ```
+
+If using the docker containers, you can most likely use the flag
+```bash
+julia --compiled-modules=existing finite_difference.jl 
+```
+to speed up the run-time.
