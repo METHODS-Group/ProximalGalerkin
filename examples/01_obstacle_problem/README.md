@@ -1,6 +1,6 @@
 # Example 1 (Figure 2): The Obstacle Problem
 
-## Finite element method
+## Finite element method (proximal Galerkin)
 
 Figures 2 (a) and (b) are generated with `DOLFINx`.
 
@@ -16,10 +16,10 @@ python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
 ```
 
 > [!NOTE]
-> The comparison script requires both [GALAHAD](https://github.com/ralna/GALAHAD) and [IPOPT](https://coin-or.github.io/Ipopt/) which is not
-> supplied by standard FEniCS/DOLFINx installation.
+> The comparison script requires both [GALAHAD](https://github.com/ralna/GALAHAD) and [IPOPT](https://coin-or.github.io/Ipopt/) which are not
+> supplied by the standard FEniCS/DOLFINx installation.
     
-## Finite difference and spectral element method
+## Proximal finite difference and spectral element methods
 
 To reproduce the finite difference and spectral element method results in Figure 2 (c), deploy a container with [Julia](https://julialang.org/), for instance (`julia:1.10.8` or `ghcr.io/methods-group/proximalgalerkin`).
 
