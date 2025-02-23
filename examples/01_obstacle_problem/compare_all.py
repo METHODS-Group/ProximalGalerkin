@@ -154,6 +154,8 @@ if __name__ == "__main__":
             "ksp_type": "preonly",
             "pc_type": "lu",
             "pc_factor_mat_solver_type": "mumps",
+            "snes_error_if_not_converged": True,
+            "ksp_error_if_not_converged": True,
         },
     )
     u_snes.name = "snes"

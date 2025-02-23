@@ -129,7 +129,7 @@ def snes_solve(
     x = dolfinx.fem.Function(V)
     snes.solve(None, x.x.petsc_vec)
     x.x.scatter_forward()
-
+    snes.destroy()
     mesh = uh.function_space.mesh
     degree = mesh.geometry.cmap.degree
     V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree))
