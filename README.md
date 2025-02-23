@@ -18,12 +18,12 @@ We provide a single docker container `ghcr.io/methods-group/proximalgalerkin` fr
 
 One can start the image with 
 ```bash
-docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
+docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin:v0.2.0-alpha
 ```
 This shares the current directory with the docker container under the location `/root/shared`.
 To restart this container at a later instance call
 ```bash
-docker container start -i proxmial-examples
+docker container start -i proximal-examples
 ```
 
 Within this installation you find all examples under `/root/LVPP`.

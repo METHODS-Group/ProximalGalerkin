@@ -2,19 +2,19 @@
 
 We have provided code for this example for both the `MFEM` and `DOLFINx` Docker containers.
 
-## MFEM
+## Using the Proximal-Galerkin docker containers
 
-To reproduce the Möbius strip solution in Figure 11, you first need to copy [./examples/eikonal/ex40.cpp](./examples/eikonal/ex40.cpp) into the `MFEM` examples folder (`/home/euler/mfem/examples/`) and then calling `make ex40` and `./ex40 -step 10.0 -mi 10`. This following code will execute to entire process:
+### MFEM
+If using the `ghcr.io/methods-group/proximalgalerkin:v0.2.0-alpha` container, you can navigate to
+`/root/LVPP/mfem/examples`, where there is a file called `ex40_taylor_hood.cpp`.
 
+This script reproduces the  Möbius strip solution in Figure 11.
 ```bash
-docker run -it --rm -v ./examples/11_eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
-cp /home/euler/shared/ex40.cpp /home/euler/mfem/examples/
-cd examples && make ex40
-./ex40 -step 10.0 -mi 10
+make ex40_taylor_hood
+./ex40_taylor_hood -step 10.0 -mi 10
 ```
 
-To reproduce the results in Figure 11 for the two geometries (i.e., the [Star](https://github.com/mfem/mfem/blob/master/data/star.mesh)
-and [Ball](https://github.com/mfem/mfem/blob/master/data/ball-nurbs.mesh)), you should compile the [official examples](https://mfem.org/examples/) `ex40p.cpp` without copying any files from this repository
+The results for the two other geoemtries can be reproduced with
 
 ```bash
 cd examples && make ex40p
@@ -24,21 +24,20 @@ cd examples && make ex40p
 ./ex40p -step 10.0 -mi 10 -m ../data/ball-nurbs.mesh
 ```
 
-## DOLFINx
+### DOLFINx
 
 The `DOLFINx` implementation requires converting the `MFEM` Möbius strip mesh [mobius-strip.mesh](https://github.com/mfem/mfem/blob/master/data/mobius-strip.mesh).
-To this end, run the following commands from the root of this repository:
-
+To convert the mesh, navigate to `/root/LVPP/mfem/examples`.
+Then run the following commands
 ```bash
-docker run -it --rm -v ./examples/11_eikonal:/home/euler/shared -w /home/euler/mfem --rm --entrypoint=/bin/bash ghcr.io/methods-group/proximalgalerkin-mfem:main
-cp /home/euler/shared/convert_mesh.cpp /home/euler/mfem/examples/
-cd examples && make convert_mesh
+make convert_mesh
 ./convert_mesh --mesh ../data/mobius-strip.mesh
-cp -r  mobius-strip.mesh/ ../../shared/
 ```
-
-The `DOLFINx` code is then executed by calling:
+Next, navigate back to this folder (either the shared volume or `/root/LVPP/examples/11_eikonal`) and run 
 
 ```bash
-python3 eikonal_dolfinx.py
+python3 eikonal_dolfinx.py --mesh-dir=/root/LVPP/mfem/examples/mobius-strip.mesh
 ```
+
+## Using a local installation of MFEM
+Copy the file `ex40.cpp` into your `mfem/examples` repository, compile it with `make ex40.cpp` and run as described above.

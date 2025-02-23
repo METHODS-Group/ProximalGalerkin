@@ -129,14 +129,15 @@ def snes_solve(
     x = dolfinx.fem.Function(V)
     snes.solve(None, x.x.petsc_vec)
     x.x.scatter_forward()
-
+    num_iterations = snes.getIterationNumber()
+    snes.destroy()
     mesh = uh.function_space.mesh
     degree = mesh.geometry.cmap.degree
     V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree))
     u_out = dolfinx.fem.Function(V_out, name="llvp")
     u_out.interpolate(x)
 
-    return u_out, snes.getIterationNumber()
+    return u_out, num_iterations
 
 
 if __name__ == "__main__":

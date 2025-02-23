@@ -18,7 +18,7 @@ jobs:
       matrix:
         platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
         container: [
-            "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env"
+            "ghcr.io/methods-group/proximalgalerkin:v0.2.0-alpha"
           ]
 
     steps:

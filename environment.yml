@@ -2,7 +2,7 @@ name: pg-env
 channels:
   - conda-forge
 dependencies:
-  - fenics-dolfinx=0.9.0=*_104
+  - fenics-dolfinx=0.9.0
   - pyvista
   - pip
   - git
@@ -16,6 +16,8 @@ dependencies:
   - ipywidgets
   - python-gmsh
   - scifem
+  - pip:
+      - git+https://github.com/METHODS-Group/ProximalGalerkin.git
 variables:
   PYVISTA_TRAME_SERVER_PROXY_PREFIX: "/proxy/"
   PYVISTA_TRAME_SERVER_PROXY_ENABLED: "True"

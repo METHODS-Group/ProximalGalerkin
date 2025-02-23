@@ -1,4 +1,4 @@
-FROM ghcr.io/methods-group/proximalgalerkin:v0.2.0-alpha
+FROM ghcr.io/methods-group/proximalgalerkin:v0.2.0-alpha AS pg
 
 
 # create user with a home directory
@@ -10,9 +10,15 @@ RUN id -nu ${NB_UID} && userdel --force $(id -nu ${NB_UID}) || true; \
     useradd -m ${NB_USER} -u ${NB_UID}
 ENV HOME=/home/${NB_USER}
 
+# Copy DOLFINx env and Firedrake env
+RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} /dolfinx-env
+RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} /firedrake-env
+RUN cp -r /root/LVPP ${HOME}/LVPP
+RUN chown -R --no-preserve-root ${NB_USER}:${NB_USER} ${HOME}/LVPP
 # Copy home directory for usage in binder
 WORKDIR ${HOME}
 COPY --chown=${NB_UID} . ${HOME}
 
 USER ${NB_USER}
+RUN python3 -m pip install -e .
 ENTRYPOINT []

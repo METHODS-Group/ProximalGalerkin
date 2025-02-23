@@ -20,7 +20,7 @@ jobs:
         container: [
             "ghcr.io/fenics/dolfinx/dolfinx:stable",
             #"ghcr.io/fenics/dolfinx/dolfinx:nightly"
-            "ghcr.io/methods-group/proximalgalerkin:dokken-combined_env"
+            "ghcr.io/methods-group/proximalgalerkin:v0.2.0-alpha"
           ]
 
     steps:
@@ -90,7 +90,7 @@ jobs:
 
   obstacle:
     runs-on: ${{ matrix.platform }}
-    container: ghcr.io/methods-group/proximalgalerkin:dokken-combined_env
+    container: ghcr.io/methods-group/proximalgalerkin:v0.2.0-alpha
     env:
       DEB_PYTHON_INSTALL_LAYOUT: deb_system
     strategy:

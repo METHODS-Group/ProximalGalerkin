@@ -41,7 +41,7 @@ U = MultiFieldFESpace([Uu, UT, Uψ]) # u, T, ψ
 dΩ = Measure(Ω,11)
 
 # Initial mould
-Φ₀ = interpolate_everywhere(x->1.0 - 2*max(abs(x[1]-1/2),  abs(x[2]-1/2)), VT)
+Phi0 = interpolate_everywhere(x->1.0 - 2*max(abs(x[1]-1/2),  abs(x[2]-1/2)), VT)
 # Smoothing function
 φ = interpolate_everywhere(x->sin(π*x[1])*sin(π*x[2]), UT)
 # Forcing term
@@ -72,7 +72,7 @@ a((uh, Th, ψh), (v, R, ϕ), α, wh) =
      ∫( 
         α*∇(uh) ⋅ ∇(v) +  ψh ⋅ v - α*fh ⋅ v - wh ⋅ v
         + ∇(Th) ⋅ ∇(R) + Th ⋅ R  - (g ∘ (exp ∘ (-ψh))) ⋅ R
-        + uh ⋅ ϕ + (exp ∘ (-ψh)) ⋅ ϕ - (Φ₀ + φ ⋅ Th) ⋅ ϕ
+        + uh ⋅ ϕ + (exp ∘ (-ψh)) ⋅ ϕ - (Phi0 + φ ⋅ Th) ⋅ ϕ
      ) * dΩ
 
 # Jacobian
@@ -135,13 +135,13 @@ end
 uh = zh.single_fe_functions[1]
 writevtk(Ω,"membrane", cellfields=["membrane"=>uh])
 Th = zh.single_fe_functions[2]
-mould = interpolate_everywhere(Φ₀ + φ ⋅ Th, VT)
+mould = interpolate_everywhere(Phi0 + φ ⋅ Th, VT)
 writevtk(Ω,"mould", cellfields=["mould"=>mould])
 
 
 # Plot 1D slice of solution
 xx = range(0,1,101)
-p = plot(xx, [uh(Point.(xx,0.5)) mould(Point.(xx,0.5)) Φ₀(Point.(xx, 0.5)) Th(Point.(xx,0.5))],
+p = plot(xx, [uh(Point.(xx,0.5)) mould(Point.(xx,0.5)) Phi0(Point.(xx, 0.5)) Th(Point.(xx,0.5))],
     linewidth=2,
     label=["Membrane" "Mould" "Original Mould" "Temperature"],
     linestyle=[:solid :dash],
