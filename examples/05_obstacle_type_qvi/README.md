@@ -1,9 +1,16 @@
 # Example 5 (Figure 6): Thermoforming Quasi-Variational Inequality
 
-Reproducing the results in this example requires the `julia:1.10.8` Docker container
-Once this container is deployed, the code can be executed by running
+## Julia implementation
+
+To reproduce the results presented in the paper, run
 
 ```bash
-julia theroforming_lvpp.jl
+python3 thermoforming_lvpp.jl
 ```
 
+## FEniCS implementation
+A FEniCS implementation with a different linesearch and linear solver can be run in `dolfinx-mode` with
+
+```bash
+python3 thermoforming_lvpp.py 
+```
