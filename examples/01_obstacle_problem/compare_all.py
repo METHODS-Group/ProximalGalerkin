@@ -177,5 +177,5 @@ if __name__ == "__main__":
     print(f"{args.infile} llvp iterations: (P=1) {max_it}")
     print(f"{args.infile} llvp iterations: (P=2) {max_it_2}")
     print(f"{args.infile} Ipopt iterations: (With hessian) {ipopt_iteration_count[True]}")
-    print(f"{args.infile} Ipopt iterations: (Without hessian {ipopt_iteration_count[False]}")
+    print(f"{args.infile} Ipopt iterations: (Without hessian) {ipopt_iteration_count[False]}")
     print(f"{args.infile} SNES iterations: {num_snes_iterations}")
