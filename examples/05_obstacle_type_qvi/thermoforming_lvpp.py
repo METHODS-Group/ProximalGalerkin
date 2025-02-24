@@ -105,14 +105,14 @@ sp = {
     "snes_linesearch_type": "bt",
     "pc_type": "lu",
     "pc_factor_mat_solver_type": "mumps",
-    "pc_svd_monitor": None,
+    # "pc_svd_monitor": None,
     "mat_mumps_icntl_14": 1000,
     "snes_atol": 1e-6,
     "snes_rtol": 1e-6,
     "snes_stol": 10 * np.finfo(dolfinx.default_scalar_type).eps,
     "snes_linesearch_damping": 1e4,
     "snes_linesearch_order": 2,
-    "snes_linesearch_monitor": None,
+    # "snes_linesearch_monitor": None,
 }
 problem = SNESProblem(F, s, bcs=[bc])
 solver = SNESSolver(problem, sp)
