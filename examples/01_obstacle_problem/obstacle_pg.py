@@ -132,7 +132,7 @@ def solve_problem(
     # Setup newton solver
     log.set_log_level(log.LogLevel.WARNING)
     newton_solver = NewtonSolver(comm=msh.comm, problem=problem)
-    newton_solver.convergence_criterion = "incremental"
+    newton_solver.rtol=1e-6
     newton_solver.max_it = 100
     ksp = newton_solver.krylov_solver
     petsc_options = {
@@ -167,7 +167,7 @@ def solve_problem(
     sol_k.x.array[:] = sol.x.array[:]
     alpha_k = 1
     step_size_rule = alpha_scheme
-    C = 0.1
+    C = 1.0
     r = 1.5
     q = 1.5
 
@@ -231,10 +231,6 @@ def solve_problem(
         if tol_Newton < tol_exit:
             break
 
-        # Reset Newton solver options
-        newton_solver.atol = 1e-4
-        newton_solver.rtol = tol_Newton * 1e-4
-
         # Update sol_k with sol_new
         sol_k.x.array[:] = sol.x.array[:]
         increment_k = increment
@@ -274,7 +270,7 @@ def solve_problem(
 
     if k == maximum_number_of_outer_loop_iterations - 1:
         rank_print("Maximum number of outer loop iterations reached", msh.comm)
-    return sol, k
+    return sol, sum(Newton_steps)
 
 
 # -------------------------------------------------------

@@ -65,23 +65,24 @@ function fd_lvpp_solve(N::Int)
     fv = Vector(vec(f.(xx,xx')))
     φv = Vector(vec(φ.(xx,xx')))
 
-    ψ, w, u, u_ = zeros(n), zeros(n), zeros(n), zeros(n)
+    ψ, w, u, u_ = ones(n), zeros(n), zeros(n), zeros(n)
 
     # Parameters for α-update rule
-    α, C, r, q = 0.0, 0.1, 1.5, 1.5
+    α, C, r, q = 1.0, 1.0, 1.5, 1.5
 
     newton_its = 0
 
     # Run LVPP loop
-    for k = 0:25
+    for k = 0:100
         # Update α
-        α = min(max(C*r^(q^k) - α, C), 1e3)
+        α = min(max(C*r^(q^k) - α, C), 1e2)
         print("α = $α.\n")
         b = -residual([u;ψ], α, A, (fv, φv, w), bcs, n)
-        print("Iteration 0, residual: $(norm(b)).\n")
+        normres0 = norm(b)
+        print("Iteration 0, absolute residual: $normres0.\n")
 
         # Limit each LVPP subproble to 2 Newton iterations
-        for iter = 1:2
+        for iter = 1:50
             J = jacobian(α, A, Iden2, ψ, bcs)
 
             # Newton system solve
@@ -94,8 +95,8 @@ function fd_lvpp_solve(N::Int)
             newton_its += 1
             b = -residual([u;ψ], α, A, (fv, φv, w), bcs, n)
             normres = norm(b)
-            print("Iteration $iter, residual: $(normres).\n")
-            if normres < 1e-4
+            print("Iteration $iter, relative residual: $(normres/normres0).\n")
+            if normres / normres0 < 1e-4
                 break
             end
         end
@@ -114,7 +115,7 @@ end
 its = Int[]
 
 # Run LVPP solver for increasing resolution
-for j in 2:7
+for j in 1:6
     N = 2^j + 1
     xx, U, Φ, newton_its =  fd_lvpp_solve(N)
     push!(its, newton_its)
