@@ -32,12 +32,12 @@ jobs:
 
       - name: Run Finite Difference
         working-directory: ./examples/01_obstacle_problem
-        run: julia finite_difference.jl
+        run: julia obstacle_finite_difference.jl
 
       - name: Run Spectral method
         working-directory: ./examples/01_obstacle_problem
-        run: julia spectral.jl
+        run: julia obstacle_spectral.jl
 
       - name: Run thermoform
         working-directory: ./examples/05_obstacle_type_qvi
-        run: julia thermoforming_lvpp.jl
+        run: julia thermoforming_gridap.jl

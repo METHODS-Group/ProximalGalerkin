@@ -6,7 +6,7 @@ Start a docker container based on `ghcr.io/methods-group/proximalgalerkin:v0.2.0
 Then call `source firedrake-mode` and run the following command
 
 ```bash
-python3 monge_ampere_cg_cg_dg_firedrake.py
+python3 monge_ampere_firedrake.py
 ```
 
 ## DOLFINx
