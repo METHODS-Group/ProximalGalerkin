@@ -38,7 +38,7 @@ if __name__ == "__main__":
         help="Path to results ",
     )
     max_iter = 500
-    tol = 1e-5
+    tol = 1e-4
     args = parser.parse_args()
 
     args.result_dir.mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         1,
         maximum_number_of_outer_loop_iterations=max_iter,
         alpha_scheme="double_exponential",
-        alpha_max=1e3,
+        alpha_max=1e2,
         tol_exit=tol,
     )
 
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         2,
         maximum_number_of_outer_loop_iterations=max_iter,
         alpha_scheme="double_exponential",
-        alpha_max=1e3,
+        alpha_max=1e2,
         tol_exit=tol,
     )
     u_out = u_lvpp_2.sub(0).collapse()
@@ -129,7 +129,7 @@ if __name__ == "__main__":
             x_i.x.array.copy(),
             bounds,
             max_iter=max_iter,
-            tol=tol,
+            tol=1e-2*tol,
             activate_hessian=with_hessian,
         )
         ipopt_iteration_count[with_hessian] = problem.total_iteration_count

@@ -17,6 +17,25 @@ Solve the obstacle problem on a disk domain with LVPP
 discretized with a sparse spectral method via Zernike polynomials.
 """
 
+import Pkg; Pkg.add("MultivariateOrthogonalPolynomials")
+import Pkg; Pkg.add("ClassicalOrthogonalPolynomials")
+import Pkg; Pkg.add("Plots")
+import Pkg; Pkg.add("LaTeXStrings")
+import Pkg; Pkg.add("IterativeSolvers")
+import Pkg; Pkg.add("LinearMaps")
+import Pkg; Pkg.add("MatrixFactorizations")
+
+using ClassicalOrthogonalPolynomials, MultivariateOrthogonalPolynomials
+import MultivariateOrthogonalPolynomials: ZernikeITransform
+using SparseArrays, LinearAlgebra
+using IterativeSolvers, LinearMaps, MatrixFactorizations
+using Plots, LaTeXStrings
+
+"""
+Solve the obstacle problem on a disk domain with LVPP 
+discretized with a sparse spectral method via Zernike polynomials.
+"""
+
 T = Float64
 
 get_rs(x) = x.r
@@ -88,16 +107,17 @@ function zernike_lvpp_solve(ΔF, BF, p::Int)
     newton_its, gmres_its = 0, 0
 
     # Parameters for α-update
-    α, C, r, q = 0.1, 0.1, 1.5, 1.5
+    α, C, r, q = 1.0, 1.0, 1.5, 1.5
 
-    for k = 1:100
+    for k = 0:100
+        α = min(max(C*r^(q^k) - α, C), 1e2)
         print("α = $α.\n")
-        α = min(max(C*r^(q^k) - α, C), 1e3)
         b = -residual([u;ψ], α, (plZ,iplZ), (Δ,B), (fv, φv, w), n)
-        print("Iteration 0, residual: $(norm(b)).\n")
+        normres0 = norm(b)
+        print("Iteration 0, absolute residual: $normres0.\n")
 
-        # Cap each LVPP subproblem solve at 2 Newton iterations
-        for iter = 1:2
+        # Run Newton solver
+        for iter = 1:100
             apply_jac(x) = apply_jacobian(x, α, (plZ,iplZ), (Δ,B), ψ, n)
             J = LinearMap(apply_jac, 2*n; ismutating=false)
 
@@ -106,7 +126,7 @@ function zernike_lvpp_solve(ΔF, BF, p::Int)
             lu_P = MatrixFactorizations.lu(P)
 
             # Solve linear system with a preconditioned GMRES solver
-            dz, info = IterativeSolvers.gmres(J, b, Pl=lu_P, restart=n, log=true)
+            dz, info = IterativeSolvers.gmres(J, b, Pl=lu_P, restart=n, log=true, reltol=1e-9)
             gmres_its += info.iters
 
             u = u + dz[1:n]
@@ -115,8 +135,8 @@ function zernike_lvpp_solve(ΔF, BF, p::Int)
             newton_its += 1
             b = -residual([u;ψ], α, (plZ,iplZ), (Δ,B), (fv, φv, w), n)
             normres = norm(b)
-            print("Iteration $iter, GMRES iters: $(info.iters), residual: $(normres).\n")
-            if normres < 1e-4
+            print("Iteration $iter, GMRES iters: $(info.iters), relative residual: $(normres/normres0).\n")
+            if normres / normres0 < 1e-4
                 break
             end
         end
