@@ -35,9 +35,9 @@ jobs:
         working-directory: ./examples/02_signorini
         run: |
           python3 generate_mesh.py
-          python3 run_lvpp_problem.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
-          python3 run_lvpp_problem.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
-          python3 run_lvpp_problem.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
+          python3 signorini_dolfinx.py --disp=-0.1 --alpha_0=0.005   --output=small_disp file --filename=meshes/half_sphere.xdmf
+          python3 signorini_dolfinx.py --disp=-0.15 --alpha_0=0.005   --output=med_disp file --filename=meshes/half_sphere.xdmf
+          python3 signorini_dolfinx.py --disp=-0.2 --alpha_0=0.005   --output=large_disp file --filename=meshes/half_sphere.xdmf
 
       - name: Run example 3
         if: (steps.install.conclusion == 'success') && (matrix.platform == 'ubuntu-24.04')
@@ -56,7 +56,7 @@ jobs:
         if: steps.install.conclusion == 'success'
         working-directory: ./examples/05_obstacle_type_qvi
         run: |
-          python3 thermoforming_lvpp.py
+          python3 thermoforming_dolfinx.py
 
       - name: Run example 6
         if: steps.install.conclusion == 'success'

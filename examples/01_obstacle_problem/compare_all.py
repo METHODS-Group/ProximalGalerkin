@@ -11,7 +11,7 @@ from pathlib import Path
 import dolfinx
 import numpy as np
 from ipopt_galahad import ObstacleProblem, setup_problem
-from lvpp_example import solve_problem
+from pg_example import solve_problem
 from obstacle_snes import snes_solve
 
 from lvpp.optimization import galahad_solver, ipopt_solver

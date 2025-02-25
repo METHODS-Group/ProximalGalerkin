@@ -32,5 +32,5 @@ jobs:
         - name: Run example 12
           working-directory: ./examples/12_monge_ampere
           run: |
-            python3 monge_ampere_cg_cg_dg_firedrake.py
+            python3 monge_ampere_firedrake.py
     

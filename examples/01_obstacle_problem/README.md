@@ -24,14 +24,14 @@ python3 compare_all.py -P ./meshes/disk_3.xdmf -O fine
 To reproduce the finite difference and spectral method results in Figure 2 (c), deploy a container with [Julia](https://julialang.org/), for instance (`julia:1.10.8` or `ghcr.io/methods-group/proximalgalerkin`).
 
 ```bash
-julia finite_difference.jl
-julia spectral.jl
+julia obstacle_finite_difference.jl
+julia obstacle_spectral.jl
 ```
 
 If using the docker containers, you can most likely use the flag
 
 ```bash
-julia --compiled-modules=existing finite_difference.jl
+julia --compiled-modules=existing obstacle_finite_difference.jl
 ```
 
 to speed up the run-time.
