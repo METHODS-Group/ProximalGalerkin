@@ -19,16 +19,18 @@ import argparse
 from pathlib import Path
 
 from mpi4py import MPI
-from petsc4py import PETSc
-
+from lvpp import SNESProblem, SNESSolver
 import basix
 import numpy as np
 import pandas as pd
 import ufl
-from dolfinx import default_scalar_type, fem, io, log, mesh
-from dolfinx.fem.petsc import NonlinearProblem
-from dolfinx.nls.petsc import NewtonSolver
+from dolfinx import default_scalar_type, fem, io, mesh
 from ufl import Measure, conditional, exp, grad, inner, lt
+
+_RED = "\033[31m"
+_BLUE = "\033[34m"
+_GREEN = "\033[32m"
+_color_reset = "\033[0m"
 
 
 def rank_print(string: str, comm: MPI.Comm, rank: int = 0):
@@ -82,7 +84,7 @@ def solve_problem(
 
     u_bc = fem.Function(V0)
     u_bc.x.array[:] = 0.0
-    bcs = fem.dirichletbc(value=u_bc, dofs=dofs, V=V.sub(0))
+    bcs = [fem.dirichletbc(value=u_bc, dofs=dofs, V=V.sub(0))]
 
     # Define solution variables
     sol = fem.Function(V)
@@ -126,29 +128,7 @@ def solve_problem(
     )
     J = ufl.derivative(F, sol)
 
-    # Setup non-linear problem
-    problem = NonlinearProblem(F, sol, bcs=[bcs], J=J)
-
     # Setup newton solver
-    log.set_log_level(log.LogLevel.WARNING)
-    newton_solver = NewtonSolver(comm=msh.comm, problem=problem)
-    newton_solver.convergence_criterion = "incremental"
-    newton_solver.max_it = 100
-    ksp = newton_solver.krylov_solver
-    petsc_options = {
-        "ksp_type": "preonly",
-        "pc_type": "lu",
-        "pc_factor_mat_solver_type": "mumps",
-        "ksp_error_if_not_converged": True,
-        "ksp_monitor": None,
-    }
-    opts = PETSc.Options()  # type: ignore
-    option_prefix = ksp.getOptionsPrefix()
-    opts.prefixPush(option_prefix)
-    for k, v in petsc_options.items():
-        opts[k] = v
-    opts.prefixPop()
-    ksp.setFromOptions()
 
     # observables
     energy_form = fem.form(0.5 * inner(grad(u), grad(u)) * dx - f * u * dx)
@@ -167,7 +147,10 @@ def solve_problem(
     sol_k.x.array[:] = sol.x.array[:]
     alpha_k = 1
     step_size_rule = alpha_scheme
-    C = 0.1
+    if alpha_scheme == "double_exponential":
+        C = 0.1
+    else:
+        C = 1
     r = 1.5
     q = 1.5
 
@@ -179,7 +162,28 @@ def solve_problem(
     step_sizes = []
     primal_increments = []
     latent_increments = []
+    init_tol = 1e-3
+    tol_Newton = init_tol
+    initial_tol = 1
+    problem = SNESProblem(fem.form(F), sol, bcs=bcs, J=fem.form(J))
+    atol = 1e-8
     for k in range(maximum_number_of_outer_loop_iterations):
+        # Reset Newton solver options
+        rtol = min(tol_Newton / initial_tol, init_tol)
+        petsc_options = {
+            "snes_linesearch_monitor": None,
+            "snes_monitor": None,
+            "snes_atol": atol,
+            "snes_rtol": rtol,
+            "snes_type": "newtonls",
+            "snes_linesearch_type": "bt",
+            "ksp_type": "preonly",
+            "pc_type": "lu",
+            "pc_factor_mat_solver_type": "mumps",
+            "ksp_error_if_not_converged": True,
+            "snes_error_if_not_converged": True,
+            # "ksp_monitor": None,
+        }
         # Update step size
         if step_size_rule == "constant":
             alpha.value = C
@@ -193,13 +197,16 @@ def solve_problem(
         else:
             step_size_rule == "geometric"
             alpha.value = C * r**k
-        rank_print(f"OUTER LOOP {k + 1} alpha: {alpha.value}", msh.comm)
+        rank_print(f"{_BLUE} OUTER LOOP {k + 1} alpha: {alpha.value}{_color_reset}", msh.comm)
+        solver = SNESSolver(problem, petsc_options)
+        converged_reason, n = solver.solve()
+        assert converged_reason > 0, "Newton solver did not converge"
 
-        # Solve problem
-        log.set_log_level(log.LogLevel.INFO)
-        (n, converged) = newton_solver.solve(sol)
         # log.set_log_level(log.LogLevel.WARNING)
-        rank_print(f"Newton steps: {n}   Converged: {converged}", msh.comm)
+        rank_print(
+            f"{_GREEN}Newton steps: {n}   Converged: {converged_reason} {atol=:.2e} {rtol=:.2e}{_color_reset}",
+            msh.comm,
+        )
 
         # Check outer loop convergence
         energy = allreduce_scalar(energy_form)
@@ -210,6 +217,8 @@ def solve_problem(
         latent_increment = np.sqrt(allreduce_scalar(L2increment_form))
 
         tol_Newton = increment
+        if k == 0:
+            initial_tol = increment
 
         if increment_k > 0.0:
             rank_print(
@@ -230,10 +239,6 @@ def solve_problem(
 
         if tol_Newton < tol_exit:
             break
-
-        # Reset Newton solver options
-        newton_solver.atol = 1e-4
-        newton_solver.rtol = tol_Newton * 1e-4
 
         # Update sol_k with sol_new
         sol_k.x.array[:] = sol.x.array[:]
@@ -274,7 +279,7 @@ def solve_problem(
 
     if k == maximum_number_of_outer_loop_iterations - 1:
         rank_print("Maximum number of outer loop iterations reached", msh.comm)
-    return sol, k
+    return sol, k, Newton_steps
 
 
 # -------------------------------------------------------
