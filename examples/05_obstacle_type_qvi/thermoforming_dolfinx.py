@@ -69,9 +69,8 @@ F += inner(u, w) * dx + inner(exp(-psi), w) * dx
 F += -inner(Phi0 + xi * T, w) * dx
 
 # Create modified Jacobian
-eps = dolfinx.fem.Constant(mesh, 1e-10)
-F_modified = F + eps / alpha * inner(grad(psi), grad(w)) * dx
-J = derivative(F_modified, s)
+eps = dolfinx.fem.Constant(mesh, 1.0e-10)
+J = derivative(F - eps / alpha * inner(grad(psi), grad(w)) * dx, s)
 
 # Create boundary condition
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
@@ -105,28 +104,27 @@ sp = {
     "snes_linesearch_type": "bt",
     "pc_type": "lu",
     "pc_factor_mat_solver_type": "mumps",
-    # "pc_svd_monitor": None,
     "mat_mumps_icntl_14": 1000,
-    "snes_atol": 1e-6,
-    "snes_rtol": 1e-6,
+    "snes_atol": 1e-5,
+    "snes_rtol": 1e-5,
     "snes_stol": 10 * np.finfo(dolfinx.default_scalar_type).eps,
-    "snes_linesearch_damping": 1e4,
     "snes_linesearch_order": 2,
     # "snes_linesearch_monitor": None,
 }
-problem = SNESProblem(F, s, bcs=[bc])
+problem = SNESProblem(F, s, bcs=[bc], J=dolfinx.fem.form(J))
 solver = SNESSolver(problem, sp)
-
 # Set initial guess for T
 s.sub(1).interpolate(lambda x: np.ones_like(x[1]))
 
 # LVPP Loop
 num_iterations = []
+alpha_max = 2**14
 for i in range(1, max_lvpp_iterations + 1):
     if mesh.comm.rank == 0:
         print(f"LVPP iteration: {i} Alpha: {float(alpha)}", flush=True)
     # Solve non-linear problem
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
+
     converged_reason, num_its = solver.solve()
     error_msg = f"Solver did not converge with {converged_reason}"
     assert converged_reason > 0, error_msg
@@ -155,6 +153,7 @@ for i in range(1, max_lvpp_iterations + 1):
     # Update previous solution and alpha
     s_prev.x.array[:] = s.x.array
     alpha.value *= 4
+    alpha.value = min(alpha_max, alpha.value)
 
 if mesh.comm.rank == 0:
     print(f"Total number of LVPP iterations: {i}", flush=True)

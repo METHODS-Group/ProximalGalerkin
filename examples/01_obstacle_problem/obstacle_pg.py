@@ -132,7 +132,7 @@ def solve_problem(
     # Setup newton solver
     log.set_log_level(log.LogLevel.WARNING)
     newton_solver = NewtonSolver(comm=msh.comm, problem=problem)
-    newton_solver.rtol=1e-6
+    newton_solver.rtol = 1e-6
     newton_solver.max_it = 100
     ksp = newton_solver.krylov_solver
     petsc_options = {
