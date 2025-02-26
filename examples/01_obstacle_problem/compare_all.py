@@ -129,7 +129,7 @@ if __name__ == "__main__":
             x_i.x.array.copy(),
             bounds,
             max_iter=max_iter,
-            tol=1e-2*tol,
+            tol=1e-2 * tol,
             activate_hessian=with_hessian,
         )
         ipopt_iteration_count[with_hessian] = problem.total_iteration_count
