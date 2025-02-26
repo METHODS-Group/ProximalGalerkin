@@ -111,7 +111,8 @@ sp = {
     "snes_linesearch_order": 2,
     # "snes_linesearch_monitor": None,
 }
-
+problem = SNESProblem(F, s, bcs=[bc], J=dolfinx.fem.form(J))
+solver = SNESSolver(problem, sp)
 # Set initial guess for T
 s.sub(1).interpolate(lambda x: np.ones_like(x[1]))
 
@@ -123,8 +124,7 @@ for i in range(1, max_lvpp_iterations + 1):
         print(f"LVPP iteration: {i} Alpha: {float(alpha)}", flush=True)
     # Solve non-linear problem
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
-    problem = SNESProblem(F, s, bcs=[bc], J=dolfinx.fem.form(J))
-    solver = SNESSolver(problem, sp)
+
     converged_reason, num_its = solver.solve()
     error_msg = f"Solver did not converge with {converged_reason}"
     assert converged_reason > 0, error_msg
