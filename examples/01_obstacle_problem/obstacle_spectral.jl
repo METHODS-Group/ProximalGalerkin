@@ -5,36 +5,17 @@ import Pkg; Pkg.add("LaTeXStrings")
 import Pkg; Pkg.add("IterativeSolvers")
 import Pkg; Pkg.add("LinearMaps")
 import Pkg; Pkg.add("MatrixFactorizations")
+"""
+Solve the obstacle problem on a disk domain with LVPP 
+discretized with a sparse spectral method via Zernike polynomials.
+"""
+
 
 using ClassicalOrthogonalPolynomials, MultivariateOrthogonalPolynomials
 import MultivariateOrthogonalPolynomials: ZernikeITransform
 using SparseArrays, LinearAlgebra
 using IterativeSolvers, LinearMaps, MatrixFactorizations
 using Plots, LaTeXStrings
-
-"""
-Solve the obstacle problem on a disk domain with LVPP 
-discretized with a sparse spectral method via Zernike polynomials.
-"""
-
-import Pkg; Pkg.add("MultivariateOrthogonalPolynomials")
-import Pkg; Pkg.add("ClassicalOrthogonalPolynomials")
-import Pkg; Pkg.add("Plots")
-import Pkg; Pkg.add("LaTeXStrings")
-import Pkg; Pkg.add("IterativeSolvers")
-import Pkg; Pkg.add("LinearMaps")
-import Pkg; Pkg.add("MatrixFactorizations")
-
-using ClassicalOrthogonalPolynomials, MultivariateOrthogonalPolynomials
-import MultivariateOrthogonalPolynomials: ZernikeITransform
-using SparseArrays, LinearAlgebra
-using IterativeSolvers, LinearMaps, MatrixFactorizations
-using Plots, LaTeXStrings
-
-"""
-Solve the obstacle problem on a disk domain with LVPP 
-discretized with a sparse spectral method via Zernike polynomials.
-"""
 
 T = Float64
 
