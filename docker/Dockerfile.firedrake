@@ -34,12 +34,13 @@ RUN wget -nc --quiet https://github.com/HDFGroup/hdf5/archive/refs/tags/hdf5_${H
 
 FROM hdf5 AS intermediate
 
+ARG FIREDRAKE_BRANCH="master"
 ENV HDF5_DIR="/usr/local"
 ENV HDF5_MPI="ON"
 ENV FIREDRAKE_PYTHON=/firedrake-env
 RUN python3 -m venv ${FIREDRAKE_PYTHON}
 WORKDIR ${FIREDRAKE_PYTHON}
-RUN git clone --branch=connorjward/pip-install --single-branch  https://github.com/firedrakeproject/firedrake
+RUN git clone --branch=${FIREDRAKE_BRANCH} --single-branch  https://github.com/firedrakeproject/firedrake
 ENV PATH=${FIREDRAKE_PYTHON}/bin:$PATH
 
 

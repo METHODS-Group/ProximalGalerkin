@@ -205,13 +205,14 @@ ENV TMP_PETSC_ARCH=${PETSC_ARCH}
 ENV PYTHONPATH=""
 ENV HDF5_DIR="/usr/local"
 ENV HDF5_MPI="ON"
+ARG FIREDRAKE_BRANCH="master"
 
 # Setup firedrake virtual env
 ENV FIREDRAKE_PYTHON=/firedrake-env
 RUN python3 -m venv ${FIREDRAKE_PYTHON}
 WORKDIR ${FIREDRAKE_PYTHON}
 # FIXME: Change when this is merged
-RUN git clone --branch=connorjward/pip-install --single-branch  https://github.com/firedrakeproject/firedrake
+RUN git clone --branch=${FIREDRAKE_BRANCH} --single-branch  https://github.com/firedrakeproject/firedrake
 ENV PATH=${FIREDRAKE_PYTHON}/bin:$PATH
 
 # Install firedrake-dependent PETSc
