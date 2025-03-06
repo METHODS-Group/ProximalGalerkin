@@ -19,7 +19,6 @@ def solve_problem(
     N: int,
     M: int,
     primal_space: str,
-    latent_space: str,
     primal_degree: int,
     cell_type: str,
     alpha_scheme: AlphaScheme,
@@ -39,18 +38,10 @@ def solve_problem(
 
     el_0 = basix.ufl.element(
         primal_space, mesh.topology.cell_name(), primal_degree)
-    if latent_space == "RT":
-        el_1 = basix.ufl.element(
-            "RT", mesh.topology.cell_name(), primal_degree - 1)
-    elif latent_space == "DG":
-        el_1 = basix.ufl.element(
-            "DG", mesh.topology.cell_name(), primal_degree - 1, shape=(mesh.geometry.dim,)
-        )
-    elif latent_space == "Lagrange":
-        assert primal_degree > 1
-        el_1 = basix.ufl.element(
-            "Lagrange", mesh.topology.cell_name(), primal_degree - 1, shape=(mesh.geometry.dim,)
-        )
+    assert primal_degree > 0
+    el_1 = basix.ufl.element(
+        "Lagrange", mesh.topology.cell_name(), primal_degree-1, shape=(mesh.geometry.dim,)
+    )
 
     trial_el = basix.ufl.mixed_element([el_0, el_1])
     V_trial = dolfinx.fem.functionspace(mesh, trial_el)
@@ -228,9 +219,9 @@ def main(
     parser = argparse.ArgumentParser(formatter_class=CustomFormatter)
     mesh_options = parser.add_argument_group("Mesh options")
     mesh_options.add_argument(
-        "-N", type=int, default=40, help="Number of elements in x-direction")
+        "-N", type=int, default=200, help="Number of elements in x-direction")
     mesh_options.add_argument(
-        "-M", type=int, default=40, help="Number of elements in y-direction")
+        "-M", type=int, default=200, help="Number of elements in y-direction")
     mesh_options.add_argument(
         "--cell_type",
         "-c",
@@ -249,13 +240,6 @@ def main(
         help="Finite Element family for primal variable",
     )
     element_options.add_argument(
-        "--latent_space",
-        type=str,
-        default="Lagrange",
-        choices=get_args(latent_spaces),
-        help="Finite element family for auxiliary variable",
-    )
-    element_options.add_argument(
         "--primal_degree",
         type=int,
         default=2,
@@ -268,7 +252,7 @@ def main(
     alpha_options.add_argument(
         "--alpha_scheme",
         type=str,
-        default="linear",
+        default="doubling",
         choices=get_args(AlphaScheme),
         help="Scheme for updating alpha",
     )
@@ -315,7 +299,6 @@ def main(
         N=parsed_args.N,
         M=parsed_args.M,
         primal_space=parsed_args.primal_space,
-        latent_space=parsed_args.latent_space,
         primal_degree=parsed_args.primal_degree,
         cell_type=parsed_args.cell_type,
         alpha_scheme=parsed_args.alpha_scheme,
