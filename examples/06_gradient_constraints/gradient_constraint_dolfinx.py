@@ -132,7 +132,7 @@ def solve_problem(
     Z = dolfinx.fem.functionspace(mesh, ("DG", 0))
     active_set = dolfinx.fem.Function(Z, name="active_set")
     active_set_expr = ufl.sqrt(ufl.dot(ufl.grad(u), ufl.grad(u))) - phi
-    active_cell = ufl.conditional(ufl.gt(active_set_expr, 0), 1, 0)
+    active_cell = ufl.conditional(ufl.ge(active_set_expr, 0), 1, 0)
     set_expr = dolfinx.fem.Expression(
         active_cell, Z.element.interpolation_points())
 
@@ -141,7 +141,7 @@ def solve_problem(
     global_active_set_exr = ufl.sqrt(
         ufl.dot(global_feasible_gradient, global_feasible_gradient)) - phi
     global_active_cell = ufl.conditional(
-        ufl.gt(global_active_set_exr, -1e-6), 1, 0)
+        ufl.gt(global_active_set_exr, -1e-8), 1, 0)
     global_set_expr = dolfinx.fem.Expression(
         global_active_cell, Z.element.interpolation_points())
     global_active_set = dolfinx.fem.Function(
