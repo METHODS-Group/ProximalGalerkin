@@ -29,6 +29,9 @@ jobs:
               . /firedrake-env/bin/activate
               echo PATH=$PATH >> $GITHUB_ENV
 
+        - name: Install matplotib
+          run: |
+              python3 -m pip install matplotlib
 
         - name: Run example 7
           working-directory: ./examples/07_eigenvalue_constraints
