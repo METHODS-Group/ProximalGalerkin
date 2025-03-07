@@ -17,11 +17,10 @@ python3 fracture_dolfinx.py
 ```
 
 ## Firedrake
-while the `Firedrake` code can be executed with:
-
-> [!WARNING]  
-> Add instructions
+while the `Firedrake` code can be executed after calling `source firedrake-mode` and then
 
 ```bash
-
+python3 fracture_firedrake.py
 ```
+
+

@@ -231,7 +231,7 @@ FROM firedrake-petsc-env AS firedrake-env
 
 # INSTALL Firedrake
 WORKDIR ${FIREDRAKE_PYTHON}/firedrake
-RUN python3 -m pip install --no-cache-dir mpi4py petsc4py -v
+RUN python3 -m pip install --no-cache-dir mpi4py petsc4py matplotlib -v
 RUN python3 -m pip install --no-binary h5py . -v
 # Install ngs-petsc and vtk on amd, only vtk on arm
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \

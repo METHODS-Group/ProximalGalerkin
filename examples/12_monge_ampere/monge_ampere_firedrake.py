@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sc
 from expm import expm
 from firedrake import *
+from pathlib import Path
 
 nonsmooth = False
 z_prev = None
@@ -37,7 +38,9 @@ for mesh in mh:
 
     C = FunctionSpace(mesh, "DG", W.ufl_element().degree())
     rho_c = Function(C, name="Density").interpolate(rho)
-    VTKFile("output/density.pvd").write(rho_c)
+    folder = Path("output")
+    folder.mkdir(exist_ok=True)
+    VTKFile(folder / "density.pvd").write(rho_c)
     assert all(rho_c.dat.data > 0)
 
     Z = MixedFunctionSpace([V, U, W])
@@ -81,7 +84,7 @@ for mesh in mh:
         for i in range(loghessian.dat.data.shape[0]):
             loghessian.dat.data[i, :, :] = sc.linalg.logm(psi_init.dat.data[i, :, :])
         z.subfunctions[2].project(as_vector([loghessian[0, 0], loghessian[0, 1], loghessian[1, 1]]))
-        VTKFile("output/initialguess.pvd").write(
+        VTKFile(folder / "initialguess.pvd").write(
             z.subfunctions[0], z.subfunctions[1], z.subfunctions[2]
         )
 
@@ -102,7 +105,7 @@ error_ = project(u_exact - u, V, solver_parameters=projsp)
 u_exact_ = project(u_exact, V, solver_parameters=projsp)
 error_.rename("Error")
 u_exact_.rename("ExactSolution")
-VTKFile("output/solution.pvd").write(
+VTKFile(folder / "solution.pvd").write(
     z.subfunctions[0], z.subfunctions[1], z.subfunctions[2], u_exact_, error_
 )
 
