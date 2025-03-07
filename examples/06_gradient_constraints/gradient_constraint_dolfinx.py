@@ -19,7 +19,6 @@ def solve_problem(
     N: int,
     M: int,
     primal_space: str,
-    latent_space: str,
     primal_degree: int,
     cell_type: str,
     alpha_scheme: AlphaScheme,
@@ -34,20 +33,15 @@ def solve_problem(
 ):
     _cell_type = dolfinx.mesh.to_type(cell_type)
 
-    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, M, cell_type=_cell_type)
+    mesh = dolfinx.mesh.create_unit_square(
+        MPI.COMM_WORLD, N, M, cell_type=_cell_type)
 
-    el_0 = basix.ufl.element(primal_space, mesh.topology.cell_name(), primal_degree)
-    if latent_space == "RT":
-        el_1 = basix.ufl.element("RT", mesh.topology.cell_name(), primal_degree - 1)
-    elif latent_space == "DG":
-        el_1 = basix.ufl.element(
-            "DG", mesh.topology.cell_name(), primal_degree - 1, shape=(mesh.geometry.dim,)
-        )
-    elif latent_space == "Lagrange":
-        assert primal_degree > 1
-        el_1 = basix.ufl.element(
-            "Lagrange", mesh.topology.cell_name(), primal_degree - 1, shape=(mesh.geometry.dim,)
-        )
+    el_0 = basix.ufl.element(
+        primal_space, mesh.topology.cell_name(), primal_degree)
+    assert primal_degree > 0
+    el_1 = basix.ufl.element(
+        "Lagrange", mesh.topology.cell_name(), primal_degree-1, shape=(mesh.geometry.dim,)
+    )
 
     trial_el = basix.ufl.mixed_element([el_0, el_1])
     V_trial = dolfinx.fem.functionspace(mesh, trial_el)
@@ -58,7 +52,7 @@ def solve_problem(
 
     v, w = ufl.TestFunctions(V_test)
 
-    dx = ufl.Measure("dx", domain=mesh)
+    dx = ufl.Measure("dx", domain=mesh, metadata={"quadrature_degree": 10})
     alpha = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(alpha_0))
     U, U_to_W = V_trial.sub(0).collapse()
     phi = dolfinx.fem.Function(U)
@@ -106,7 +100,8 @@ def solve_problem(
     u_bc = dolfinx.fem.Function(U)
     u_bc.x.array[:] = 0
     bcs = [dolfinx.fem.dirichletbc(u_bc, boundary_dofs, V_trial.sub(0))]
-
+    print(
+        f"Number of dofs: {U.dofmap.index_map.size_global*U.dofmap.index_map_bs}")
     problem = NonlinearProblem(F, sol, bcs=bcs)
     solver = NewtonSolver(mesh.comm, problem)
     solver.convergence_criterion = "residual"
@@ -120,25 +115,51 @@ def solve_problem(
     option_prefix = ksp.getOptionsPrefix()
     opts[f"{option_prefix}ksp_type"] = "preonly"
     opts[f"{option_prefix}pc_type"] = "lu"
-    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "superlu"
+    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
     ksp.setFromOptions()
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
-    W = dolfinx.fem.functionspace(mesh, ("DG", (primal_degree - 1), (mesh.geometry.dim,)))
-    global_feasible_gradient = phi * psi / ufl.sqrt(1 + ufl.dot(psi, psi))
-    feas_grad = dolfinx.fem.Expression(global_feasible_gradient, W.element.interpolation_points())
+    Z = dolfinx.fem.functionspace(mesh, ("DG", 0))
+    active_set = dolfinx.fem.Function(Z, name="active_set")
+    active_set_expr = ufl.sqrt(ufl.dot(ufl.grad(u), ufl.grad(u))) - phi
+    active_cell = ufl.conditional(ufl.ge(active_set_expr, 0), 1, 0)
+    set_expr = dolfinx.fem.Expression(
+        active_cell, Z.element.interpolation_points())
+
+    global_feasible_gradient = phi * psi / \
+        ufl.sqrt(1 + ufl.dot(psi, psi))
+    global_active_set_exr = ufl.sqrt(
+        ufl.dot(global_feasible_gradient, global_feasible_gradient)) - phi
+    global_active_cell = ufl.conditional(
+        ufl.gt(global_active_set_exr, -1e-8), 1, 0)
+    global_set_expr = dolfinx.fem.Expression(
+        global_active_cell, Z.element.interpolation_points())
+    global_active_set = dolfinx.fem.Function(
+        Z, name="global_feasible_active_set")
+    xdmf = dolfinx.io.XDMFFile(mesh.comm, "active_set.xdmf", "w")
+    xdmf.write_mesh(mesh)
+    W = dolfinx.fem.functionspace(
+        mesh, ("DG", (primal_degree - 1), (mesh.geometry.dim,)))
+    global_feasible_gradient = phi * psi / \
+        ufl.sqrt(1 + ufl.dot(psi, psi))
+    phi_out = dolfinx.fem.Function(W, name="phi")
+    phi_out.sub(0).interpolate(phi)
+    feas_grad = dolfinx.fem.Expression(
+        global_feasible_gradient, W.element.interpolation_points())
     pg_grad = dolfinx.fem.Function(W)
     pg_grad.name = "Global feasible gradient"
 
     u_out = sol.sub(0).collapse()
     u_out.name = "u"
-    bp_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
+    bp_u = dolfinx.io.VTXWriter(
+        mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
     grad_u = dolfinx.fem.Function(W)
     grad_u.name = "grad(u)"
-    grad_u_expr = dolfinx.fem.Expression(ufl.grad(u), W.element.interpolation_points())
+    grad_u_expr = dolfinx.fem.Expression(
+        ufl.grad(u), W.element.interpolation_points())
     bp_grad_u = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "grad_u.bp", [grad_u, pg_grad], engine="BP4"
+        mesh.comm, result_dir / "grad_u.bp", [grad_u, pg_grad, phi_out], engine="BP4"
     )
     diff = sol.sub(0) - w0.sub(0)
     L2_squared = ufl.dot(diff, diff) * dx
@@ -160,7 +181,7 @@ def solve_problem(
         L2_diff[i] = global_diff
         if mesh.comm.rank == 0:
             print(
-                f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}",
+                f"Iteration {i+1}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}",
                 f"|delta u |= {global_diff}",
             )
 
@@ -172,8 +193,12 @@ def solve_problem(
 
         if global_diff < stopping_tol:
             break
-
+        active_set.interpolate(set_expr)
+        global_active_set.interpolate(global_set_expr)
+        xdmf.write_function(global_active_set, i)
+        xdmf.write_function(active_set, i)
         w0.x.array[:] = sol.x.array
+    xdmf.close()
     bp_u.close()
     bp_grad_u.close()
     return newton_iterations[: i + 1], L2_diff[: i + 1]
@@ -193,8 +218,10 @@ def main(
 ):
     parser = argparse.ArgumentParser(formatter_class=CustomFormatter)
     mesh_options = parser.add_argument_group("Mesh options")
-    mesh_options.add_argument("-N", type=int, default=40, help="Number of elements in x-direction")
-    mesh_options.add_argument("-M", type=int, default=40, help="Number of elements in y-direction")
+    mesh_options.add_argument(
+        "-N", type=int, default=200, help="Number of elements in x-direction")
+    mesh_options.add_argument(
+        "-M", type=int, default=200, help="Number of elements in y-direction")
     mesh_options.add_argument(
         "--cell_type",
         "-c",
@@ -203,20 +230,14 @@ def main(
         choices=["triangle", "quadrilateral"],
         help="Cell type",
     )
-    element_options = parser.add_argument_group("Finite element discretization options")
+    element_options = parser.add_argument_group(
+        "Finite element discretization options")
     element_options.add_argument(
         "--primal_space",
         type=str,
         default="Lagrange",
         choices=["Lagrange", "P", "CG"],
         help="Finite Element family for primal variable",
-    )
-    element_options.add_argument(
-        "--latent_space",
-        type=str,
-        default="Lagrange",
-        choices=get_args(latent_spaces),
-        help="Finite element family for auxiliary variable",
     )
     element_options.add_argument(
         "--primal_degree",
@@ -231,11 +252,12 @@ def main(
     alpha_options.add_argument(
         "--alpha_scheme",
         type=str,
-        default="linear",
+        default="doubling",
         choices=get_args(AlphaScheme),
         help="Scheme for updating alpha",
     )
-    alpha_options.add_argument("--alpha_0", type=float, default=1.0, help="Initial value of alpha")
+    alpha_options.add_argument(
+        "--alpha_0", type=float, default=1.0, help="Initial value of alpha")
     alpha_options.add_argument(
         "--alpha_c", type=float, default=1.0, help="Increment of alpha in linear scheme"
     )
@@ -264,20 +286,19 @@ def main(
     if phi_func is None:
 
         def phi_func(x):
-            return 0.1 + 0.1 * x[0] + x[1] * 0.4
+            return 0.1 + 0.2 * x[0] + x[1] * 0.4
             # return np.full(x.shape[1], 0.1)
 
     if f_func is None:
 
         def f_func(x):
             # return np.full(x.shape[1], 1)
-            return 10 * np.sin(np.pi * x[0]) * np.sin(np.pi * x[0])
+            return 15 * np.sin(np.pi * x[0]) * np.sin(np.pi * x[0])
 
     iteration_counts, L2_diffs = solve_problem(
         N=parsed_args.N,
         M=parsed_args.M,
         primal_space=parsed_args.primal_space,
-        latent_space=parsed_args.latent_space,
         primal_degree=parsed_args.primal_degree,
         cell_type=parsed_args.cell_type,
         alpha_scheme=parsed_args.alpha_scheme,
