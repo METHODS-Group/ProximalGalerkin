@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0.0", "wheel"]
 
 [project]
 name = "lvpp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Tools for the Latent Variable Proximal Point method"
 authors = [{ name = "Jørgen S. Dokken", email = "dokken@simula.no" }]
 license = { file = "LICENSE" }

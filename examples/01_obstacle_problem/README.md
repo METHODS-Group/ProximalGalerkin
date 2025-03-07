@@ -5,7 +5,7 @@
 Figures 2 (a) and (b) are generated with `DOLFINx`.
 
 To reproduce the results in Figures 2 (a) (the comparison between Proximal Galerkin, SNES, Galahad, and IPOPT),
-first deploy the `ghcr.io/methods-group/proximalgalerkin:v0.2.0` Docker container.
+first deploy the `ghcr.io/methods-group/proximalgalerkin:v0.3.0` Docker container.
 Then execute the following scripts (in `dolfinx-mode`, see [../../README.md](../../README.md)):
 
 ```bash

@@ -5,7 +5,7 @@ We have provided code for this example for both the `MFEM` and `DOLFINx` Docker 
 ## Using the Proximal-Galerkin docker containers
 
 ### MFEM
-If using the `ghcr.io/methods-group/proximalgalerkin:v0.2.0` container, you can navigate to
+If using the `ghcr.io/methods-group/proximalgalerkin:v0.3.0` container, you can navigate to
 `/root/LVPP/mfem/examples`, where there is a file called `ex40_taylor_hood.cpp`.
 
 This script reproduces the  Möbius strip solution in Figure 11.

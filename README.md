@@ -22,7 +22,7 @@ We provide a single docker container `ghcr.io/methods-group/proximalgalerkin` fr
 One can start the image with
 
 ```bash
-docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin:v0.2.0
+docker run -ti -v $(pwd):/root/shared --name=proximal-examples ghcr.io/methods-group/proximalgalerkin:v0.3.0
 ```
 
 This shares the current directory with the docker container under the location `/root/shared`.
