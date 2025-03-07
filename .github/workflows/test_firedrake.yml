@@ -48,4 +48,4 @@ jobs:
         - name: Run example 3
           working-directory: ./examples/03_fracture
           run: |
-            python3 poisson_firedrake.py
+            python3 fracture_firedrake.py
