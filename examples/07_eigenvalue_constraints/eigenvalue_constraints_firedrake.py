@@ -5,6 +5,7 @@
 from firedrake import *
 from ufl_expressions import expm2 as expm
 import numpy.linalg
+from pathlib import Path
 
 I = Identity(2)
 tanh = lambda M: 2 * inv(expm(2 * M) + I) * (expm(2 * M) - I)
@@ -146,4 +147,6 @@ m_minus = Function(V, name="MinimumEigenvalue")
 for i in range(t.dat.data.shape[0]):
     m_minus.dat.data[i] = numpy.linalg.eigvals(t.dat.data[i, :, :]).min()
 
-VTKFile("output/solution.pvd").write(t, latent, conforming, diff, m_plus, m_minus)
+folder = Path("output")
+folder.mkdir(exist_ok=True)
+VTKFile(folder / "solution.pvd").write(t, latent, conforming, diff, m_plus, m_minus)

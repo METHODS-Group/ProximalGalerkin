@@ -7,6 +7,7 @@ from numpy import linspace
 from firedrake import PETSc
 from netgen.geom2d import CSG2d, Solid2d, EdgeInfo, Circle
 import argparse
+from pathlib import Path
 
 print = PETSc.Sys.Print
 
@@ -112,8 +113,9 @@ sp = {
     "pc_factor_mat_solver_type": "mumps",
     "mat_mumps_icntl_14": 500,
 }
-
-pvd = VTKFile(f"output/nref-{args.nref}/lvpp.pvd")
+folder = Path("output")
+folder.mkdir(exist_ok=True)
+pvd = VTKFile(folder / f"nref-{args.nref}/lvpp.pvd")
 
 NFAIL_MAX = 50
 

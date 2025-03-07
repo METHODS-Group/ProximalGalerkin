@@ -149,7 +149,11 @@ for phi_ in [3, 2, 1, 0.5, 0.1, 0.01]:
     u_conform.interpolate(exp(z.subfunctions[1]) + phi0)
     fplt.plot(u_conform, label=f"φ = {phi_}", axes=ax)
     u = z.subfunctions[0]
-    with open(f"output/phi-{phi_}.txt", "w") as f:
+
+    folder = Path("output")
+    folder.mkdir(exist_ok=True)
+
+    with open(folder / f"phi-{phi_}.txt", "w") as f:
         for x_ in np.linspace(0, 1, 1001):
             f.write(f"{x_} {u_conform.at(x_)}\n")
             # f.write(f"{x_} {u.at(x_)}\n")
@@ -157,8 +161,6 @@ for phi_ in [3, 2, 1, 0.5, 0.1, 0.01]:
 
 phi0_plot = Function(V)
 phi0_plot.interpolate(phi0)
-folder = Path("output")
-folder.mkdir(exist_ok=True)
 
 with open(folder / "obstacle.txt", "w") as f:
     for x_ in np.linspace(0, 1, 1001):
