@@ -48,7 +48,8 @@ jobs:
           run: |
             python3 monge_ampere_firedrake.py
     
-        - name: Run example 3
+        - name: Run example 3 (skip on arm due to missing netgen)
+          if: (matrix.platform == 'ubuntu-24.04')
           working-directory: ./examples/03_fracture
           run: |
             python3 fracture_firedrake.py
