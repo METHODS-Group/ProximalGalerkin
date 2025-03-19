@@ -2,6 +2,7 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from mpi4py import MPI
 
+from packaging.version import Version
 import basix.ufl
 import dolfinx.fem.petsc
 import numpy as np
@@ -89,8 +90,11 @@ Gc = dolfinx.fem.Constant(mesh, st(1.0))
 
 # Compute maximum cell size
 W = dolfinx.fem.functionspace(mesh, ("DG", 0))
-h = dolfinx.fem.Expression(4 * Circumradius(mesh),
-                           W.element.interpolation_points())
+if Version(dolfinx.__version__) > Version("0.9.0"):
+    ip = W.element.interpolation_points
+else:
+    ip = W.element.interpolation_points()
+h = dolfinx.fem.Expression(4 * Circumradius(mesh), ip)
 diam = dolfinx.fem.Function(W)
 diam.interpolate(h)
 max_diam = mesh.comm.allreduce(np.max(diam.x.array), op=MPI.MAX)
@@ -116,8 +120,12 @@ output_space = dolfinx.fem.functionspace(mesh, ("Lagrange", 3))
 c_conform_out = dolfinx.fem.Function(output_space, name="ConformingDamage")
 alpha = dolfinx.fem.Constant(mesh, st(1.0))
 c_conform = (c_prev + exp(psi)) / (exp(psi) + 1)
+if Version(dolfinx.__version__) > Version("0.9.0"):
+    out_ip = output_space.element.interpolation_points
+else:
+    out_ip = output_space.element.interpolation_points()
 c_conform_expr = dolfinx.fem.Expression(
-    c_conform, output_space.element.interpolation_points())
+    c_conform, out_ip)
 
 eps = dolfinx.fem.Constant(mesh, 1.0e-5)
 E = (
@@ -196,8 +204,10 @@ xdmf_file = dolfinx.io.XDMFFile(mesh.comm, "solution.xdmf", "w")
 xdmf_file.write_mesh(mesh)
 xdmf_file.close()
 vtx_damage = dolfinx.io.VTXWriter(mesh.comm, "damage.bp", [c_conform_out])
-L2_c = dolfinx.fem.form(inner(c - c_iter, c - c_iter) * dx)
-L2_u = dolfinx.fem.form(inner(u - u_iter, u - u_iter) * dx)
+diff_c = c - c_iter
+diff_u = u - u_iter
+H1_c = dolfinx.fem.form(inner(diff_c, diff_c)*dx + inner(grad(diff_c), grad(diff_c)) * dx)
+H1_u = dolfinx.fem.form(inner(diff_u, diff_u)*dx + inner(grad(diff_u), grad(diff_u))* dx)
 L2_z = dolfinx.fem.form(inner(z - z_prev, z - z_prev) * dx)
 
 U, U_to_Z = Z.sub(0).collapse()
@@ -263,16 +273,16 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
 
         # Termination
         nrm_c = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(
-            L2_c), op=MPI.SUM))
+            H1_c), op=MPI.SUM))
         nrm_u = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(
-            L2_u), op=MPI.SUM))
+            H1_u), op=MPI.SUM))
         if mesh.comm.rank == 0:
             print(
                 f"{_GREEN}Solved {k=} {num_iterations=} alpha={float(alpha)},"
-                f"||c_{k} - c_{k - 1}|| = {nrm_c}{_color_reset}",
+                f"||c_{k} - c_{k - 1}||_H1 = {nrm_c:.3e} ||u_{k} - u_{k - 1}||_H1 = {nrm_u:.3e} {_color_reset}",
                 flush=True,
             )
-        if nrm_c < 1.0e-4:  # and nrm_u < 1.0e-4:
+        if nrm_c < 1.0e-4 and nrm_u < 1.0e-4:
             break
 
         # Update alpha
