@@ -63,7 +63,8 @@ parser.add_argument(
     dest="num_load_steps",
     help="Number of load steps",
 )
-parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output from PETSc SNES")
+parser.add_argument("--verbose", "-v", action="store_true",
+                    help="Verbose output from PETSc SNES")
 parser.add_argument("--Tmin", type=float, default=0.0, help="Minimum load")
 parser.add_argument("--Tmax", type=float, default=5.0, help="Maximum load")
 
@@ -88,7 +89,8 @@ Gc = dolfinx.fem.Constant(mesh, st(1.0))
 
 # Compute maximum cell size
 W = dolfinx.fem.functionspace(mesh, ("DG", 0))
-h = dolfinx.fem.Expression(4 * Circumradius(mesh), W.element.interpolation_points())
+h = dolfinx.fem.Expression(4 * Circumradius(mesh),
+                           W.element.interpolation_points())
 diam = dolfinx.fem.Function(W)
 diam.interpolate(h)
 max_diam = mesh.comm.allreduce(np.max(diam.x.array), op=MPI.MAX)
@@ -107,14 +109,15 @@ z_trial = TrialFunction(Z)
 z_prev = dolfinx.fem.Function(Z)
 _, c_prev, _ = split(z_prev)
 z_iter = dolfinx.fem.Function(Z)
-(_, c_iter, psi_iter) = split(z_iter)
+(u_iter, c_iter, psi_iter) = split(z_iter)
 
 
 output_space = dolfinx.fem.functionspace(mesh, ("Lagrange", 3))
 c_conform_out = dolfinx.fem.Function(output_space, name="ConformingDamage")
 alpha = dolfinx.fem.Constant(mesh, st(1.0))
 c_conform = (c_prev + exp(psi)) / (exp(psi) + 1)
-c_conform_expr = dolfinx.fem.Expression(c_conform, output_space.element.interpolation_points())
+c_conform_expr = dolfinx.fem.Expression(
+    c_conform, output_space.element.interpolation_points())
 
 eps = dolfinx.fem.Constant(mesh, 1.0e-5)
 E = (
@@ -194,6 +197,7 @@ xdmf_file.write_mesh(mesh)
 xdmf_file.close()
 vtx_damage = dolfinx.io.VTXWriter(mesh.comm, "damage.bp", [c_conform_out])
 L2_c = dolfinx.fem.form(inner(c - c_iter, c - c_iter) * dx)
+L2_u = dolfinx.fem.form(inner(u - u_iter, u - u_iter) * dx)
 L2_z = dolfinx.fem.form(inner(z - z_prev, z - z_prev) * dx)
 
 U, U_to_Z = Z.sub(0).collapse()
@@ -258,14 +262,17 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
                 continue
 
         # Termination
-        nrm = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(L2_c), op=MPI.SUM))
+        nrm_c = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(
+            L2_c), op=MPI.SUM))
+        nrm_u = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(
+            L2_u), op=MPI.SUM))
         if mesh.comm.rank == 0:
             print(
                 f"{_GREEN}Solved {k=} {num_iterations=} alpha={float(alpha)},"
-                f"||c_{k} - c_{k - 1}|| = {nrm}{_color_reset}",
+                f"||c_{k} - c_{k - 1}|| = {nrm_c}{_color_reset}",
                 flush=True,
             )
-        if nrm < 1.0e-4:
+        if nrm_c < 1.0e-4:  # and nrm_u < 1.0e-4:
             break
 
         # Update alpha
@@ -283,15 +290,16 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
     # the failure mode of the algorithm above is that it terminates in one
     # PG iteration that does no Newton iterations, so the solution doesn't
     # change
-    norm_Z = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(L2_z), op=MPI.SUM))
+    norm_Z = np.sqrt(mesh.comm.allreduce(
+        dolfinx.fem.assemble_scalar(L2_z), op=MPI.SUM))
     if k == 1 and np.isclose(norm_Z, 0.0):
         break
 
     if nfail == NFAIL_MAX:
         break
-    c_conform_out.interpolate(c_conform_expr)
-
+    z_prev.interpolate(z)
     if step % write_frequency == 0:
+        c_conform_out.interpolate(c_conform_expr)
         with dolfinx.io.XDMFFile(mesh.comm, "solution.xdmf", "a") as xdmf_file:
             u_out.x.array[:] = z.x.array[U_to_Z]
             c_out.x.array[:] = z.x.array[C_to_Z]
@@ -300,6 +308,5 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
             xdmf_file.write_function(c_out, T)
             xdmf_file.write_function(psi_out, T)
 
-        z_prev.interpolate(z)
         vtx_damage.write(T)
 vtx_damage.close()
