@@ -100,7 +100,7 @@ diam.interpolate(h)
 max_diam = mesh.comm.allreduce(np.max(diam.x.array), op=MPI.MAX)
 l = dolfinx.fem.Constant(mesh, st(max_diam))
 print(f"Using l = {float(l)}")
-
+print("System size: ", Z.dofmap.index_map.size_global*Z.dofmap.index_map_bs)
 
 z = dolfinx.fem.Function(Z)
 (u, c, psi) = split(z)
@@ -221,6 +221,8 @@ num_iterations = -1
 
 
 problem = SNESProblem(F_compiled, z, bcs=bcs, J=J_reg)
+solver = SNESSolver(problem, sp)
+
 for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
     if mesh.comm.rank == 0:
         print(
@@ -238,9 +240,12 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
         try:
             if mesh.comm.rank == 0:
                 print(f"Attempting {k=} alpha={float(alpha)}", flush=True)
+            del solver
             solver = SNESSolver(problem, sp)
             converged_reason, num_iterations = solver.solve()
-
+            if converged_reason == -3:
+                # Linear solver did not converge
+                raise NotConvergedError(f"Not converged, linear solver failed with {solver._snes.getKSP().getConvergedReason()}")
             if num_iterations == 0 and converged_reason > 0:
                 # solver didn't actually get to do any work,
                 # we've just reduced alpha so much that the initial guess
