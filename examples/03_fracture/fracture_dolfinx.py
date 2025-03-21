@@ -1,7 +1,7 @@
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from mpi4py import MPI
-
+from typing import Literal
 from packaging.version import Version
 import basix.ufl
 import dolfinx.fem.petsc
@@ -17,6 +17,7 @@ from ufl import (
     grad,
     inner,
     split,
+    core,
 )
 
 from lvpp import SNESProblem, SNESSolver
@@ -30,6 +31,20 @@ _color_reset = "\033[0m"
 class NotConvergedError(Exception):
     pass
 
+def norm(expr: core.expr.Expr, norm_type: Literal["L2", "H1", "H10"]) -> dolfinx.fem.Form:
+    """
+    Compile the norm of an UFL expression into a DOLFINx form.
+
+    Args:
+        expr: UFL expression
+        norm_type: Type of norm
+    """
+    if norm_type == "L2":
+        return dolfinx.fem.form(inner(expr, expr) * dx)
+    elif norm_type == "H1":
+        return norm(expr, "L2") + norm(grad(expr), "L2")
+    elif norm_type == "H10":
+        return norm(grad(expr), "L2")
 
 parser = ArgumentParser(
     description="Solve the obstacle problem on a unit square using Galahad.",
@@ -206,9 +221,10 @@ xdmf_file.close()
 vtx_damage = dolfinx.io.VTXWriter(mesh.comm, "damage.bp", [c_conform_out])
 diff_c = c - c_iter
 diff_u = u - u_iter
-H1_c = dolfinx.fem.form(inner(diff_c, diff_c)*dx + inner(grad(diff_c), grad(diff_c)) * dx)
-H1_u = dolfinx.fem.form(inner(diff_u, diff_u)*dx + inner(grad(diff_u), grad(diff_u))* dx)
-L2_z = dolfinx.fem.form(inner(z - z_prev, z - z_prev) * dx)
+diff_z = z - z_prev
+norm_c = norm(diff_c, "L2")
+norm_u = norm(diff_u, "L2")
+norm_z = norm(diff_z, "L2")
 
 U, U_to_Z = Z.sub(0).collapse()
 u_out = dolfinx.fem.Function(U, name="u")
@@ -242,7 +258,11 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
                 print(f"Attempting {k=} alpha={float(alpha)}", flush=True)
             del solver
             solver = SNESSolver(problem, sp)
+            import time
+            start = time.perf_counter()
             converged_reason, num_iterations = solver.solve()
+            end = time.perf_counter()
+            print(f"Solve time: {end-start:.2e}")
             if converged_reason == -3:
                 # Linear solver did not converge
                 raise NotConvergedError(f"Not converged, linear solver failed with {solver._snes.getKSP().getConvergedReason()}")
@@ -278,13 +298,13 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
 
         # Termination
         nrm_c = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(
-            H1_c), op=MPI.SUM))
+            norm_c), op=MPI.SUM))
         nrm_u = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(
-            H1_u), op=MPI.SUM))
+            norm_u), op=MPI.SUM))
         if mesh.comm.rank == 0:
             print(
                 f"{_GREEN}Solved {k=} {num_iterations=} alpha={float(alpha)},"
-                f"||c_{k} - c_{k - 1}||_H1 = {nrm_c:.3e} ||u_{k} - u_{k - 1}||_H1 = {nrm_u:.3e} {_color_reset}",
+                f"||c_{k} - c_{k - 1}|| = {nrm_c:.3e} ||u_{k} - u_{k - 1}|| = {nrm_u:.3e} {_color_reset}",
                 flush=True,
             )
         if nrm_c < 1.0e-4 and nrm_u < 1.0e-4:
@@ -305,9 +325,9 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
     # the failure mode of the algorithm above is that it terminates in one
     # PG iteration that does no Newton iterations, so the solution doesn't
     # change
-    norm_Z = np.sqrt(mesh.comm.allreduce(
-        dolfinx.fem.assemble_scalar(L2_z), op=MPI.SUM))
-    if k == 1 and np.isclose(norm_Z, 0.0):
+    norm_LVPP = np.sqrt(mesh.comm.allreduce(
+        dolfinx.fem.assemble_scalar(norm_z), op=MPI.SUM))
+    if k == 1 and np.isclose(norm_LVPP, 0.0):
         break
 
     if nfail == NFAIL_MAX:
