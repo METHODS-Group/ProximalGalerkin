@@ -7,12 +7,13 @@ import basix.ufl
 import dolfinx.fem.petsc
 import numpy as np
 from generate_mesh import create_crack_mesh
+import time
 from ufl import (
     Circumradius,
     TestFunction,
     TrialFunction,
     derivative,
-    dx,
+    Measure,
     exp,
     grad,
     inner,
@@ -31,6 +32,7 @@ _color_reset = "\033[0m"
 class NotConvergedError(Exception):
     pass
 
+
 def norm(expr: core.expr.Expr, norm_type: Literal["L2", "H1", "H10"]) -> dolfinx.fem.Form:
     """
     Compile the norm of an UFL expression into a DOLFINx form.
@@ -40,11 +42,12 @@ def norm(expr: core.expr.Expr, norm_type: Literal["L2", "H1", "H10"]) -> dolfinx
         norm_type: Type of norm
     """
     if norm_type == "L2":
-        return dolfinx.fem.form(inner(expr, expr) * dx)
+        return dolfinx.fem.form(inner(expr, expr) * Measure("dx"))
     elif norm_type == "H1":
         return norm(expr, "L2") + norm(grad(expr), "L2")
     elif norm_type == "H10":
         return norm(grad(expr), "L2")
+
 
 parser = ArgumentParser(
     description="Solve the obstacle problem on a unit square using Galahad.",
@@ -59,6 +62,14 @@ parser.add_argument(
     help="Resolution of the mesh",
 )
 parser.add_argument(
+    "--quadrature_degree",
+    "-q",
+    dest="qdegree",
+    type=int,
+    default=10,
+    help="Quadrature degree",
+)
+parser.add_argument(
     "--max-fail-iter",
     type=int,
     default=50,
@@ -68,7 +79,7 @@ parser.add_argument(
 parser.add_argument(
     "--write-frequency",
     type=int,
-    default=25,
+    default=1,
     dest="write_frequency",
     help="Frequency of writing output to XDMFFile",
 )
@@ -79,8 +90,7 @@ parser.add_argument(
     dest="num_load_steps",
     help="Number of load steps",
 )
-parser.add_argument("--verbose", "-v", action="store_true",
-                    help="Verbose output from PETSc SNES")
+parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output from PETSc SNES")
 parser.add_argument("--Tmin", type=float, default=0.0, help="Minimum load")
 parser.add_argument("--Tmax", type=float, default=5.0, help="Maximum load")
 
@@ -92,6 +102,7 @@ num_load_steps = args.num_load_steps
 Tmin = args.Tmin
 Tmax = args.Tmax
 verbose = args.verbose
+q_deg = args.qdegree
 
 st = dolfinx.default_scalar_type
 mesh, ft, material_map = create_crack_mesh(MPI.COMM_WORLD, max_res=0.0125)
@@ -115,7 +126,7 @@ diam.interpolate(h)
 max_diam = mesh.comm.allreduce(np.max(diam.x.array), op=MPI.MAX)
 l = dolfinx.fem.Constant(mesh, st(max_diam))
 print(f"Using l = {float(l)}")
-print("System size: ", Z.dofmap.index_map.size_global*Z.dofmap.index_map_bs)
+print("System size: ", Z.dofmap.index_map.size_global * Z.dofmap.index_map_bs)
 
 z = dolfinx.fem.Function(Z)
 (u, c, psi) = split(z)
@@ -126,7 +137,6 @@ z_trial = TrialFunction(Z)
 (v_trial, d_trial, phi_trial) = split(z_trial)
 
 z_prev = dolfinx.fem.Function(Z)
-_, c_prev, _ = split(z_prev)
 z_iter = dolfinx.fem.Function(Z)
 (u_iter, c_iter, psi_iter) = split(z_iter)
 
@@ -134,15 +144,24 @@ z_iter = dolfinx.fem.Function(Z)
 output_space = dolfinx.fem.functionspace(mesh, ("Lagrange", 3))
 c_conform_out = dolfinx.fem.Function(output_space, name="ConformingDamage")
 alpha = dolfinx.fem.Constant(mesh, st(1.0))
-c_conform = (c_prev + exp(psi)) / (exp(psi) + 1)
+
+q_el = basix.ufl.quadrature_element(
+    mesh.basix_cell(), value_shape=(), scheme="default", degree=q_deg
+)
+Q = dolfinx.fem.functionspace(mesh, q_el)
+# C_prev starts as zero everywhere
+c_conform_prev = dolfinx.fem.Function(Q)
+c_tmp = dolfinx.fem.Function(Q)  # Intermediate variable to store c_prev in the loop
+c_conform = (c_conform_prev + exp(psi)) / (exp(psi) + 1)
 if Version(dolfinx.__version__) > Version("0.9.0"):
-    out_ip = output_space.element.interpolation_points
+    quadrature_points = Q.element.interpolation_points
 else:
-    out_ip = output_space.element.interpolation_points()
-c_conform_expr = dolfinx.fem.Expression(
-    c_conform, out_ip)
+    quadrature_points = Q.element.interpolation_points()
+
+feasible_c = dolfinx.fem.Expression(c_conform, quadrature_points)
 
 eps = dolfinx.fem.Constant(mesh, 1.0e-5)
+dx = Measure("dx", domain=mesh, metadata={"quadrature_degree": q_deg})
 E = (
     0.5 * G * ((1 - eps) * (1 - c) ** 2 + eps) * inner(grad(u), grad(u)) * dx
     + 0.5 * Gc / l * inner(c, c) * dx
@@ -197,7 +216,7 @@ bcs = [
 
 sp = {
     "snes_linesearch_type": "l2",
-    "snes_linesearch_maxstep": 1,
+    "snes_linesearch_maxstep": 2,
     "snes_atol": 1.0e-6,
     "ksp_type": "preonly",
     "pc_type": "lu",
@@ -218,7 +237,6 @@ if verbose:
 xdmf_file = dolfinx.io.XDMFFile(mesh.comm, "solution.xdmf", "w")
 xdmf_file.write_mesh(mesh)
 xdmf_file.close()
-vtx_damage = dolfinx.io.VTXWriter(mesh.comm, "damage.bp", [c_conform_out])
 diff_c = c - c_iter
 diff_u = u - u_iter
 diff_z = z - z_prev
@@ -258,14 +276,15 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
                 print(f"Attempting {k=} alpha={float(alpha)}", flush=True)
             del solver
             solver = SNESSolver(problem, sp)
-            import time
             start = time.perf_counter()
             converged_reason, num_iterations = solver.solve()
             end = time.perf_counter()
-            print(f"Solve time: {end-start:.2e}")
+            print(f"Solve time: {end - start:.2e}")
             if converged_reason == -3:
                 # Linear solver did not converge
-                raise NotConvergedError(f"Not converged, linear solver failed with {solver._snes.getKSP().getConvergedReason()}")
+                raise NotConvergedError(
+                    f"Not converged, linear solver failed with {solver._snes.getKSP().getConvergedReason()}"
+                )
             if num_iterations == 0 and converged_reason > 0:
                 # solver didn't actually get to do any work,
                 # we've just reduced alpha so much that the initial guess
@@ -282,6 +301,7 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
                     flush=True,
                 )
             alpha.value /= 2
+
             if k == 1:
                 z.interpolate(z_prev)
             else:
@@ -297,17 +317,15 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
                 continue
 
         # Termination
-        nrm_c = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(
-            norm_c), op=MPI.SUM))
-        nrm_u = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(
-            norm_u), op=MPI.SUM))
+        nrm_c = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(norm_c), op=MPI.SUM))
+        nrm_u = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(norm_u), op=MPI.SUM))
         if mesh.comm.rank == 0:
             print(
                 f"{_GREEN}Solved {k=} {num_iterations=} alpha={float(alpha)},"
                 f"||c_{k} - c_{k - 1}|| = {nrm_c:.3e} ||u_{k} - u_{k - 1}|| = {nrm_u:.3e} {_color_reset}",
                 flush=True,
             )
-        if nrm_c < 1.0e-4 and nrm_u < 1.0e-4:
+        if nrm_c < 1.0e-4:  # and nrm_u < 1.0e-4:
             break
 
         # Update alpha
@@ -318,15 +336,17 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
 
         # Update z_iter
         z_iter.interpolate(z)
-
         k += 1
+
+    # Update c_conform
+    c_tmp.interpolate(feasible_c)
+    c_conform_prev.interpolate(c_tmp)
 
     # When the object has broken (i.e. the crack has partitioned the domain),
     # the failure mode of the algorithm above is that it terminates in one
     # PG iteration that does no Newton iterations, so the solution doesn't
     # change
-    norm_LVPP = np.sqrt(mesh.comm.allreduce(
-        dolfinx.fem.assemble_scalar(norm_z), op=MPI.SUM))
+    norm_LVPP = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(norm_z), op=MPI.SUM))
     if k == 1 and np.isclose(norm_LVPP, 0.0):
         break
 
@@ -334,7 +354,6 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
         break
     z_prev.interpolate(z)
     if step % write_frequency == 0:
-        c_conform_out.interpolate(c_conform_expr)
         with dolfinx.io.XDMFFile(mesh.comm, "solution.xdmf", "a") as xdmf_file:
             u_out.x.array[:] = z.x.array[U_to_Z]
             c_out.x.array[:] = z.x.array[C_to_Z]
@@ -342,6 +361,3 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
             xdmf_file.write_function(u_out, T)
             xdmf_file.write_function(c_out, T)
             xdmf_file.write_function(psi_out, T)
-
-        vtx_damage.write(T)
-vtx_damage.close()
