@@ -2,15 +2,12 @@
 import Pkg
 Pkg.add("Gridap")
 Pkg.add("LineSearches")
-Pkg.add("Plots")
-Pkg.add("LaTeXStrings")
 using Gridap, LineSearches
-using Plots, LaTeXStrings
 
 """
-Use LVPP to solve a thermoforming quasi-variational inequality.
+Use a Moreau-Yosida penalization to solve a thermoforming quasi-variational inequality.
 We use the Gridap FEM package in Julia and continuous piecewise linear
-FEM for the u, T, and ψ.
+FEM for the u and T.
 
 """
 function copy_z(zh::Gridap.MultiField.MultiFieldFEFunction)
@@ -20,8 +17,7 @@ end
 domain = (0,1,0,1)
 partition = (150,150)
 model = CartesianDiscreteModel(domain,partition)
-# Use simplex elements
-model = simplexify(model)
+model = simplexify(model) # Use simplex elements
 
 labels = get_face_labeling(model)
 # CG1 FEM
@@ -33,15 +29,11 @@ VT = TestFESpace(model,reffe_u,labels=labels,conformity=:H1)
 Uu = TrialFESpace(Vu, 0.0) # zero bcs
 UT = TrialFESpace(VT)
 
-Vψ = TestFESpace(model,reffe_ψ,labels=labels,conformity=:H1)
-Uψ = TrialFESpace(Vψ)
-
-V = MultiFieldFESpace([Vu, VT, Vψ]) # u, T, ψ
-U = MultiFieldFESpace([Uu, UT, Uψ]) # u, T, ψ
+V = MultiFieldFESpace([Vu, VT]) # u, T
+U = MultiFieldFESpace([Uu, UT]) # u, T
 
 Ω = Triangulation(model)
 Γ = BoundaryTriangulation(model,labels)
-
 dΩ = Measure(Ω,11)
 
 # Initial mould
@@ -71,20 +63,28 @@ function dg(s)
     end
 end
 
+plus(x) = max(0, x)
+plus²(x) = plus(x)^2
+function dplus(x)
+    if x>0
+        return 1.0
+    else
+        return 0.0
+    end
+end
+
 # Residual forms
-a((uh, Th, ψh), (v, R, ϕ)) =
+a((u, T), (v, R)) =
      ∫( 
-        α*∇(uh) ⋅ ∇(v) +  ψh ⋅ v - α*fh ⋅ v - wh ⋅ v
-        + ∇(Th) ⋅ ∇(R) + Th ⋅ R  - (g ∘ (exp ∘ (-ψh))) ⋅ R
-        + uh ⋅ ϕ + (exp ∘ (-ψh)) ⋅ ϕ - (Φ₀ + φ ⋅ Th) ⋅ ϕ
+        ∇(u) ⋅ ∇(v) - fh ⋅ v + γ*(plus ∘ (u - (Φ₀ + φ ⋅ T))) ⋅ v
+        + ∇(T) ⋅ ∇(R) + T ⋅ R  - (g ∘ (Φ₀ + φ ⋅ T - u)) ⋅ R
      ) * dΩ
 
 # Jacobian
-jac((uh, Th, ψh), (duh, dTh, dψh), (v, R, ϕ)) =
+jac((u, T), (du, dT), (v, R)) =
      ∫( 
-         α*∇(duh) ⋅ ∇(v) + dψh ⋅ v
-         + ∇(dTh) ⋅ ∇(R) + dTh ⋅ R - (dg ∘ (exp ∘ (-ψh))) ⋅ (exp ∘ (-ψh)) ⋅ (-dψh) ⋅ R
-         + duh ⋅ ϕ - ((exp ∘ (-ψh)) ⋅ dψh ) ⋅ ϕ - (φ ⋅ dTh) ⋅ ϕ - 1e-10/α*(∇(dψh) ⋅ ∇(ϕ))
+         ∇(du) ⋅ ∇(v) + γ*(dplus ∘ (u - (Φ₀ + φ ⋅ T))) ⋅ du ⋅ v - γ*(dplus ∘ (u - (Φ₀ + φ ⋅ T))) ⋅ φ ⋅ dT ⋅ v
+         + ∇(dT) ⋅ ∇(R) + dT ⋅ R - (dg ∘ (Φ₀ + φ ⋅ T - u)) ⋅ φ ⋅ dT ⋅ R + (dg ∘ (Φ₀ + φ ⋅ T - u)) ⋅ du ⋅ R
      ) * dΩ
 
 
@@ -93,12 +93,26 @@ au0(uh, v) =∫(∇(uh) ⋅ ∇(v) + uh ⋅ v) * dΩ
 jacu0(uh, duh, v) =∫(∇(duh) ⋅ ∇(v) + duh ⋅ v) * dΩ
 J = Gridap.Algebra.jacobian( FEOperator(au0, jacu0, Uu, Vu), interpolate_everywhere(x->0.0, Uu))
 
+# γ-update scheme
+energy(u) = ∫(0.5*∇(u) ⋅ ∇(u) - fh ⋅ u) * dΩ
+penalty(u, T) = ∫(γ/2*(plus² ∘ (u - (Φ₀ + φ ⋅ T)))) * dΩ
+function update_γ(zh, γ, k)
+    uh, Th = zh.single_fe_functions
+    infeasibility = sum(penalty(uh, Th))
+    functional = sum(energy(uh))
+    print("         infeasibility: $infeasibility, functional: $functional.\n")
+    Eₖ = γ * infeasibility / functional
+    θₖ = functional + infeasibility
+    C₂ₖ = Eₖ * (Eₖ + γ) * θₖ / γ
+    C₁ₖ = C₂ₖ / Eₖ
+    τₖ = 1/k
+    return C₂ₖ /(τₖ  * abs(C₁ₖ - θₖ)) - Eₖ
+end
+
 # Initial guess
 u0 = interpolate_everywhere(x->0.0, Uu).free_values
 T0 = interpolate_everywhere(x->1.0, UT).free_values
-w0 = interpolate_everywhere(x->0.0, Uψ).free_values
-global zh = FEFunction(U,[u0; T0; w0]);
-global wh = FEFunction(Uψ,w0);
+global zh = FEFunction(U,[u0; T0]);
 newton_its=[];
 
 cauchy =  []
@@ -107,47 +121,28 @@ op = FEOperator(a, jac, U, V)
 nls = NLSolver(show_trace=true, method=:newton, linesearch=LineSearches.BackTracking(c_1=-1e8), ftol=1e-5, xtol=10*eps())
 solver = FESolver(nls)
 
-# Run LVPP solve
-global α = 2^(-6)
+# Run Moreau-Yosida path-following solve
+global γ = 1.0
 tic = @elapsed for j in 1:100
-    print("Considering α = $α. \n")
+    print("Considering γ = $γ. \n")
 
     # Newton solver with backtracking linesearch
     global zh, its = solve!(zh,solver,op)
     its = its.result.iterations
 
-    global wh.free_values .= zh.single_fe_functions[3].free_values[:]
     push!(newton_its, its)
 
     d = zh.single_fe_functions[1].free_values[:] - zh_.single_fe_functions[1].free_values[:]
     push!(cauchy, sqrt(d' * J * d))
     print("Cauchy norm: $(cauchy[end]).\n")
     zh_ = copy_z(zh)
-    # α-update rule
-    global α = 4*α
+
+    # γ-update rule
+    global γ = update_γ(zh, γ, j+1)
 
     # break if tolerance reached
     if cauchy[end] < 1e-5
         break
     end
 end
-print("Run time(s): $tic, LVPP its: $(length(newton_its)), linear system solves: $(sum(newton_its))")
-
-# Save solutions for Paraview
-uh = zh.single_fe_functions[1]
-writevtk(Ω,"membrane", cellfields=["membrane"=>uh])
-Th = zh.single_fe_functions[2]
-mould = interpolate_everywhere(Φ₀ + φ ⋅ Th, VT)
-writevtk(Ω,"mould", cellfields=["mould"=>mould])
-
-
-# Plot 1D slice of solution
-xx = range(0,1,101)
-p = plot(xx, [uh(Point.(xx,0.5)) mould(Point.(xx,0.5)) Φ₀(Point.(xx, 0.5)) Th(Point.(xx,0.5))],
-    linewidth=2,
-    label=["Membrane" "Mould" "Original Mould" "Temperature"],
-    linestyle=[:solid :dash],
-    xlabel=L"x",
-    xlabelfontsize=20, xtickfontsize=12,ytickfontsize=12,
-)
-Plots.savefig("thermoforming-slice.pdf")
+print("Run time(s): $tic, moreau-yosida its: $(length(newton_its)), linear system solves: $(sum(newton_its))")
