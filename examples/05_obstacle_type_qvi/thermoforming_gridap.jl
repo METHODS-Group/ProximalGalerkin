@@ -102,7 +102,7 @@ global wh = FEFunction(Uψ,w0);
 newton_its=[];
 
 cauchy =  []
-zh_ = copy_z(zh)
+global zh_ = copy_z(zh)
 op = FEOperator(a, jac, U, V)
 nls = NLSolver(show_trace=true, method=:newton, linesearch=LineSearches.BackTracking(c_1=-1e8), ftol=1e-5, xtol=10*eps())
 solver = FESolver(nls)
@@ -122,7 +122,7 @@ tic = @elapsed for j in 1:100
     d = zh.single_fe_functions[1].free_values[:] - zh_.single_fe_functions[1].free_values[:]
     push!(cauchy, sqrt(d' * J * d))
     print("Cauchy norm: $(cauchy[end]).\n")
-    zh_ = copy_z(zh)
+    global zh_ = copy_z(zh)
     # α-update rule
     global α = 4*α
 
