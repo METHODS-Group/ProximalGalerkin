@@ -59,7 +59,6 @@ def solve_problem(
     F += gamma_ * (ufl.dot(psi, psi) - one) * ufl.inner(u, v) * dx
     F += ufl.inner(psi, v) * dx
     F -= ufl.inner(psi0, v) * dx
-
     F += ufl.inner(u, w) * dx
 
     non_lin_term = 1 / (ufl.sqrt(ufl.dot(psi, psi)))
@@ -97,25 +96,62 @@ def solve_problem(
     ]
     sol.sub(0).interpolate(bc_func)
     sol.sub(1).interpolate(bc_func)
-    problem = NonlinearProblem(F, sol, bcs=bcs)
-    solver = NewtonSolver(mesh.comm, problem)
-    solver.convergence_criterion = "residual"
-    solver.rtol = 1e-9
-    solver.atol = 1e-9
-    solver.max_it = 100
-    solver.error_on_nonconvergence = True
 
-    ksp = solver.krylov_solver
-    opts = PETSc.Options()  # type: ignore
-    option_prefix = ksp.getOptionsPrefix()
-    opts[f"{option_prefix}ksp_type"] = "preonly"
-    opts[f"{option_prefix}pc_type"] = "lu"
-    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
-    ksp.setFromOptions()
+    from lvpp.problem import SNESProblem, SNESSolver
+
+    sp = {
+        "snes_type": "newtonls",
+        # "snes_monitor": None,
+        "snes_linesearch_type": "l2",
+        "ksp_type": "preonly",
+        "pc_type": "lu",
+        "pc_factor_mat_solver_type": "mumps",
+        "mat_mumps_icntl_14": 1000,
+        "snes_atol": 1e-9,
+        "snes_rtol": 1e-9,
+        "snes_stol": 10 * np.finfo(dolfinx.default_scalar_type).eps,
+        "snes_linesearch_order": 2,
+        "snes_linesearch_monitor": None,
+        "ksp_error_if_not_converged": True,
+        "snes_max_it": 300,
+    }
+    problem = SNESProblem(F, sol, bcs=bcs)
+    solver = SNESSolver(problem, sp)
+
+    # problem = NonlinearProblem(F, sol, bcs=bcs)
+    # solver = NewtonSolver(mesh.comm, problem)
+    # solver.convergence_criterion = "residual"
+    # solver.rtol = 1e-9
+    # solver.atol = 1e-9
+    # solver.max_it = 100
+    # solver.error_on_nonconvergence = True
+
+    # ksp = solver.krylov_solver
+    # opts = PETSc.Options()  # type: ignore
+    # option_prefix = ksp.getOptionsPrefix()
+    # opts[f"{option_prefix}ksp_type"] = "preonly"
+    # opts[f"{option_prefix}pc_type"] = "lu"
+    # opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
+    # ksp.setFromOptions()
 
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
     u_out = dolfinx.fem.Function(U)
+    u_out.name = "u"
+    bp_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
+    u_out.x.array[:] = sol.x.array[U_to_W]
+    bp_u.write(0)
+
+    grad_u_out = dolfinx.fem.Function(
+        dolfinx.fem.functionspace(mesh, ("DG", primal_degree, (3, 1)))
+    )
+    grad_u_out.name = "grad(u)"
+    grad_u_out_expr = dolfinx.fem.Expression(
+        ufl.grad(u), grad_u_out.function_space.element.interpolation_points
+    )
+    bp_gradu = dolfinx.io.VTXWriter(mesh.comm, result_dir / "grad_u.bp", [grad_u_out], engine="BP4")
+    bp_gradu.write(0)
+
     u_out.name = "u"
     bp_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
     u_out.x.array[:] = sol.x.array[U_to_W]
@@ -140,21 +176,27 @@ def solve_problem(
         elif alpha_scheme == "doubling":
             alpha.value = alpha_0 * 2**i
 
-        num_newton_iterations, converged = solver.solve(sol)
+        # num_newton_iterations, converged = solver.solve(sol)
+
+        converged, num_newton_iterations = solver.solve()
         newton_iterations[i - 1] = num_newton_iterations
         local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
         global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
         L2_diff[i - 1] = global_diff
         if mesh.comm.rank == 0:
+            # print(
+            #     f"Iteration {i}: {converged =} {num_newton_iterations = } {ksp.getConvergedReason() =}",
+            #     f"|delta u |= {global_diff}",
+            # )
             print(
-                f"Iteration {i}: {converged =} {num_newton_iterations = } {
-                    ksp.getConvergedReason() =}",
-                f"|delta u |= {global_diff}",
+                f"Iteration {i}: {converged =} {num_newton_iterations = }",
+                f"|delta u |= {global_diff} alpha:{float(alpha)}",
             )
-
+        print(np.linalg.norm(psi_out.x.array - sol.x.array[Q_to_W]))
         u_out.x.array[:] = sol.x.array[U_to_W]
         psi_out.x.array[:] = sol.x.array[Q_to_W]
-
+        grad_u_out.interpolate(grad_u_out_expr)
+        bp_gradu.write(i)
         bp_u.write(i)
         bp_psi.write(i)
         if global_diff < stopping_tol:
@@ -162,6 +204,31 @@ def solve_problem(
         w0.x.array[:] = sol.x.array
     bp_u.close()
     bp_psi.close()
+    bp_gradu.close()
+
+    # Compute analytical solution
+    p = bc_func([0])
+    q = bc_func([1])
+    theta = np.acos(np.dot(p, q))
+    x = ufl.SpatialCoordinate(mesh)
+    gamma_t = ufl.sin((1 - x[0]) * theta) / ufl.sin(theta) * ufl.as_vector(p) + ufl.sin(
+        x[0] * theta
+    ) / ufl.sin(theta) * ufl.as_vector(q)
+
+    VG = dolfinx.fem.functionspace(mesh, ("Lagrange", primal_degree, (3,)))
+    g_out = dolfinx.fem.Function(VG)
+    g_out.interpolate(
+        dolfinx.fem.Expression(gamma_t, g_out.function_space.element.interpolation_points)
+    )
+    with dolfinx.io.VTXWriter(mesh.comm, result_dir / "gamma.bp", [g_out]) as gamma_writer:
+        gamma_writer.write(0)
+
+    # Compute L2 error
+    diff = sol.sub(0) - g_out
+    L2_squared = ufl.dot(diff, diff) * dx
+    local_L2 = dolfinx.fem.assemble_scalar(dolfinx.fem.form(L2_squared))
+    global_L2 = np.sqrt(mesh.comm.allreduce(local_L2, op=MPI.SUM))
+    print(f"Final L2 error: {global_L2}")
 
     return newton_iterations[: i + 1], L2_diff[: i + 1]
 
