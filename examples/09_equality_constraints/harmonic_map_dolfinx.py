@@ -65,7 +65,7 @@ def solve_problem(
     phi = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
     F -= phi * non_lin_term * ufl.dot(psi, w) * dx
 
-    def bc_func(x, theta=5.7 * np.pi):
+    def bc_func(x, theta=50 * np.pi):
         u_x = np.cos(theta * x[0])
         u_z = 1 - 2 * x[0] - np.sin(0.8 * np.pi * x[0])
         u_y = np.sin(theta * x[0])
@@ -111,7 +111,7 @@ def solve_problem(
         "snes_rtol": 1e-9,
         "snes_stol": 10 * np.finfo(dolfinx.default_scalar_type).eps,
         "snes_linesearch_order": 2,
-        "snes_linesearch_monitor": None,
+        # "snes_linesearch_monitor": None,
         "ksp_error_if_not_converged": True,
         "snes_max_it": 300,
     }
@@ -163,11 +163,33 @@ def solve_problem(
     psi_out.x.array[:] = sol.x.array[Q_to_W]
     bp_psi.write(0)
 
+    # Compute analytical solution
+    p = bc_func([0])
+    q = bc_func([1])
+    theta = np.acos(np.dot(p, q))
+    x = ufl.SpatialCoordinate(mesh)
+    gamma_t = ufl.sin((1 - x[0]) * theta) / ufl.sin(theta) * ufl.as_vector(p) + ufl.sin(
+        x[0] * theta
+    ) / ufl.sin(theta) * ufl.as_vector(q)
+
+    VG = dolfinx.fem.functionspace(mesh, ("Lagrange", primal_degree, (3,)))
+    g_out = dolfinx.fem.Function(VG)
+    g_out.interpolate(
+        dolfinx.fem.Expression(gamma_t, g_out.function_space.element.interpolation_points)
+    )
+    diff_exact = sol.sub(0) - gamma_t
+    L2_exact = dolfinx.fem.form(ufl.dot(diff_exact, diff_exact) * dx)
+
     diff = sol.sub(0) - w0.sub(0)
     L2_squared = ufl.dot(diff, diff) * dx
     compiled_diff = dolfinx.fem.form(L2_squared)
     newton_iterations = np.zeros(max_iterations, dtype=np.int32)
     L2_diff = np.zeros(max_iterations, dtype=np.float64)
+
+    local_L2 = dolfinx.fem.assemble_scalar(L2_exact)
+    global_L2 = np.sqrt(mesh.comm.allreduce(local_L2, op=MPI.SUM))
+    print(f"Initial L2 error: {global_L2}")
+
     for i in range(1, max_iterations + 1):
         if alpha_scheme == "constant":
             pass
@@ -192,6 +214,10 @@ def solve_problem(
                 f"Iteration {i}: {converged =} {num_newton_iterations = }",
                 f"|delta u |= {global_diff} alpha:{float(alpha)}",
             )
+        local_L2 = dolfinx.fem.assemble_scalar(L2_exact)
+        global_L2 = np.sqrt(mesh.comm.allreduce(local_L2, op=MPI.SUM))
+        print(f"L2 error: {global_L2}")
+
         print(np.linalg.norm(psi_out.x.array - sol.x.array[Q_to_W]))
         u_out.x.array[:] = sol.x.array[U_to_W]
         psi_out.x.array[:] = sol.x.array[Q_to_W]
@@ -206,29 +232,10 @@ def solve_problem(
     bp_psi.close()
     bp_gradu.close()
 
-    # Compute analytical solution
-    p = bc_func([0])
-    q = bc_func([1])
-    theta = np.acos(np.dot(p, q))
-    x = ufl.SpatialCoordinate(mesh)
-    gamma_t = ufl.sin((1 - x[0]) * theta) / ufl.sin(theta) * ufl.as_vector(p) + ufl.sin(
-        x[0] * theta
-    ) / ufl.sin(theta) * ufl.as_vector(q)
-
-    VG = dolfinx.fem.functionspace(mesh, ("Lagrange", primal_degree, (3,)))
-    g_out = dolfinx.fem.Function(VG)
-    g_out.interpolate(
-        dolfinx.fem.Expression(gamma_t, g_out.function_space.element.interpolation_points)
-    )
     with dolfinx.io.VTXWriter(mesh.comm, result_dir / "gamma.bp", [g_out]) as gamma_writer:
         gamma_writer.write(0)
 
     # Compute L2 error
-    diff = sol.sub(0) - g_out
-    L2_squared = ufl.dot(diff, diff) * dx
-    local_L2 = dolfinx.fem.assemble_scalar(dolfinx.fem.form(L2_squared))
-    global_L2 = np.sqrt(mesh.comm.allreduce(local_L2, op=MPI.SUM))
-    print(f"Final L2 error: {global_L2}")
 
     return newton_iterations[: i + 1], L2_diff[: i + 1]
 
