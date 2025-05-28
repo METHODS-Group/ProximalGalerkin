@@ -1,6 +1,6 @@
 import Pkg
 Pkg.add("Gridap")
-Pkg.add("https://github.com/ioannisPApapadopoulos/SemismoothQVIs.jl.git")
+Pkg.add(url="https://github.com/ioannisPApapadopoulos/SemismoothQVIs.jl.git")
 using Gridap, SemismoothQVIs
 
 """

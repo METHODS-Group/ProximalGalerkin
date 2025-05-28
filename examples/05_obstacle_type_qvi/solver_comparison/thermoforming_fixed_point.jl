@@ -121,19 +121,20 @@ solver_u = FESolver(nls_u)
 nls_T = NLSolver(show_trace=false, method=:newton, linesearch=LineSearches.BackTracking(c_1=-1e8), ftol=1e-10, xtol=10*eps())
 solver_T = FESolver(nls_T)
 
-newton_its_T, newton_its_u = 0, 0
+global newton_its_T = 0 
+global newton_its_u = 0
 cauchy = []
 
 tic = @elapsed for j in 1:10_000
     print("Considering Fixed Point Iteration: $j. \n")
     print("     Solving for T.\n")
     global Th, its = solve!(Th,solver_T,opT)
-    newton_its_T += its.result.iterations
+    global newton_its_T += its.result.iterations
 
     print("     Solving for u.\n")
     global γ = 1e0
     global uh, its_u = path_following_solve(opu, solver_u, uh, J, γ)
-    newton_its_u += its_u
+    global newton_its_u += its_u
     d = uh.free_values[:] - uh_
     push!(cauchy, sqrt(d' * J * d))
     print("Cauchy norm: $(cauchy[end]).\n")
