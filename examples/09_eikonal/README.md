@@ -1,4 +1,4 @@
-# Example 11 (Figure 11): The Eikonal Equation
+# Example 9 (Figure 11): The Eikonal Equation
 
 We have provided code for this example for both the `MFEM` and `DOLFINx` Docker containers.
 
@@ -33,7 +33,7 @@ Then run the following commands
 make convert_mesh
 ./convert_mesh --mesh ../data/mobius-strip.mesh
 ```
-Next, navigate back to this folder (either the shared volume or `/root/LVPP/examples/11_eikonal`) and run 
+Next, navigate back to this folder (either the shared volume or `/root/LVPP/examples/09_eikonal`) and run 
 
 ```bash
 python3 eikonal_dolfinx.py --mesh-dir=/root/LVPP/mfem/examples/mobius-strip.mesh

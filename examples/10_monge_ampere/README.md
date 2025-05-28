@@ -1,4 +1,4 @@
-# Example 12 (Figure 12): The Monge–Ampere Equation
+# Example 10 (Figure 12): The Monge–Ampere Equation
 
 ## Firedrake
 

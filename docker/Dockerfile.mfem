@@ -37,4 +37,4 @@ RUN cd mfem && \
     make parallel -j 2
 
 WORKDIR /root/LVPP/mfem/examples
-ADD ./examples/11_eikonal/ex40.cpp ex40_taylor_hood.cpp
+ADD ./examples/09_eikonal/ex40.cpp ex40_taylor_hood.cpp

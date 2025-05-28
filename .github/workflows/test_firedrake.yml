@@ -7,7 +7,6 @@ on:
     branches: [main]
 
 jobs:
-
   test-examples:
     runs-on: ${{ matrix.platform }}
     container: ${{ matrix.container }}
@@ -17,39 +16,37 @@ jobs:
       fail-fast: true
       matrix:
         platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
-        container: [
-            "ghcr.io/methods-group/proximalgalerkin:v0.2.0"
-          ]
+        container: ["ghcr.io/methods-group/proximalgalerkin:v0.2.0"]
 
     steps:
-        - uses: actions/checkout@v4
-        
-        - name: Activate Firedrake virtual environment
-          run: |
-              . /firedrake-env/bin/activate
-              echo PATH=$PATH >> $GITHUB_ENV
+      - uses: actions/checkout@v4
 
-        - name: Install matplotib
-          run: |
-              python3 -m pip install matplotlib
+      - name: Activate Firedrake virtual environment
+        run: |
+          . /firedrake-env/bin/activate
+          echo PATH=$PATH >> $GITHUB_ENV
 
-        - name: Run example 7
-          working-directory: ./examples/07_eigenvalue_constraints
-          run: |
-            python3 eigenvalue_constraints_firedrake.py
-    
-        - name: Run example 8
-          working-directory: ./examples/08_intersecting_constraints
-          run: |
-            python3 intersecting_constraints_firedrake.py
-  
-        - name: Run example 12
-          working-directory: ./examples/12_monge_ampere
-          run: |
-            python3 monge_ampere_firedrake.py
-    
-        - name: Run example 3 (skip on arm due to missing netgen)
-          if: (matrix.platform == 'ubuntu-24.04')
-          working-directory: ./examples/03_fracture
-          run: |
-            python3 fracture_firedrake.py
+      - name: Install matplotib
+        run: |
+          python3 -m pip install matplotlib
+
+      - name: Run example 7
+        working-directory: ./examples/07_eigenvalue_constraints
+        run: |
+          python3 eigenvalue_constraints_firedrake.py
+
+      - name: Run example 8
+        working-directory: ./examples/08_intersecting_constraints
+        run: |
+          python3 intersecting_constraints_firedrake.py
+
+      - name: Run example 12
+        working-directory: ./examples/10_monge_ampere
+        run: |
+          python3 monge_ampere_firedrake.py
+
+      - name: Run example 3 (skip on arm due to missing netgen)
+        if: (matrix.platform == 'ubuntu-24.04')
+        working-directory: ./examples/03_fracture
+        run: |
+          python3 fracture_firedrake.py

@@ -1,4 +1,4 @@
-# Example 8 (Figure 9): Intersections of Constraints
+# Example 8 (Figure 10): Intersections of Constraints
 
 
 ## Firedrake
