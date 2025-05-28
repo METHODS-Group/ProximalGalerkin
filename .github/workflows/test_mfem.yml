@@ -14,16 +14,14 @@ jobs:
       fail-fast: true
       matrix:
         platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
-        container: [
-            "ghcr.io/methods-group/proximalgalerkin:v0.2.0"
-          ]
+        container: ["ghcr.io/methods-group/proximalgalerkin:v0.2.0"]
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Copy eikonal script from repository
         run: |
-          cp ./examples/11_eikonal/ex40.cpp /root/LVPP/mfem/examples
+          cp ./examples/09_eikonal/ex40.cpp /root/LVPP/mfem/examples
 
       - name: Run Eikonal on Mobius strip
         working-directory: /root/LVPP/mfem/examples

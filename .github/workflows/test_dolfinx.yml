@@ -78,13 +78,7 @@ jobs:
 
       - name: Run example 9
         if: steps.install.conclusion == 'success'
-        working-directory: ./examples/09_equality_constraints
-        run: |
-          python3 harmonic_map_dolfinx.py
-
-      - name: Run example 12
-        if: steps.install.conclusion == 'success'
-        working-directory: ./examples/12_monge_ampere
+        working-directory: ./examples/10_monge_ampere
         run: |
           python3 monge_ampere_dolfinx.py
 
@@ -115,7 +109,7 @@ jobs:
 
       - name: Copy mesh-creation script
         run: |
-          cp ./examples/11_eikonal/convert_mesh.cpp /root/LVPP/mfem/examples
+          cp ./examples/09_eikonal/convert_mesh.cpp /root/LVPP/mfem/examples
 
       - name: Compile mesh-creation script
         working-directory: /root/LVPP/mfem/examples
@@ -127,7 +121,7 @@ jobs:
         run: |
           python3 -m pip install -e .[eikonal]
 
-      - name: Run example 11
-        working-directory: ./examples/11_eikonal
+      - name: Run example 9
+        working-directory: ./examples/09_eikonal
         run: |
           python3 eikonal_dolfinx.py --mesh-dir=/root/LVPP/mfem/examples/mobius-strip.mesh

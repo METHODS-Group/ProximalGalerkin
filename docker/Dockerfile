@@ -297,8 +297,8 @@ RUN julia -e 'using Pkg; Pkg.add(["ClassicalOrthogonalPolynomials", "Multivariat
 
 # ADD various files to the docker container for easy switching between environments
 WORKDIR /root/LVPP/mfem/examples
-ADD ./examples/11_eikonal/ex40.cpp ex40_taylor_hood.cpp
-ADD ./examples/11_eikonal/convert_mesh.cpp convert_mesh.cpp
+ADD ./examples/09_eikonal/ex40.cpp ex40_taylor_hood.cpp
+ADD ./examples/09_eikonal/convert_mesh.cpp convert_mesh.cpp
 ADD docker/firedrake-mode /usr/local/bin/firedrake-mode
 RUN chmod +x /usr/local/bin/firedrake-mode
 ADD docker/dolfinx-mode /usr/local/bin/dolfinx-mode
