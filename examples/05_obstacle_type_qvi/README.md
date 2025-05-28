@@ -1,4 +1,4 @@
-# Example 5 (Figure 6): Thermoforming Quasi-Variational Inequality
+# Example 5 (Figure 7): Thermoforming Quasi-Variational Inequality
 
 ## Julia implementation
 

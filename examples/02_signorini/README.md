@@ -1,4 +1,4 @@
-# Example 2 (Figure 3): The Signorini Problem
+# Example 2 (Figure 4): The Signorini Problem
 
 ## Dependencies
 This demo requires:
@@ -15,7 +15,7 @@ python3 -m pip install git+https://https://github.com/METHODS-Group/ProximalGale
 ```
 See for instance [environment.yml](../../environment.yml) for a DOLFINx conda environment.
 
-## Figure 3
+## Figure 4
 
 The mesh can be generated with
 ```bash

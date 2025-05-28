@@ -1,4 +1,4 @@
-# Example 7 (Figure 8): Eigenvalue Constraints
+# Example 7 (Figure 9): Eigenvalue Constraints
 
 ## Firedrake
 Start a docker container based on `ghcr.io/methods-group/proximalgalerkin:v0.3.0`.

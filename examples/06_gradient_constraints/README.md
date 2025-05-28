@@ -1,4 +1,4 @@
-# Example 6 (Figure 7): Gradient Norm Constraints
+# Example 6 (Figure 8): Gradient Norm Constraints
 
 To reproduce the results of example 6, use `dolfinx-mode` and run
 

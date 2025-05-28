@@ -63,20 +63,15 @@ The following table associates each implementation to the examples and figures i
 
 | Figure |                                 Folder                                 |              Backend              | Problem Type                 |
 | :----: | :--------------------------------------------------------------------: | :-------------------------------: | ---------------------------- |
-|   2b   |         [01_obstacle_problem](./examples/01_obstacle_problem/)         |              FEniCS               | Obstacle problem (FEM)       |
-| 2c(i)  |         [01_obstacle_problem](./examples/01_obstacle_problem/)         |               Julia               | Obstacle problem (FD)        |
-| 2c(ii) |         [01_obstacle_problem](./examples/01_obstacle_problem/)         | MultivariateOrthogonalPolynomials | Obstacle problem (Spectral)  |
-|   3    |                [02_signorini](./examples/02_signorini)                 |              FEniCS               | Signorini                    |
-|   4    |                 [03_fracture](./examples/03_fracture/)                 |         Firedrake/FEniCS          | Fracture                     |
-|   5    |               [04_multiphase](./examples/04_multiphase)                |              FEniCS               | Cahn-Hilliard                |
-|   6    |        [05_obstacle_type_qvi](./examples/05_obstacle_type_qvi/)        |         Gridap.jl/FEniCS          | Thermoforming QVI            |
-|   7    |     [06_gradient_constraints](./examples/06_gradient_constraints)      |              FEniCS               | Gradient constraint          |
-|   8    |   [07_eigenvalue_constraints](./examples/07_eigenvalue_constraints)    |         Firedrake/FEniCS          | Landau–de Gennes             |
-|   9    | [08_intersecting_constraints](./examples/08_intersecting_constraints/) |         Firedrake/FEniCS          | Intersections of constraints |
-|   10   |     [09_equality_constraints](./examples/09_equality_constraints)      |              FEniCS               | Harmonic map                 |
-|   11   |                  [11_eikonal](./examples/11_eikonal)                   |            MFEM/FEniCS            | Eikonal equation             |
-|   12   |             [12_monge_ampere](./examples/12_monge_ampere)              |         Firedrake/FEniCS          | Monge-Ampere                 |
-
-## Example 10: Linear Equality Constraints
-
-Note that there is no numerical example for this setting because the derived variational formulation is equivalent to the standard Lagrange multiplier formulation for this class of problems.
+|   3b   |         [01_obstacle_problem](./examples/01_obstacle_problem/)         |              FEniCS               | Obstacle problem (FEM)       |
+| 3c(i)  |         [01_obstacle_problem](./examples/01_obstacle_problem/)         |               Julia               | Obstacle problem (FD)        |
+| 3c(ii) |         [01_obstacle_problem](./examples/01_obstacle_problem/)         | MultivariateOrthogonalPolynomials | Obstacle problem (Spectral)  |
+|   4    |                [02_signorini](./examples/02_signorini)                 |              FEniCS               | Signorini                    |
+|   5    |                 [03_fracture](./examples/03_fracture/)                 |         Firedrake/FEniCS          | Fracture                     |
+|   6    |               [04_multiphase](./examples/04_multiphase)                |              FEniCS               | Cahn-Hilliard                |
+|   7    |        [05_obstacle_type_qvi](./examples/05_obstacle_type_qvi/)        |         Gridap.jl/FEniCS          | Thermoforming QVI            |
+|   8    |     [06_gradient_constraints](./examples/06_gradient_constraints)      |              FEniCS               | Gradient constraint          |
+|   9    |   [07_eigenvalue_constraints](./examples/07_eigenvalue_constraints)    |         Firedrake/FEniCS          | Landau–de Gennes             |
+|   10   | [08_intersecting_constraints](./examples/08_intersecting_constraints/) |         Firedrake/FEniCS          | Intersections of constraints |
+|   11   |                  [09_eikonal](./examples/09_eikonal)                   |            MFEM/FEniCS            | Eikonal equation             |
+|   12   |             [10_monge_ampere](./examples/10_monge_ampere)              |         Firedrake/FEniCS          | Monge-Ampere                 |

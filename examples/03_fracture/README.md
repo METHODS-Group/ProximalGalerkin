@@ -1,4 +1,4 @@
-# Example 3 (Figure 4): Variational Fracture
+# Example 3 (Figure 5): Variational Fracture
 
 This example can be executed using either FEniCS (DOLFINx) or Firedrake.
 

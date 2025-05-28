@@ -1,10 +1,10 @@
-# Example 1 (Figure 2): The Obstacle Problem
+# Example 1 (Figure 3): The Obstacle Problem
 
 ## Finite element method (proximal Galerkin)
 
-Figures 2 (a) and (b) are generated with `DOLFINx`.
+Figures 3 (a) and (b) are generated with `DOLFINx`.
 
-To reproduce the results in Figures 2 (a) (the comparison between Proximal Galerkin, SNES, Galahad, and IPOPT),
+To reproduce the results in Figures 3 (a) (the comparison between Proximal Galerkin, SNES, Galahad, and IPOPT),
 first deploy the `ghcr.io/methods-group/proximalgalerkin:v0.3.0` Docker container.
 Then execute the following scripts (in `dolfinx-mode`, see [../../README.md](../../README.md)):
 
