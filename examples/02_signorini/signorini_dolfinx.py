@@ -16,7 +16,7 @@ import dolfinx.fem.petsc
 import numpy as np
 import ufl
 from packaging.version import Version
-from scifem import BlockedNewtonSolver
+# from scifem import BlockedNewtonSolver
 
 AlphaScheme = typing.Literal["constant", "linear", "doubling"]
 
@@ -232,9 +232,8 @@ def solve_contact_problem(
     Q = ufl.MixedFunctionSpace(V, W)
 
     # Define primal and latent variable + test functions
+    u, psi = ufl.TrialFunctions(Q)
     v, w = ufl.TestFunctions(Q)
-    u = dolfinx.fem.Function(V, name="displacement")
-    psi = dolfinx.fem.Function(W)
     psi_k = dolfinx.fem.Function(W)
 
     # Define problem specific parameters
@@ -253,16 +252,21 @@ def solve_contact_problem(
     ) - alpha * ufl.inner(f, v) * ufl.dx(domain=mesh)
     residual += -ufl.inner(psi - psi_k, ufl.dot(v, n_g)) * ds
     residual += ufl.inner(ufl.dot(u, n_g), w) * ds
-    residual += ufl.inner(ufl.exp(psi), w) * ds - ufl.inner(g, w) * ds
+    residual += ufl.inner(ufl.exp(psi_k), w) * ds - ufl.inner(g, w) * ds
 
-    # Compile residual
-    F = dolfinx.fem.form(ufl.extract_blocks(residual), entity_maps=entity_maps)
+    a, L = ufl.system(residual)
 
-    # Set up Jacobian
-    jac = ufl.derivative(residual, [u, psi], ufl.TrialFunctions(Q))
+    u = dolfinx.fem.Function(V, name="displacement")
+    psi = dolfinx.fem.Function(W)
+
+    # # Compile residual
+    # F = dolfinx.fem.form(ufl.extract_blocks(residual), entity_maps=entity_maps)
+
+    # # Set up Jacobian
+    # jac = ufl.derivative(residual, [u, psi], ufl.TrialFunctions(Q))
 
     # Compile Jacobian
-    J = dolfinx.fem.form(ufl.extract_blocks(jac), entity_maps=entity_maps)
+    # J = dolfinx.fem.form(ufl.extract_blocks(jac), entity_maps=entity_maps)
     u_bc = dolfinx.fem.Function(V)
 
     def disp_func(x):
@@ -287,8 +291,16 @@ def solve_contact_problem(
         # "mat_mumps_icntl_14": 120,
         "ksp_error_if_not_converged": True,
     }
-    solver = BlockedNewtonSolver(F, [u, psi], bcs=bcs, J=J, petsc_options=petsc_options)
-    solver.max_iter = newton_max_its
+    # solver = BlockedNewtonSolver(F, [u, psi], bcs=bcs, J=J, petsc_options=petsc_options)
+    # solver.max_iter = newton_max_its
+    solver = dolfinx.fem.petsc.LinearProblem(
+        dolfinx.fem.form(ufl.extract_blocks(a), entity_maps=entity_maps),
+        dolfinx.fem.form(ufl.extract_blocks(L), entity_maps=entity_maps),
+        u=[u, psi],
+        bcs=bcs,
+        petsc_options=petsc_options,
+        kind="mpi"
+    )
     violation = dolfinx.fem.Function(V)
     bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u, violation])
     bp_psi = dolfinx.io.VTXWriter(mesh.comm, output / "psi.bp", [psi])
@@ -298,13 +310,13 @@ def solve_contact_problem(
     bp_vonmises = dolfinx.io.VTXWriter(mesh.comm, output / "von_mises.bp", [stresses, u_dg])
     s = sigma(u, mu, lmbda) - 1.0 / 3 * ufl.tr(sigma(u, mu, lmbda)) * ufl.Identity(len(u))
     von_Mises = ufl.sqrt(3.0 / 2 * ufl.inner(s, s))
-    stress_expr = dolfinx.fem.Expression(von_Mises, V_DG.element.interpolation_points())
+    stress_expr = dolfinx.fem.Expression(von_Mises, V_DG.element.interpolation_points)
 
     u_prev = dolfinx.fem.Function(V)
     diff = dolfinx.fem.Function(V)
     normed_diff = -1.0
     displacement = ufl.inner(u, n_g) - g
-    expr = dolfinx.fem.Expression(displacement, V.element.interpolation_points())
+    expr = dolfinx.fem.Expression(displacement, V.element.interpolation_points)
     penetration = ufl.conditional(ufl.gt(displacement, 0), displacement, 0)
     boundary_penetration = dolfinx.fem.form(ufl.inner(penetration, penetration) * ds)
 
@@ -330,15 +342,19 @@ def solve_contact_problem(
             alpha.value = alpha_0 * 2**it
 
         solver_tol = 10 * newton_tol if it < 2 else newton_tol
-        solver.atol = solver_tol
-        solver.rtol = solver_tol
-        num_its, converged = solver.solve()
-        iterations.append(num_its)
+        # solver.atol = solver_tol
+        # solver.rtol = solver_tol
+        # num_its, converged = solver.solve()
+        solver.solve()
+        #solver.solver.view()
+        converged_reason = solver.solver.getConvergedReason()
+        print(f"Converged reason: {converged_reason}, {u.x.array, psi.x.array}")
+        # iterations.append(num_its)
         diff.x.array[:] = u.x.array - u_prev.x.array
         diff.x.petsc_vec.normBegin(2)
         normed_diff = diff.x.petsc_vec.normEnd(2)
         if normed_diff <= tol:
-            print(f"Converged at {it=} with increment norm {normed_diff:.2e}<{tol:.2e}")
+            print(f"Converged at {it=} {converged_reason=} with increment norm {normed_diff:.2e}<{tol:.2e}")
             break
         u_prev.x.array[:] = u.x.array
         psi_k.x.array[:] = psi.x.array
@@ -349,7 +365,7 @@ def solve_contact_problem(
         violation.sub(0).interpolate(expr)
         bp.write(it)
         bp_psi.write(it)
-
+        converged = converged_reason > 0
         if not converged:
             print(
                 f"Solver did not convert at {
