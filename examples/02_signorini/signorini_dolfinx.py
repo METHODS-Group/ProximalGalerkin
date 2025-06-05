@@ -235,7 +235,7 @@ def solve_contact_problem(
     u, psi = ufl.TrialFunctions(Q)
     v, w = ufl.TestFunctions(Q)
     psi_k = dolfinx.fem.Function(W)
-
+    psi_k.x.array[:] =-100
     # Define problem specific parameters
     mu = E / (2.0 * (1.0 + nu))
     lmbda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
@@ -253,7 +253,7 @@ def solve_contact_problem(
     residual += -ufl.inner(psi - psi_k, ufl.dot(v, n_g)) * ds
     residual += ufl.inner(ufl.dot(u, n_g), w) * ds
     residual += ufl.inner(ufl.exp(psi_k), w) * ds - ufl.inner(g, w) * ds
-
+    residual += dolfinx.fem.Constant(submesh, 0.0)*ufl.inner(psi, w)*ufl.ds
     a, L = ufl.system(residual)
 
     u = dolfinx.fem.Function(V, name="displacement")
@@ -280,8 +280,15 @@ def solve_contact_problem(
     _, V0_to_V = V.sub(gdim - 1).collapse()
     disp_facets = [facet_tag.find(d) for d in boundary_conditions["displacement"]]
     bc_facets = np.unique(np.concatenate(disp_facets))
+    
+    submesh.topology.create_connectivity(submesh.topology.dim-1, submesh.topology.dim)
+    surface_boundary = dolfinx.mesh.exterior_facet_indices(submesh.topology)
+    surface_boundary_dofs = dolfinx.fem.locate_dofs_topological(W, fdim-1, surface_boundary)
+    bc_psi = dolfinx.fem.dirichletbc(0., surface_boundary_dofs, W)
+
+
     bc = dolfinx.fem.dirichletbc(u_bc, dolfinx.fem.locate_dofs_topological(V, fdim, bc_facets))
-    bcs = [bc]
+    bcs = [bc, bc_psi]
 
     # Set up solver
     petsc_options = {
