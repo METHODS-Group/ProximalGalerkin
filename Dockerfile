@@ -23,6 +23,9 @@ RUN cd basix && cmake -G Ninja -DCMAKE_BUILD_TYPE=${DOLFINX_CMAKE_BUILD_TYPE} -B
     cd ../ffcx && pip install --no-cache-dir . -U && \
     cd ../ && pip install --no-cache-dir ipython
 
+RUN pip install --no-cache-dir -r dolfinx/python/build-requirements.txt && \
+    pip install --no-cache-dir pyamg pytest scipy matplotlib numba # test + optional set
+
 RUN cd dolfinx && \
     mkdir -p build-real && \
     cd build-real && \
