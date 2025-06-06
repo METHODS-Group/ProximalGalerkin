@@ -47,3 +47,11 @@ RUN cd dolfinx && \
     --config-settings=cmake.build-type="${DOLFINX_CMAKE_BUILD_TYPE}" --config-settings=install.strip=false --no-build-isolation --check-build-dependencies \
     --target /usr/local/dolfinx-complex/lib/python3.12/dist-packages --no-dependencies --no-cache-dir '.'
 
+
+
+
+ENV PKG_CONFIG_PATH=/usr/local/dolfinx-real/lib/pkgconfig:$PKG_CONFIG_PATH \
+    CMAKE_PREFIX_PATH=/usr/local/dolfinx-real/lib/cmake:$CMAKE_PREFIX_PATH \
+    PETSC_ARCH=linux-gnu-real64-32 \
+    PYTHONPATH=/usr/local/dolfinx-real/lib/python3.12/dist-packages:$PYTHONPATH \
+    LD_LIBRARY_PATH=/usr/local/dolfinx-real/lib:$LD_LIBRARY_PATH
