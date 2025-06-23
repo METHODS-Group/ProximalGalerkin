@@ -1,8 +1,7 @@
 FROM ubuntu:24.04
 ARG HYPRE_VERSION=2.32.0
 ARG METIS_VERSION=4.0.3
-# WORKAROUND until: https://github.com/mfem/mfem/pull/4702 is merged
-ARG MFEM_BRANCH=VectorDiffusionIntegrator
+ARG MFEM_BRANCH=v4.8
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get -qq update && \
