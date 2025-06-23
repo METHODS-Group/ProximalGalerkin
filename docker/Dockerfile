@@ -8,7 +8,8 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 WORKDIR /galahad
 RUN python3 -m pip install meson
 
-RUN git clone https://github.com/ralna/GALAHAD.git
+ARG GALAHAD_VERSION=v5.2.0
+RUN git clone --single-branch --branch=${GALAHAD_VERSION} https://github.com/ralna/GALAHAD.git
 ENV MESON_DIR=build-dir-galahad
 WORKDIR /galahad/GALAHAD
 RUN meson setup ${MESON_DIR} -Dpythoniface=true -Dpython.install_env=auto && \
@@ -205,27 +206,33 @@ ENV TMP_PETSC_ARCH=${PETSC_ARCH}
 ENV PYTHONPATH=""
 ENV HDF5_DIR="/usr/local"
 ENV HDF5_MPI="ON"
-ARG FIREDRAKE_BRANCH="master"
-
+ARG FIREDRAKE_BRANCH="2025.4.1"
 # Setup firedrake virtual env
 ENV FIREDRAKE_PYTHON=/firedrake-env
 RUN python3 -m venv ${FIREDRAKE_PYTHON}
 WORKDIR ${FIREDRAKE_PYTHON}
-# FIXME: Change when this is merged
-RUN git clone --branch=${FIREDRAKE_BRANCH} --single-branch  https://github.com/firedrakeproject/firedrake
+
+RUN git clone --branch ${FIREDRAKE_BRANCH} --single-branch https://github.com/firedrakeproject/firedrake.git
+
+# Build recipe from firedrake website
 ENV PATH=${FIREDRAKE_PYTHON}/bin:$PATH
 
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get install -y liblapack-dev
 # Install firedrake-dependent PETSc
-RUN git clone https://github.com/firedrakeproject/petsc.git
+RUN git clone --branch $(python3 ./firedrake/scripts/firedrake-configure --show-petsc-version) https://gitlab.com/petsc/petsc.git
 WORKDIR ${FIREDRAKE_PYTHON}/petsc
 ENV PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
 ENV PETSC_ARCH=arch-firedrake-default
-RUN apt-get install -y autoconf libtool flex bison libhwloc-dev
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get install -y autoconf libtool flex bison libhwloc-dev
+ENV HDF5_DIR="/usr/local"
+ENV HDF5_MPI="ON"
 RUN ./configure  --with-c2html=0 --with-debugging=0 --with-fortran-bindings=0 --with-shared-libraries=1 \
     --with-strict-petscerrorcode --COPTFLAGS=-O3 -march=native -mtune=native --CXXOPTFLAGS=-O3 -march=native -mtune=native --FOPTFLAGS=-O3 -march=native \
-    -mtune=native --with-bison --with-hdf5-lib=${HDF5_DIR}/lib/libhdf5.a --with-hdf5-include=${HDF5_DIR}/include --with-hwloc --download-metis --download-mumps \
-    --download-netcdf --download-pastix --download-pnetcdf --download-ptscotch --download-scalapack --download-suitesparse --download-superlu_dist --with-zlib --download-hypre
-RUN make
+    -mtune=native --with-bison --with-fftw --with-hdf5-lib=${HDF5_DIR}/lib/libhdf5.a --with-hdf5-include="${HDF5_DIR}/include" --with-hwloc --download-metis --download-mumps \
+    --download-netcdf --download-pnetcdf --download-ptscotch --download-scalapack --download-suitesparse --download-superlu_dist --with-zlib --download-hypre
+RUN make PETSC_ARCH=${PETSC_ARCH} -j${BUILD_NP} all
 
 FROM firedrake-petsc-env AS firedrake-env
 
