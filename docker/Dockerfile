@@ -225,7 +225,7 @@ WORKDIR ${FIREDRAKE_PYTHON}/petsc
 ENV PETSC_DIR=${FIREDRAKE_PYTHON}/petsc
 ENV PETSC_ARCH=arch-firedrake-default
 RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get install -y autoconf libtool flex bison libhwloc-dev
+    apt-get install -y autoconf libtool flex bison libhwloc-dev libfftw3-dev libfftw3-mpi-dev
 ENV HDF5_DIR="/usr/local"
 ENV HDF5_MPI="ON"
 RUN ./configure  --with-c2html=0 --with-debugging=0 --with-fortran-bindings=0 --with-shared-libraries=1 \
