@@ -255,10 +255,7 @@ def solve_contact_problem(
     residual += ufl.inner(ufl.exp(psi), w) * ds - ufl.inner(g, w) * ds
 
     # Compile residual
-    F = dolfinx.fem.form(ufl.extract_blocks(residual), entity_maps=entity_maps)
-
-    # Set up Jacobian
-    jac = ufl.extract_blocks(ufl.derivative(residual, [u, psi], ufl.TrialFunctions(Q)))
+    F = ufl.extract_blocks(residual)
 
     # Compile Jacobian
     u_bc = dolfinx.fem.Function(V)
@@ -289,7 +286,7 @@ def solve_contact_problem(
         "snes_monitor": None,
     }
     options_prefix = "signorini_"
-    solver = dolfinx.fem.petsc.NonlinearProblem(F, [u, psi], bcs=bcs, J=jac, petsc_options=petsc_options,
+    solver = dolfinx.fem.petsc.NonlinearProblem(F, [u, psi], bcs=bcs, petsc_options=petsc_options,
                                                 petsc_options_prefix=options_prefix,
                                                 entity_maps=entity_maps, kind="mpi")
 
