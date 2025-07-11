@@ -16,7 +16,6 @@ import dolfinx.fem.petsc
 import numpy as np
 import ufl
 from packaging.version import Version
-from scifem import BlockedNewtonSolver
 
 AlphaScheme = typing.Literal["constant", "linear", "doubling"]
 
@@ -259,10 +258,9 @@ def solve_contact_problem(
     F = dolfinx.fem.form(ufl.extract_blocks(residual), entity_maps=entity_maps)
 
     # Set up Jacobian
-    jac = ufl.derivative(residual, [u, psi], ufl.TrialFunctions(Q))
+    jac = ufl.extract_blocks(ufl.derivative(residual, [u, psi], ufl.TrialFunctions(Q)))
 
     # Compile Jacobian
-    J = dolfinx.fem.form(ufl.extract_blocks(jac), entity_maps=entity_maps)
     u_bc = dolfinx.fem.Function(V)
 
     def disp_func(x):
@@ -281,14 +279,20 @@ def solve_contact_problem(
 
     # Set up solver
     petsc_options = {
+        "snes_type": "newtonls",
+        "snes_linesearch_type": "none",
         "ksp_type": "preonly",
         "pc_type": "lu",
         "pc_factor_mat_solver_type": "mumps",
-        # "mat_mumps_icntl_14": 120,
         "ksp_error_if_not_converged": True,
+        "snes_error_if_not_converged": True,
+        "snes_monitor": None,
     }
-    solver = BlockedNewtonSolver(F, [u, psi], bcs=bcs, J=J, petsc_options=petsc_options)
-    solver.max_iter = newton_max_its
+    options_prefix = "signorini_"
+    solver = dolfinx.fem.petsc.NonlinearProblem(F, [u, psi], bcs=bcs, J=jac, petsc_options=petsc_options,
+                                                petsc_options_prefix=options_prefix,
+                                                entity_maps=entity_maps, kind="mpi")
+
     violation = dolfinx.fem.Function(V)
     bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u, violation])
     bp_psi = dolfinx.io.VTXWriter(mesh.comm, output / "psi.bp", [psi])
@@ -298,13 +302,13 @@ def solve_contact_problem(
     bp_vonmises = dolfinx.io.VTXWriter(mesh.comm, output / "von_mises.bp", [stresses, u_dg])
     s = sigma(u, mu, lmbda) - 1.0 / 3 * ufl.tr(sigma(u, mu, lmbda)) * ufl.Identity(len(u))
     von_Mises = ufl.sqrt(3.0 / 2 * ufl.inner(s, s))
-    stress_expr = dolfinx.fem.Expression(von_Mises, V_DG.element.interpolation_points())
+    stress_expr = dolfinx.fem.Expression(von_Mises, V_DG.element.interpolation_points)
 
     u_prev = dolfinx.fem.Function(V)
     diff = dolfinx.fem.Function(V)
     normed_diff = -1.0
     displacement = ufl.inner(u, n_g) - g
-    expr = dolfinx.fem.Expression(displacement, V.element.interpolation_points())
+    expr = dolfinx.fem.Expression(displacement, V.element.interpolation_points)
     penetration = ufl.conditional(ufl.gt(displacement, 0), displacement, 0)
     boundary_penetration = dolfinx.fem.form(ufl.inner(penetration, penetration) * ds)
 
@@ -313,8 +317,6 @@ def solve_contact_problem(
         return np.sqrt(mesh.comm.allreduce(local_penetration, op=MPI.SUM))
 
     iterations = []
-    solver.error_on_nonconvergence = True
-    solver.convergence_criterion = "residual"
     for it in range(1, max_iterations + 1):
         print(
             f"{it=}/{max_iterations} {normed_diff:.2e} Penetration L2(Gamma):",
@@ -330,9 +332,8 @@ def solve_contact_problem(
             alpha.value = alpha_0 * 2**it
 
         solver_tol = 10 * newton_tol if it < 2 else newton_tol
-        solver.atol = solver_tol
-        solver.rtol = solver_tol
-        num_its, converged = solver.solve()
+        solver.solver.setTolerances(atol= solver_tol, rtol=solver_tol)
+        _, _, num_its, converged = solver.solve()
         iterations.append(num_its)
         diff.x.array[:] = u.x.array - u_prev.x.array
         diff.x.petsc_vec.normBegin(2)
