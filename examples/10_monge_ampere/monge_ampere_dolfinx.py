@@ -1,13 +1,11 @@
 from mpi4py import MPI
 
 import basix.ufl
-import dolfinx
+import dolfinx.fem.petsc
 import numpy as np
 import scipy as sc
 import ufl
 from expm import expm
-
-from lvpp import SNESProblem, SNESSolver
 
 nonsmooth = False
 z_prev = None
@@ -57,7 +55,7 @@ for j in range(3, 15):
 
     C = dolfinx.fem.functionspace(mesh, ("DG", el_U.degree))
     rho_c = dolfinx.fem.Function(C, name="Density")
-    rho_expr = dolfinx.fem.Expression(rho, C.element.interpolation_points())
+    rho_expr = dolfinx.fem.Expression(rho, C.element.interpolation_points)
     rho_c.interpolate(rho_expr)
     with dolfinx.io.VTXWriter(mesh.comm, "output/density.bp", [rho_c]) as bp:
         bp.write(0.0)
@@ -90,7 +88,7 @@ for j in range(3, 15):
     bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
     V, _ = Z.sub(0).collapse()
     u_bc = dolfinx.fem.Function(V)
-    bc_expr = dolfinx.fem.Expression(g, V.element.interpolation_points())
+    bc_expr = dolfinx.fem.Expression(g, V.element.interpolation_points)
     u_bc.interpolate(bc_expr)
     bndry_dofs = dolfinx.fem.locate_dofs_topological(
         (Z.sub(0), V), mesh.topology.dim - 1, bndry_facets
@@ -115,15 +113,13 @@ for j in range(3, 15):
         else:
             u_guess = x**2 + y**2
         B = dolfinx.fem.functionspace(mesh, ("DG", el_W.degree, (gdim, gdim)))
-        z.sub(0).interpolate(
-            dolfinx.fem.Expression(u_guess, Z.sub(0).element.interpolation_points())
-        )
+        z.sub(0).interpolate(dolfinx.fem.Expression(u_guess, Z.sub(0).element.interpolation_points))
         z.sub(1).interpolate(
-            dolfinx.fem.Expression(ufl.grad(u_guess), Z.sub(1).element.interpolation_points())
+            dolfinx.fem.Expression(ufl.grad(u_guess), Z.sub(1).element.interpolation_points)
         )
         psi_init = dolfinx.fem.Function(B)
         psi_init.interpolate(
-            dolfinx.fem.Expression(hessian(z.sub(0)), B.element.interpolation_points())
+            dolfinx.fem.Expression(hessian(z.sub(0)), B.element.interpolation_points)
         )
         loghessian = dolfinx.fem.Function(B, name="LogHessian")
         tmp_arr = psi_init.x.array.reshape(-1, gdim, gdim)
@@ -134,7 +130,7 @@ for j in range(3, 15):
         z.sub(2).interpolate(
             dolfinx.fem.Expression(
                 ufl.as_vector([loghessian[0, 0], loghessian[0, 1], loghessian[1, 1]]),
-                Z.sub(2).element.interpolation_points(),
+                Z.sub(2).element.interpolation_points,
             )
         )
 
@@ -151,9 +147,12 @@ for j in range(3, 15):
             bp.write(0.0)
         #
 
-    problem = SNESProblem(F, z, bcs=[bc])
-    solver = SNESSolver(problem, sp)
-    converged_reason, num_iterations = solver.solve()
+    problem = dolfinx.fem.petsc.NonlinearProblem(
+        F, u=z, bcs=[bc], J=J, petsc_options=sp, petsc_options_prefix=f"snes_{j}"
+    )
+    problem.solve()
+    num_iterations = problem.solver.getIterationNumber()
+    converged_reason = problem.solver.getConvergedReason()
     print(f"Converged reason: {converged_reason}, iterations: {num_iterations}", flush=True)
     assert converged_reason > 0, "Solver did not converge"
     z_prev = z
@@ -166,7 +165,7 @@ for j in range(3, 15):
     with dolfinx.io.VTXWriter(mesh.comm, f"output/solution_{j}.bp", [z.sub(0).collapse()]) as vtx:
         vtx.write(0.0)
 
-    # mesh, _, _ = dolfinx.mesh.refine(mesh)
+    mesh, _, _ = dolfinx.mesh.refine(mesh)
 
 
 # Not relevant for p-refinement

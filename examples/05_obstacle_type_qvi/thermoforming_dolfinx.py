@@ -20,8 +20,6 @@ from ufl import (
     split,
 )
 
-from lvpp import SNESProblem, SNESSolver
-
 # Define domain
 M = 150
 mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, M, M)
@@ -111,8 +109,8 @@ sp = {
     "snes_linesearch_order": 2,
     # "snes_linesearch_monitor": None,
 }
-problem = SNESProblem(F, s, bcs=[bc], J=dolfinx.fem.form(J))
-solver = SNESSolver(problem, sp)
+problem = dolfinx.fem.petsc.NonlinearProblem(F, u=s, bcs=[bc], J=J, petsc_options=sp)
+
 # Set initial guess for T
 s.sub(1).interpolate(lambda x: np.ones_like(x[1]))
 
@@ -125,7 +123,9 @@ for i in range(1, max_lvpp_iterations + 1):
     # Solve non-linear problem
     dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 
-    converged_reason, num_its = solver.solve()
+    problem.solve()
+    num_its = problem.solver.getIterationNumber()
+    converged_reason = problem.solver.getConvergedReason()
     error_msg = f"Solver did not converge with {converged_reason}"
     assert converged_reason > 0, error_msg
 
@@ -163,7 +163,7 @@ vtx_u.close()
 vtx_T.close()
 
 # Store original mould
-interpolation_points = V0.element.interpolation_points()
+interpolation_points = V0.element.interpolation_points
 original_mould = dolfinx.fem.Function(V0)
 original_mould.interpolate(dolfinx.fem.Expression(Phi0, interpolation_points))
 original_mould.name = "OriginalMould"

@@ -5,8 +5,6 @@ import dolfinx
 import numpy as np
 import ufl
 
-from lvpp import SNESProblem, SNESSolver
-
 
 class NotConvergedError(Exception):
     pass
@@ -63,7 +61,6 @@ bc_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
 bc_dofs = dolfinx.fem.locate_dofs_topological(Z.sub(0), mesh.topology.dim - 1, bc_facets)
 bcs = [dolfinx.fem.dirichletbc(0.0, bc_dofs, Z.sub(0))]
 
-problem = SNESProblem(F, z, bcs=bcs)
 
 sp = {
     "snes_monitor": None,
@@ -79,13 +76,16 @@ sp = {
     "pc_factor_mat_solver_type": "mumps",
     "mat_mumps_icntl_14": 500,
 }
+problem = dolfinx.fem.petsc.NonlinearProblem(
+    F, z, bcs=bcs, petsc_options=sp, petsc_options_prefix="snes_"
+)
 
 
 L2_u = dolfinx.fem.form(ufl.inner(u - u_iter, u - u_iter) * dx)
 L2_z = dolfinx.fem.form(ufl.inner(z - z_prev, z - z_iter) * dx)
 
 V_primal, primal_to_Z = Z.sub(0).collapse()
-primal_points = V_primal.element.interpolation_points()
+primal_points = V_primal.element.interpolation_points
 u_out = dolfinx.fem.Function(V_primal, name="u")
 u_conform_out = dolfinx.fem.Function(V_primal, name="conform_u")
 conform_expr = dolfinx.fem.Expression(ufl.exp(psi0) + phi0, primal_points)
@@ -94,7 +94,7 @@ obstacle_expr = dolfinx.fem.Expression(phi0, primal_points)
 vtx = dolfinx.io.VTXWriter(mesh.comm, "output.bp", [u_out, u_conform_out, obstacle])
 
 G = dolfinx.fem.functionspace(mesh, ("DG", 0, (mesh.geometry.dim,)))
-G_points = G.element.interpolation_points()
+G_points = G.element.interpolation_points
 grad_u = dolfinx.fem.Expression(ufl.grad(u), G_points)
 grad_func = dolfinx.fem.Function(G, name="grad_u")
 phi_func = dolfinx.fem.Function(G, name="phi")
@@ -108,7 +108,6 @@ NFAIL_MAX = 50
 phis = [3, 2, 1, 0.5, 0.1, 0.01]
 num_newton_iterations = np.zeros_like(phis, dtype=np.int32)
 num_lvpp_iterations = np.zeros_like(phis, dtype=np.int32)
-problem = SNESProblem(F, z, bcs=bcs)
 for i, phi_ in enumerate(phis):
     phic.value = phi_
     if mesh.comm.rank == 0:
@@ -122,8 +121,12 @@ for i, phi_ in enumerate(phis):
         try:
             if mesh.comm.rank == 0:
                 print(f"Attempting {k=} alpha={float(alpha)}", flush=True)
-            solver = SNESSolver(problem, sp)
-            converged_reason, num_iterations = solver.solve()
+            problem = dolfinx.fem.petsc.NonlinearProblem(
+                F, z, bcs=bcs, petsc_options=sp, petsc_options_prefix="snes_"
+            )
+            problem.solve()
+            num_iterations = problem.solver.getIterationNumber()
+            converged_reason = problem.solver.getConvergedReason()
             num_newton_iterations[i] += num_iterations
             if num_iterations == 0 and converged_reason > 0:
                 # solver didn't actually get to do any work,
