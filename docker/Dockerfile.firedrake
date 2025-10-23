@@ -34,7 +34,7 @@ RUN wget -nc --quiet https://github.com/HDFGroup/hdf5/archive/refs/tags/hdf5_${H
 
 FROM hdf5 AS intermediate
 
-ARG FIREDRAKE_BRANCH="2025.4.1"
+ARG FIREDRAKE_BRANCH="2025.10.1"
 # Setup firedrake virtual env
 ENV FIREDRAKE_PYTHON=/firedrake-env
 RUN python3 -m venv ${FIREDRAKE_PYTHON}

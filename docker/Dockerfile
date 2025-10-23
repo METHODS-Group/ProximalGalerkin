@@ -1,4 +1,4 @@
-FROM ghcr.io/fenics/dolfinx/dev-env:v0.9.0-openmpi AS galahad
+FROM ghcr.io/fenics/dolfinx/dev-env:v0.10.0-openmpi AS galahad
 ARG TARGETPLATFORM
 ENV DEBIAN_FRONTEND=noninteractive
 ENV OMPI_ALLOW_RUN_AS_ROOT=1
@@ -17,7 +17,7 @@ RUN meson setup ${MESON_DIR} -Dpythoniface=true -Dpython.install_env=auto && \
     meson install -C ${MESON_DIR} && \
     meson test -C ${MESON_DIR} --suite=Python
 
-ARG IPOPT_VERSION=3.14.11
+ARG IPOPT_VERSION=3.14.19
 
 # Pull MUMPS 
 WORKDIR /ipopt
@@ -53,14 +53,14 @@ RUN make install
 
 
 # Build pyipopt
-ARG CYIPOPT_VERSION=1.5.0
+ARG CYIPOPT_VERSION=1.6.1
 RUN python3 -m pip install --no-cache git+https://github.com/mechmotum/cyipopt.git@v${CYIPOPT_VERSION}
 
-ARG PYVISTA_VERSION=0.44.2
-ARG DOLFINX_VERSION=v0.9.0.post1
-ARG BASIX_VERSION=v0.9.0
-ARG UFL_VERSION=2024.2.0
-ARG FFCX_VERSION=v0.9.0
+ARG PYVISTA_VERSION=0.46.3
+ARG DOLFINX_VERSION=v0.10.0.post1
+ARG BASIX_VERSION=v0.10.0
+ARG UFL_VERSION=2025.2.0
+ARG FFCX_VERSION=v0.10.0
 
 FROM optimization AS dolfinx-onbuild
 LABEL description="DOLFINx in 32-bit real and complex modes (onbuild)"
@@ -165,7 +165,7 @@ RUN pip install --no-cache-dir jupyter jupyterlab
 
 # pyvista dependencies from apt
 RUN apt-get -qq update && \
-    apt-get -y install libgl1-mesa-dev xvfb && \
+    apt-get -y install libgl1-mesa-dev mesa-utils && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -174,15 +174,8 @@ RUN apt-get -qq update && \
 # matplotlib improves plotting quality with better color maps and
 # properly rendering colorbars.
 # trame is the preferred backend for pyvista.
-RUN dpkgArch="$(dpkg --print-architecture)"; \
-    pip install matplotlib; \
-    case "$dpkgArch" in amd64) \
-    pip install --no-cache-dir pyvista[jupyter]==${PYVISTA_VERSION} ;; \
-    esac; \
-    case "$dpkgArch" in arm64) \
-    pip install --no-cache-dir https://github.com/scientificcomputing/vtk-aarch64/releases/download/v9.4.1-py3.12/vtk-9.4.1.dev0-cp312-cp312-linux_aarch64.whl && \
-    pip install --no-cache-dir pyvista[jupyter]==${PYVISTA_VERSION} ;; \
-    esac; \
+RUN pip install matplotlib && \
+    pip install --no-cache-dir pyvista[jupyter]==${PYVISTA_VERSION} && \
     pip cache purge
 
 # Jupyter Notebook kernel specification for complex build DOLFINx
@@ -206,7 +199,7 @@ ENV TMP_PETSC_ARCH=${PETSC_ARCH}
 ENV PYTHONPATH=""
 ENV HDF5_DIR="/usr/local"
 ENV HDF5_MPI="ON"
-ARG FIREDRAKE_BRANCH="2025.4.1"
+ARG FIREDRAKE_BRANCH="2025.10.1"
 # Setup firedrake virtual env
 ENV FIREDRAKE_PYTHON=/firedrake-env
 RUN python3 -m venv ${FIREDRAKE_PYTHON}
@@ -242,7 +235,7 @@ RUN python3 -m pip install --no-cache-dir mpi4py petsc4py matplotlib -v
 RUN python3 -m pip install --no-binary h5py . -v
 # Install ngs-petsc and vtk on amd, only vtk on arm
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; \
-    then python3 -m pip install --no-cache-dir https://github.com/scientificcomputing/vtk-aarch64/releases/download/v9.4.1-py3.12/vtk-9.4.1.dev0-cp312-cp312-linux_aarch64.whl; \
+    then python3 -m pip install --no-cache-dir vtk; \
     elif [ "$TARGETPLATFORM" = "linux/amd64" ]; \
     then python3 -m pip install ngspetsc netgen-mesher vtk ; \
     else echo "Unknown TARGETPLATFORM: ${TARGETPLATFORM}, it should be either 'linux/amd64' or 'linux/arm64'"; \
