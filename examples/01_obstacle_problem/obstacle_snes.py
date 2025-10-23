@@ -19,8 +19,6 @@ import dolfinx.fem.petsc
 import numpy as np
 import ufl
 
-from lvpp.problem import SNESProblem
-
 parser = argparse.ArgumentParser(
     description="Solve the obstacle problem on a unit square.",
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -38,11 +36,8 @@ parser.add_argument(
 def snes_solve(
     filename: Path,
     snes_options: typing.Optional[dict] = None,
-    petsc_options: typing.Optional[dict] = None,
-    tol: float = 1e-8,
 ):
     snes_options = {} if snes_options is None else snes_options
-    petsc_options = {} if petsc_options is None else petsc_options
 
     with dolfinx.io.XDMFFile(MPI.COMM_WORLD, filename, "r") as xdmf:
         mesh = xdmf.read_mesh(name="mesh")
@@ -71,9 +66,6 @@ def snes_solve(
     v = ufl.TestFunction(V)
     f = dolfinx.fem.Constant(mesh, (0.0))
     F = (ufl.inner(ufl.grad(uh), ufl.grad(v)) - ufl.inner(f, v)) * ufl.dx
-    J = ufl.derivative(F, uh)
-    F_compiled = dolfinx.fem.form(F)
-    J_compiled = dolfinx.fem.form(J)
 
     # bc_expr = dolfinx.fem.Expression(u_ex, V.element.interpolation_points())
     u_bc = dolfinx.fem.Function(V)
@@ -87,55 +79,20 @@ def snes_solve(
     u_max = dolfinx.fem.Function(V)
     u_max.x.array[:] = PETSc.INFINITY
 
-    # Create semismooth Newton solver (SNES)
-    snes = PETSc.SNES().create(comm=mesh.comm)  # type: ignore
-    snes.setTolerances(tol, tol, tol, 1000)
-    # Set SNES options
-    opts = PETSc.Options()  # type: ignore
-    snes.setOptionsPrefix("snes_solve")
-    option_prefix = snes.getOptionsPrefix()
-    opts.prefixPush(option_prefix)
-    for k, v in snes_options.items():
-        opts[k] = v
-    opts.prefixPop()
-    snes.setFromOptions()
-
-    b = dolfinx.fem.Function(V)
-    b_vec = b.x.petsc_vec
-
     # Create nonlinear problem
-    problem = SNESProblem(F_compiled, uh, bcs=bcs, J=J_compiled)
+    problem = dolfinx.fem.petsc.NonlinearProblem(
+        F, uh, bcs=bcs, petsc_options=snes_options, petsc_options_prefix="snes_"
+    )
+    problem.solver.setVariableBounds(phi.x.petsc_vec, u_max.x.petsc_vec)
+    problem.solve()
 
-    A = dolfinx.fem.petsc.create_matrix(J_compiled)
+    num_iterations = problem.solver.getIterationNumber()
 
-    # Set solve functions and variable bounds
-    snes.setFunction(problem.F, b_vec)
-    snes.setJacobian(problem.J, A)
-    snes.setVariableBounds(phi.x.petsc_vec, u_max.x.petsc_vec)
-
-    # Set ksp options
-    ksp = snes.ksp
-    ksp.setOptionsPrefix("snes_ksp")
-    opts = PETSc.Options()  # type: ignore
-    option_prefix = ksp.getOptionsPrefix()
-    opts.prefixPush(option_prefix)
-    for k, v in petsc_options.items():
-        opts[k] = v
-    opts.prefixPop()
-    ksp.setFromOptions()
-    # For SNES line search to function correctly it is necessary that the
-    # u.x.petsc_vec in the Jacobian and residual is *not* passed to
-    # snes.solve.
-    x = dolfinx.fem.Function(V)
-    snes.solve(None, x.x.petsc_vec)
-    x.x.scatter_forward()
-    num_iterations = snes.getIterationNumber()
-    snes.destroy()
     mesh = uh.function_space.mesh
     degree = mesh.geometry.cmap.degree
     V_out = dolfinx.fem.functionspace(mesh, ("Lagrange", degree))
     u_out = dolfinx.fem.Function(V_out, name="llvp")
-    u_out.interpolate(x)
+    u_out.interpolate(uh)
 
     return u_out, num_iterations
 
@@ -144,10 +101,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     snes_solve(
         args.infile,
-        snes_options={"snes_type": "vinewtonssls", "snes_monitor": None},
-        petsc_options={
+        snes_options={
+            "snes_type": "vinewtonssls",
+            "snes_monitor": None,
             "ksp_type": "preonly",
             "pc_type": "lu",
             "pc_factor_mat_solver_type": "mumps",
+            "snes_max_it": 1000,
+            "snes_atol": 1e-8,
+            "snes_rtol": 1e-8,
+            "snes_stol": 1e-8,
         },
     )
