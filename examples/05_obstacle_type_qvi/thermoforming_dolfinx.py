@@ -109,7 +109,9 @@ sp = {
     "snes_linesearch_order": 2,
     # "snes_linesearch_monitor": None,
 }
-problem = dolfinx.fem.petsc.NonlinearProblem(F, u=s, bcs=[bc], J=J, petsc_options=sp)
+problem = dolfinx.fem.petsc.NonlinearProblem(
+    F, u=s, bcs=[bc], J=J, petsc_options=sp, petsc_options_prefix="snes_"
+)
 
 # Set initial guess for T
 s.sub(1).interpolate(lambda x: np.ones_like(x[1]))
