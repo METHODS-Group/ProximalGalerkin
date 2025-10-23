@@ -205,13 +205,7 @@ def solve_contact_problem(
     fdim = mesh.topology.dim - 1
     # Create submesh for potential facets
     submesh, submesh_to_mesh = dolfinx.mesh.create_submesh(mesh, fdim, contact_facets)[0:2]
-
-    # Invert map to get mapping from parent facet to submesh cell
-    facet_imap = mesh.topology.index_map(fdim)
-    num_facets = facet_imap.size_local + facet_imap.num_ghosts
-    mesh_to_submesh = np.full(num_facets, -1)
-    mesh_to_submesh[submesh_to_mesh] = np.arange(len(submesh_to_mesh))
-    entity_maps = {submesh: mesh_to_submesh}
+    entity_maps = [submesh_to_mesh]
 
     # Define integration measure only on potential contact facets
     metadata = {"quadrature_degree": quadrature_degree}
@@ -286,9 +280,15 @@ def solve_contact_problem(
         "snes_monitor": None,
     }
     options_prefix = "signorini_"
-    solver = dolfinx.fem.petsc.NonlinearProblem(F, [u, psi], bcs=bcs, petsc_options=petsc_options,
-                                                petsc_options_prefix=options_prefix,
-                                                entity_maps=entity_maps, kind="mpi")
+    solver = dolfinx.fem.petsc.NonlinearProblem(
+        F,
+        [u, psi],
+        bcs=bcs,
+        petsc_options=petsc_options,
+        petsc_options_prefix=options_prefix,
+        entity_maps=entity_maps,
+        kind="mpi",
+    )
 
     violation = dolfinx.fem.Function(V)
     bp = dolfinx.io.VTXWriter(mesh.comm, output / "uh.bp", [u, violation])
@@ -329,8 +329,10 @@ def solve_contact_problem(
             alpha.value = alpha_0 * 2**it
 
         solver_tol = 10 * newton_tol if it < 2 else newton_tol
-        solver.solver.setTolerances(atol= solver_tol, rtol=solver_tol)
-        _, _, num_its, converged = solver.solve()
+        solver.solver.setTolerances(atol=solver_tol, rtol=solver_tol)
+        solver.solve()
+        num_its = solver.solver.getIterationNumber()
+        converged = solver.solver.getConvergedReason() > 0
         iterations.append(num_its)
         diff.x.array[:] = u.x.array - u_prev.x.array
         diff.x.petsc_vec.normBegin(2)
@@ -405,7 +407,7 @@ if __name__ == "__main__":
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, args.filename, "r") as xdmf:
             mesh = xdmf.read_mesh()
             mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
-            mt = xdmf.read_meshtags(mesh, name="Facet tags")
+            mt = xdmf.read_meshtags(mesh, name="facet_tags")
             bcs = {"contact": (args.ct,), "displacement": (args.dt,)}
 
     it, iterations = solve_contact_problem(

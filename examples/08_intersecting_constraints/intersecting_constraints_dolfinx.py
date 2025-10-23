@@ -1,7 +1,7 @@
 from mpi4py import MPI
 
 import basix.ufl
-import dolfinx
+import dolfinx.fem.petsc
 import numpy as np
 import ufl
 
@@ -66,7 +66,7 @@ sp = {
     "snes_monitor": None,
     "snes_converged_reason": None,
     "snes_linesearch_type": "l2",
-    "snes_linesearch_maxstep": 1,
+    "snes_linesearch_maxlambda": 1,
     "snes_atol": 1.0e-6,
     "snes_rtol": 1.0e-6,
     "snes_stol": 1e-14,

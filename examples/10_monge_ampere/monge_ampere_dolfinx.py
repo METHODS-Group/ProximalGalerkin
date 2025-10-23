@@ -15,6 +15,7 @@ mesh.geometry
 sp = {
     "snes_monitor": None,
     "snes_linesearch_type": "l2",
+    "ksp_type": "preonly",
     "pc_type": "lu",
     "pc_factor_mat_solver_type": "mumps",
     "pc_svd_monitor": None,
@@ -148,7 +149,7 @@ for j in range(3, 15):
         #
 
     problem = dolfinx.fem.petsc.NonlinearProblem(
-        F, u=z, bcs=[bc], J=J, petsc_options=sp, petsc_options_prefix=f"snes_{j}"
+        F, u=z, bcs=[bc], petsc_options=sp, petsc_options_prefix=f"snes_{j}"
     )
     problem.solve()
     num_iterations = problem.solver.getIterationNumber()
@@ -165,7 +166,7 @@ for j in range(3, 15):
     with dolfinx.io.VTXWriter(mesh.comm, f"output/solution_{j}.bp", [z.sub(0).collapse()]) as vtx:
         vtx.write(0.0)
 
-    mesh, _, _ = dolfinx.mesh.refine(mesh)
+    # mesh, _, _ = dolfinx.mesh.refine(mesh)
 
 
 # Not relevant for p-refinement
