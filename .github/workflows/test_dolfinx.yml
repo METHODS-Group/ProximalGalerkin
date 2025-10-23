@@ -24,7 +24,7 @@ jobs:
           ]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install package
         id: install
@@ -93,7 +93,7 @@ jobs:
         platform: ["ubuntu-24.04", "ubuntu-24.04-arm"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install package
         run: |
