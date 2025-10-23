@@ -7,7 +7,7 @@ ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 WORKDIR /galahad
 RUN python3 -m pip install meson
 
-RUN git clone https://github.com/ralna/GALAHAD.git
+RUN git clone --branch=v5.3.0 --single-branch https://github.com/ralna/GALAHAD.git
 ENV MESON_DIR=build-dir-galahad
 WORKDIR /galahad/GALAHAD
 RUN meson setup ${MESON_DIR} -Dpythoniface=true -Dpython.install_env=auto && \
