@@ -1,4 +1,4 @@
-FROM ghcr.io/methods-group/proximalgalerkin:v0.4.0 AS pg
+FROM ghcr.io/methods-group/proximalgalerkin:v0.5.0 AS pg
 
 
 # create user with a home directory
