@@ -70,7 +70,7 @@ def read_mobius_strip(filename: Path):
     partitioner = dolfinx.cpp.mesh.create_cell_partitioner(dolfinx.mesh.GhostMode.shared_facet)
     ufl_domain = ufl.Mesh(basix.ufl.element("Lagrange", "quadrilateral", order, shape=(3,)))
     mesh = dolfinx.mesh.create_mesh(
-        MPI.COMM_WORLD, dx_cells, unique_points, ufl_domain, partitioner
+        MPI.COMM_WORLD, cells=dx_cells, x=unique_points, e=ufl_domain, partitioner=partitioner
     )
     return mesh
 
