@@ -6,11 +6,9 @@ from mpi4py import MPI
 from petsc4py import PETSc
 
 import basix.ufl
-import dolfinx
+import dolfinx.fem.petsc
 import numpy as np
 import ufl
-from dolfinx.fem.petsc import NonlinearProblem
-from dolfinx.nls.petsc import NewtonSolver
 
 AlphaScheme = Literal["constant", "linear", "doubling"]
 
@@ -127,31 +125,26 @@ def solve_problem(
     u_prev.x.scatter_forward()
 
     bcs: list[dolfinx.fem.DirichletBC] = []
-    problem = NonlinearProblem(F, sol, bcs=bcs)
-    solver = NewtonSolver(mesh.comm, problem)
-    solver.convergence_criterion = "residual"
-    solver.rtol = 1e-8
-    solver.atol = 1e-8
-    solver.max_it = 25
-    solver.error_on_nonconvergence = True
+    petsc_options = {
+        "snes_type": "newtonls",
+        "snes_atol": 1e-8,
+        "ksp_type": "preonly",
+        "pc_type": "lu",
+        "pc_factor_mat_solver_type": "mumps",
+        "ksp_error_if_not_converged": True,
+        "snes_error_if_not_converged": True,
+        "mat_mumps_icntl_14": 600,
+        "mat_mumps_icntl_24": 1,
+        "snes_monitor": None,
+        "snes_atol": 1e-8,
+        "snes_rtol": 1e-8,
+        "snes_rtol": 1e-8,
+        "snes_max_it": 25,
+    }
 
-    ksp = solver.krylov_solver
-    opts = PETSc.Options()  # type: ignore
-    prefix = ""
-    ksp.setOptionsPrefix(prefix)
-    opts[f"{prefix}ksp_type"] = "preonly"
-    opts[f"{prefix}pc_type"] = "lu"
-
-    opts[f"{prefix}pc_factor_mat_solver_type"] = "mumps"
-    opts[f"{prefix}ksp_error_if_not_converged"] = True
-    # Increase MUMPS working memory
-    opts[f"{prefix}mat_mumps_icntl_14"] = 600
-    # opts[f"{prefix}mat_mumps_icntl_4"] = 3
-    opts[f"{prefix}mat_mumps_icntl_24"] = 1
-    if dolfinx.log.get_log_level() == dolfinx.log.LogLevel.INFO:
-        opts[f"{prefix}ksp_monitor"] = None
-    # opts[f"{option_prefix}ksp_view"] = None
-    ksp.setFromOptions()
+    problem = dolfinx.fem.petsc.NonlinearProblem(
+        F, u=sol, bcs=bcs, petsc_options=petsc_options, petsc_options_prefix="nls_"
+    )
 
     bp_c = dolfinx.io.VTXWriter(
         mesh.comm,
@@ -187,7 +180,7 @@ def solve_problem(
     psi_scalar = [V_trial.sub(2).sub(i).collapse() for i in range(num_species)]
     psi_init = [
         dolfinx.fem.Expression(
-            ufl.ln(abs(u[i]) + 1e-7) + 1, psi_scalar[i][0].element.interpolation_points()
+            ufl.ln(abs(u[i]) + 1e-7) + 1, psi_scalar[i][0].element.interpolation_points
         )
         for i in range(num_species)
     ]
@@ -210,18 +203,16 @@ def solve_problem(
                 alpha.value = min(alpha_0 + alpha_c * i, alpha_max)
             elif alpha_scheme == "doubling":
                 alpha.value = min(alpha_0 * 2**i, alpha_max)
-            num_newton_iterations, converged = solver.solve(sol)
-
-            newton_iterations[j - 1] += num_newton_iterations
+            problem.solve()
+            num_iterations = problem.solver.getIterationNumber()
+            converged = problem.solver.getConvergedReason()
+            newton_iterations[j - 1] += num_iterations
             local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
             global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
             if mesh.comm.rank == 0:
                 print(
-                    f"Iteration {i}: {converged=} alpha={
-                        float(alpha):.2e
-                    } {num_newton_iterations=}",
+                    f"Iteration {i}: {converged=} alpha={float(alpha):.2e} {num_iterations=}",
                     f"|delta u |= {global_diff}",
-                    f"{ksp.getConvergedReason()=}",
                     flush=True,
                 )
 

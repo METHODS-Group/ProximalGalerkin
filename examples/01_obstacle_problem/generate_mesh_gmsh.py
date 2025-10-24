@@ -34,11 +34,8 @@ def generate_disk(filename: Path, res: float, order: int = 1, refinement_level: 
 
     gmsh_model_rank = 0
     mesh_comm = MPI.COMM_WORLD
-    model = dolfinx.io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=gdim)
-    if packaging.version.Version(dolfinx.__version__) > packaging.version.Version("0.9.0"):
-        msh = model.mesh
-    else:
-        msh = model[0]
+    model = dolfinx.io.gmsh.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=gdim)
+    msh = model[0]
     gmsh.finalize()
     out_name = filename.with_stem(f"{filename.stem}_{refinement_level}").with_suffix(".xdmf")
     filename.parent.mkdir(exist_ok=True, parents=True)

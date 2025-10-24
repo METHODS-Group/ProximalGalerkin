@@ -33,14 +33,12 @@ def solve_problem(
 ):
     _cell_type = dolfinx.mesh.to_type(cell_type)
 
-    mesh = dolfinx.mesh.create_unit_square(
-        MPI.COMM_WORLD, N, M, cell_type=_cell_type)
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, M, cell_type=_cell_type)
 
-    el_0 = basix.ufl.element(
-        primal_space, mesh.topology.cell_name(), primal_degree)
+    el_0 = basix.ufl.element(primal_space, mesh.topology.cell_name(), primal_degree)
     assert primal_degree > 0
     el_1 = basix.ufl.element(
-        "Lagrange", mesh.topology.cell_name(), primal_degree-1, shape=(mesh.geometry.dim,)
+        "Lagrange", mesh.topology.cell_name(), primal_degree - 1, shape=(mesh.geometry.dim,)
     )
 
     trial_el = basix.ufl.mixed_element([el_0, el_1])
@@ -79,7 +77,18 @@ def solve_problem(
         L = f * q * dx
         u_bc_init = dolfinx.fem.Function(U)
         bc_init = dolfinx.fem.dirichletbc(u_bc_init, boundary_dofs[1])
-        lin_prob = LinearProblem(a, L, bcs=[bc_init])
+        lin_prob = LinearProblem(
+            a,
+            L,
+            bcs=[bc_init],
+            petc_options_prefix="warm_start",
+            petsc_options={
+                "ksp_type": "preonly",
+                "pc_type": "lu",
+                "pc_factor_mat_solver_type": "mumps",
+                "ksp_error_if_not_converged": True,
+            },
+        )
         u_init_out = lin_prob.solve()
         u_init_out.name = "InitialU"
         # u init is equal to the solution of the linear problem
@@ -100,64 +109,57 @@ def solve_problem(
     u_bc = dolfinx.fem.Function(U)
     u_bc.x.array[:] = 0
     bcs = [dolfinx.fem.dirichletbc(u_bc, boundary_dofs, V_trial.sub(0))]
-    print(
-        f"Number of dofs: {U.dofmap.index_map.size_global*U.dofmap.index_map_bs}")
-    problem = NonlinearProblem(F, sol, bcs=bcs)
-    solver = NewtonSolver(mesh.comm, problem)
-    solver.convergence_criterion = "residual"
-    solver.rtol = 1e-9
-    solver.atol = 1e-9
-    solver.max_it = 20
-    solver.error_on_nonconvergence = True
-
-    ksp = solver.krylov_solver
-    opts = PETSc.Options()  # type: ignore
-    option_prefix = ksp.getOptionsPrefix()
-    opts[f"{option_prefix}ksp_type"] = "preonly"
-    opts[f"{option_prefix}pc_type"] = "lu"
-    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
-    ksp.setFromOptions()
-
-    dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
+    print(f"Number of dofs: {U.dofmap.index_map.size_global * U.dofmap.index_map_bs}")
+    problem = NonlinearProblem(
+        F,
+        u=sol,
+        bcs=bcs,
+        petsc_options_prefix="pg_",
+        petsc_options={
+            "snes_type": "newtonls",
+            "snes_monitor": None,
+            "ksp_type": "preonly",
+            "pc_type": "lu",
+            "pc_factor_mat_solver_type": "mumps",
+            "mat_mumps_icntl_14": 500,
+            "snes_atol": 1e-9,
+            "snes_rtol": 1e-9,
+            "snes_stol": 1e-9,
+            "snes_max_it": 20,
+            "snes_error_if_not_converged": True,
+            "snes_linesearch_type": "none",
+        },
+    )
 
     Z = dolfinx.fem.functionspace(mesh, ("DG", 0))
     active_set = dolfinx.fem.Function(Z, name="active_set")
     active_set_expr = ufl.sqrt(ufl.dot(ufl.grad(u), ufl.grad(u))) - phi
     active_cell = ufl.conditional(ufl.ge(active_set_expr, 0), 1, 0)
-    set_expr = dolfinx.fem.Expression(
-        active_cell, Z.element.interpolation_points())
+    set_expr = dolfinx.fem.Expression(active_cell, Z.element.interpolation_points)
 
-    global_feasible_gradient = phi * psi / \
-        ufl.sqrt(1 + ufl.dot(psi, psi))
-    global_active_set_exr = ufl.sqrt(
-        ufl.dot(global_feasible_gradient, global_feasible_gradient)) - phi
-    global_active_cell = ufl.conditional(
-        ufl.gt(global_active_set_exr, -1e-8), 1, 0)
-    global_set_expr = dolfinx.fem.Expression(
-        global_active_cell, Z.element.interpolation_points())
-    global_active_set = dolfinx.fem.Function(
-        Z, name="global_feasible_active_set")
+    global_feasible_gradient = phi * psi / ufl.sqrt(1 + ufl.dot(psi, psi))
+    global_active_set_exr = (
+        ufl.sqrt(ufl.dot(global_feasible_gradient, global_feasible_gradient)) - phi
+    )
+    global_active_cell = ufl.conditional(ufl.gt(global_active_set_exr, -1e-8), 1, 0)
+    global_set_expr = dolfinx.fem.Expression(global_active_cell, Z.element.interpolation_points)
+    global_active_set = dolfinx.fem.Function(Z, name="global_feasible_active_set")
     xdmf = dolfinx.io.XDMFFile(mesh.comm, "active_set.xdmf", "w")
     xdmf.write_mesh(mesh)
-    W = dolfinx.fem.functionspace(
-        mesh, ("DG", (primal_degree - 1), (mesh.geometry.dim,)))
-    global_feasible_gradient = phi * psi / \
-        ufl.sqrt(1 + ufl.dot(psi, psi))
+    W = dolfinx.fem.functionspace(mesh, ("DG", (primal_degree - 1), (mesh.geometry.dim,)))
+    global_feasible_gradient = phi * psi / ufl.sqrt(1 + ufl.dot(psi, psi))
     phi_out = dolfinx.fem.Function(W, name="phi")
     phi_out.sub(0).interpolate(phi)
-    feas_grad = dolfinx.fem.Expression(
-        global_feasible_gradient, W.element.interpolation_points())
+    feas_grad = dolfinx.fem.Expression(global_feasible_gradient, W.element.interpolation_points)
     pg_grad = dolfinx.fem.Function(W)
     pg_grad.name = "Global feasible gradient"
 
     u_out = sol.sub(0).collapse()
     u_out.name = "u"
-    bp_u = dolfinx.io.VTXWriter(
-        mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
+    bp_u = dolfinx.io.VTXWriter(mesh.comm, result_dir / "u.bp", [u_out], engine="BP4")
     grad_u = dolfinx.fem.Function(W)
     grad_u.name = "grad(u)"
-    grad_u_expr = dolfinx.fem.Expression(
-        ufl.grad(u), W.element.interpolation_points())
+    grad_u_expr = dolfinx.fem.Expression(ufl.grad(u), W.element.interpolation_points)
     bp_grad_u = dolfinx.io.VTXWriter(
         mesh.comm, result_dir / "grad_u.bp", [grad_u, pg_grad, phi_out], engine="BP4"
     )
@@ -174,14 +176,17 @@ def solve_problem(
         elif alpha_scheme == "doubling":
             alpha.value = alpha_0 * 2**i
 
-        num_newton_iterations, converged = solver.solve(sol)
+        problem.solve()
+        num_newton_iterations = problem.solver.getIterationNumber()
         newton_iterations[i] = num_newton_iterations
+        converged = problem.solver.getConvergedReason()
+        ksp_converged = problem.solver.ksp.getConvergedReason()
         local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
         global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
         L2_diff[i] = global_diff
         if mesh.comm.rank == 0:
             print(
-                f"Iteration {i+1}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}",
+                f"Iteration {i + 1}: {converged=} {num_newton_iterations=} {ksp_converged=}",
                 f"|delta u |= {global_diff}",
             )
 
@@ -218,10 +223,8 @@ def main(
 ):
     parser = argparse.ArgumentParser(formatter_class=CustomFormatter)
     mesh_options = parser.add_argument_group("Mesh options")
-    mesh_options.add_argument(
-        "-N", type=int, default=200, help="Number of elements in x-direction")
-    mesh_options.add_argument(
-        "-M", type=int, default=200, help="Number of elements in y-direction")
+    mesh_options.add_argument("-N", type=int, default=200, help="Number of elements in x-direction")
+    mesh_options.add_argument("-M", type=int, default=200, help="Number of elements in y-direction")
     mesh_options.add_argument(
         "--cell_type",
         "-c",
@@ -230,8 +233,7 @@ def main(
         choices=["triangle", "quadrilateral"],
         help="Cell type",
     )
-    element_options = parser.add_argument_group(
-        "Finite element discretization options")
+    element_options = parser.add_argument_group("Finite element discretization options")
     element_options.add_argument(
         "--primal_space",
         type=str,
@@ -256,8 +258,7 @@ def main(
         choices=get_args(AlphaScheme),
         help="Scheme for updating alpha",
     )
-    alpha_options.add_argument(
-        "--alpha_0", type=float, default=1.0, help="Initial value of alpha")
+    alpha_options.add_argument("--alpha_0", type=float, default=1.0, help="Initial value of alpha")
     alpha_options.add_argument(
         "--alpha_c", type=float, default=1.0, help="Increment of alpha in linear scheme"
     )

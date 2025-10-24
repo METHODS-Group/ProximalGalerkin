@@ -1,7 +1,7 @@
 from mpi4py import MPI
 
 import basix.ufl
-import dolfinx
+import dolfinx.fem.petsc
 import numpy as np
 import numpy.linalg
 from ufl import (
@@ -17,8 +17,6 @@ from ufl import (
     tr,
 )
 from ufl_expressions import expm2
-
-from lvpp import SNESProblem, SNESSolver
 
 _RED = "\033[31m"
 _BLUE = "\033[34m"
@@ -84,13 +82,6 @@ F = (
     + inner(Q, Phi) * dx
     - inner(0.5 * tanh(Psi / 2), Phi) * dx
 )
-cffi_options = ["-Ofast", "-march=native"]
-jit_options = {
-    "cffi_extra_compile_args": cffi_options,
-    "cffi_libraries": ["m"],
-}
-F_compiled = dolfinx.fem.form(F, jit_options=jit_options)
-J_compiled = dolfinx.fem.form(derivative(F, z), jit_options=jit_options)
 
 # Set up for boundary conditions from Robinson et al. (2017)
 d = 0.06
@@ -153,13 +144,20 @@ sp = {"snes_monitor": None, "snes_linesearch_type": "l2", "snes_linesearch_monit
 
 
 Q_space = dolfinx.fem.functionspace(mesh, ("Lagrange", p, Q.ufl_shape))
-Q_points = Q_space.element.interpolation_points()
+Q_points = Q_space.element.interpolation_points
 q_out = dolfinx.fem.Function(Q_space, name="Q-tensor")
 expr = dolfinx.fem.Expression(Q, Q_points)
 vtx = dolfinx.io.VTXWriter(mesh.comm, "Q.bp", [q_out])
 
+cffi_options = ["-Ofast", "-march=native"]
+jit_options = {
+    "cffi_extra_compile_args": cffi_options,
+    "cffi_libraries": ["m"],
+}
 L2_Q = dolfinx.fem.form(inner(Q - Q_iter, Q - Q_iter) * dx, jit_options=jit_options)
-problem = SNESProblem(F_compiled, z, bcs=bcs, J=J_compiled)
+problem = dolfinx.fem.petsc.NonlinearProblem(
+    F, u=z, bcs=bcs, petsc_options=sp, petsc_options_prefix="snes_"
+)
 
 NFAIL_MAX = 50
 NLVVP_MAX = 100
@@ -171,8 +169,12 @@ while nfail < NFAIL_MAX and nlvpp < NLVVP_MAX:
     if mesh.comm.rank == 0:
         print(f"{_BLUE}Attempting {nlvpp=} alpha={float(alpha)}{_color_reset}", flush=True)
     try:
-        solver = SNESSolver(problem, sp)
-        converged_reason, num_iterations = solver.solve()
+        problem = dolfinx.fem.petsc.NonlinearProblem(
+            F, u=z, bcs=bcs, petsc_options=sp, petsc_options_prefix="snes_"
+        )
+        problem.solve()
+        num_iterations = problem.solver.getIterationNumber()
+        converged_reason = problem.solver.getConvergedReason()
         if num_iterations == 0 and converged_reason > 0:
             # solver didn't actually get to do any work,
             # we've just reduced alpha so much that the initial guess

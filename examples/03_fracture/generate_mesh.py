@@ -57,7 +57,7 @@ def create_crack_mesh(comm, max_res: float = 0.05):
     MPI.COMM_WORLD.barrier()
 
     ud = ufl.Mesh(basix.ufl.element("Lagrange", "triangle", 1, shape=(2,)))
-    linear_mesh = dolfinx.mesh.create_mesh(MPI.COMM_WORLD, cells, x, ud)
+    linear_mesh = dolfinx.mesh.create_mesh(MPI.COMM_WORLD, cells=cells, x=x, e=ud)
 
     if comm.rank == 0:
         regions: dict[str, list[int]] = {name: [] for name in ngmesh.GetRegionNames(codim=1)}
@@ -83,7 +83,7 @@ def create_crack_mesh(comm, max_res: float = 0.05):
         facets = np.zeros((0, 3), dtype=np.int64)
         facet_values = np.zeros((0,), dtype=np.int32)
         regions = comm.bcast(None, root=0)
-    local_entities, local_values = dolfinx.io.gmshio.distribute_entity_data(
+    local_entities, local_values = dolfinx.io.gmsh.distribute_entity_data(
         linear_mesh, linear_mesh.topology.dim - 1, facets, facet_values
     )
     linear_mesh.topology.create_connectivity(linear_mesh.topology.dim - 1, 0)

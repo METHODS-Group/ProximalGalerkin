@@ -64,22 +64,22 @@ J = ufl.derivative(F, w)
 
 tol = 1e-5
 
-problem = NonlinearProblem(F, w, bcs=[], J=J)
-solver = NewtonSolver(mesh.comm, problem)
-solver.convergence_criterion = "residual"
-solver.rtol = tol
-solver.atol = tol
-solver.max_it = 100
-solver.error_on_nonconvergence = True
+sp = {
+    "snes_monitor": None,
+    "snes_line_search_type": "none",
+    "snes_rtol": tol,
+    "snes_atol": tol,
+    "snes_stol": tol,
+    "snes_max_it": 100,
+    "pc_factor_mat_solver_type": "mumps",
+    "mat_mumps_icntl_14": 500,
+    "snes_error_if_not_converged": True,
+    "ksp_type": "preonly",
+    "pc_type": "lu",
+    "pc_factor_mat_solver_type": "mumps",
+}
+problem = NonlinearProblem(F, u=w, bcs=[], J=J, petsc_options=sp, petsc_options_prefix="snes_")
 
-
-ksp = solver.krylov_solver
-opts = PETSc.Options()  # type: ignore
-option_prefix = ksp.getOptionsPrefix()
-opts[f"{option_prefix}ksp_type"] = "preonly"
-opts[f"{option_prefix}pc_type"] = "lu"
-opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
-ksp.setFromOptions()
 
 dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
 V_out = dolfinx.fem.functionspace(mesh, ("DG", mesh.geometry.cmap.degree))
@@ -99,9 +99,7 @@ submesh, entity_map, _, _ = dolfinx.mesh.create_submesh(
 )
 q_el = basix.ufl.quadrature_element(submesh.basix_cell(), nh.ufl_shape, "default", 1)
 Q = dolfinx.fem.functionspace(submesh, q_el)
-expr = dolfinx.fem.Expression(
-    nh, Q.element.interpolation_points(), dtype=dolfinx.default_scalar_type
-)
+expr = dolfinx.fem.Expression(nh, Q.element.interpolation_points, dtype=dolfinx.default_scalar_type)
 f_to_c = mesh.topology.connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 mesh.topology.create_connectivity(mesh.topology.dim, mesh.topology.dim - 1)
 c_to_f = mesh.topology.connectivity(mesh.topology.dim, mesh.topology.dim - 1)
@@ -124,7 +122,7 @@ scifem.xdmf.create_pointcloud("data.xdmf", [qq])
 Q_out = dolfinx.fem.functionspace(mesh, ("DG", mesh.geometry.cmap.degree, (mesh.geometry.dim,)))
 q_out = dolfinx.fem.Function(Q_out)
 q_out.name = "grad(u)"
-q_expr = dolfinx.fem.Expression(ufl.grad(w.sub(0)), Q_out.element.interpolation_points())
+q_expr = dolfinx.fem.Expression(ufl.grad(w.sub(0)), Q_out.element.interpolation_points)
 
 psi_out = dolfinx.fem.Function(Q_out)
 psi_out.name = "psi"
@@ -139,9 +137,12 @@ try:
     for i in range(1, 100):
         alpha.value = min(2**i, 10)
 
-        num_newton_iterations, converged = solver.solve(w)
+        problem.solve()
+        num_newton_iterations = problem.solver.getIterationNumber()
+        converged = problem.solver.getConvergedReason() > 0
+        ksp_converged = problem.solver.ksp.getConvergedReason()
         newton_iterations.append(num_newton_iterations)
-        print(f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp.getConvergedReason()=}")
+        print(f"Iteration {i}: {converged=} {num_newton_iterations=} {ksp_converged=}")
         local_diff = dolfinx.fem.assemble_scalar(compiled_diff)
         global_diff = np.sqrt(mesh.comm.allreduce(local_diff, op=MPI.SUM))
         print(f"|delta u |= {global_diff}")

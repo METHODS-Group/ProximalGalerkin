@@ -18,8 +18,6 @@ from ufl import (
     split,
 )
 
-from lvpp import SNESProblem, SNESSolver
-
 _RED = "\033[31m"
 _BLUE = "\033[34m"
 _GREEN = "\033[32m"
@@ -88,7 +86,7 @@ Gc = dolfinx.fem.Constant(mesh, st(1.0))
 
 # Compute maximum cell size
 W = dolfinx.fem.functionspace(mesh, ("DG", 0))
-h = dolfinx.fem.Expression(4 * Circumradius(mesh), W.element.interpolation_points())
+h = dolfinx.fem.Expression(4 * Circumradius(mesh), W.element.interpolation_points)
 diam = dolfinx.fem.Function(W)
 diam.interpolate(h)
 max_diam = mesh.comm.allreduce(np.max(diam.x.array), op=MPI.MAX)
@@ -114,7 +112,7 @@ output_space = dolfinx.fem.functionspace(mesh, ("Lagrange", 3))
 c_conform_out = dolfinx.fem.Function(output_space, name="ConformingDamage")
 alpha = dolfinx.fem.Constant(mesh, st(1.0))
 c_conform = (c_prev + exp(psi)) / (exp(psi) + 1)
-c_conform_expr = dolfinx.fem.Expression(c_conform, output_space.element.interpolation_points())
+c_conform_expr = dolfinx.fem.Expression(c_conform, output_space.element.interpolation_points)
 
 eps = dolfinx.fem.Constant(mesh, 1.0e-5)
 E = (
@@ -130,20 +128,13 @@ F = (
     + inner(c, phi) * dx
     - inner(c_conform, phi) * dx
 )
-cffi_options = ["-Ofast", "-march=native"]
-jit_options = {
-    "cffi_extra_compile_args": cffi_options,
-    "cffi_libraries": ["m"],
-}
-F_compiled = dolfinx.fem.form(F, jit_options=jit_options)
 
 reps = dolfinx.fem.Constant(mesh, 1.0e-3)
-J_reg = dolfinx.fem.form(
+J_reg = (
     derivative(F, z, z_trial)
     + reps * inner(v, v_trial) * dx
     + reps * inner(d, d_trial) * dx
-    - reps * inner(phi, phi_trial) * dx,
-    jit_options=jit_options,
+    - reps * inner(phi, phi_trial) * dx
 )
 
 # Right side of crack (4), left crack (7)
@@ -171,7 +162,7 @@ bcs = [
 
 sp = {
     "snes_linesearch_type": "l2",
-    "snes_linesearch_maxstep": 1,
+    "snes_linesearch_maxlambda": 1,
     "snes_atol": 1.0e-6,
     "ksp_type": "preonly",
     "pc_type": "lu",
@@ -205,8 +196,14 @@ psi_out = dolfinx.fem.Function(Psi, name="psi")
 converged_reason = -1
 num_iterations = -1
 
-
-problem = SNESProblem(F_compiled, z, bcs=bcs, J=J_reg)
+cffi_options = ["-Ofast", "-march=native"]
+jit_options = {
+    "cffi_extra_compile_args": cffi_options,
+    "cffi_libraries": ["m"],
+}
+problem = dolfinx.fem.petsc.NonlinearProblem(
+    F, z, bcs=bcs, J=J_reg, petsc_options=sp, jit_options=jit_options, petsc_options_prefix="snes_"
+)
 for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
     if mesh.comm.rank == 0:
         print(
@@ -224,9 +221,18 @@ for step, T in enumerate(np.linspace(Tmin, Tmax, num_load_steps)[1:]):
         try:
             if mesh.comm.rank == 0:
                 print(f"Attempting {k=} alpha={float(alpha)}", flush=True)
-            solver = SNESSolver(problem, sp)
-            converged_reason, num_iterations = solver.solve()
-
+            problem = dolfinx.fem.petsc.NonlinearProblem(
+                F,
+                z,
+                bcs=bcs,
+                J=J_reg,
+                petsc_options=sp,
+                jit_options=jit_options,
+                petsc_options_prefix="snes_",
+            )
+            problem.solve()
+            num_iterations = problem.solver.getIterationNumber()
+            converged_reason = problem.solver.getConvergedReason()
             if num_iterations == 0 and converged_reason > 0:
                 # solver didn't actually get to do any work,
                 # we've just reduced alpha so much that the initial guess

@@ -149,8 +149,9 @@ if __name__ == "__main__":
     # Solve with SNES
     u_snes, num_snes_iterations = snes_solve(
         args.infile,
-        snes_options={"snes_type": "vinewtonssls", "snes_monitor": None},
-        petsc_options={
+        snes_options={
+            "snes_type": "vinewtonssls",
+            "snes_monitor": None,
             "ksp_type": "preonly",
             "pc_type": "lu",
             "pc_factor_mat_solver_type": "mumps",

@@ -71,7 +71,7 @@ def create_half_disk(
             gmsh.model.mesh.setOrder(order)
     gmsh_model_rank = 0
     mesh_comm = MPI.COMM_WORLD
-    model = dolfinx.io.gmshio.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=2)
+    model = dolfinx.io.gmsh.model_to_mesh(gmsh.model, mesh_comm, gmsh_model_rank, gdim=2)
 
     if Version(dolfinx.__version__) > Version("0.9.0"):
         msh = model.mesh
@@ -157,7 +157,7 @@ def create_half_sphere(
         gmsh.model.mesh.generate(3)
         gmsh.model.mesh.setOrder(order)
         gmsh.model.mesh.remove_duplicate_nodes()
-    model = dolfinx.io.gmshio.model_to_mesh(gmsh.model, comm, 0)
+    model = dolfinx.io.gmsh.model_to_mesh(gmsh.model, comm, 0)
     if Version(dolfinx.__version__) > Version("0.9.0"):
         msh = model.mesh
         ct = model.cell_tags
