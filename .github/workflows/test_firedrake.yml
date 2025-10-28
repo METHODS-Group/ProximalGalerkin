@@ -12,6 +12,7 @@ jobs:
     container: ${{ matrix.container }}
     env:
       DEB_PYTHON_INSTALL_LAYOUT: deb_system
+
     strategy:
       fail-fast: true
       matrix:
@@ -25,8 +26,10 @@ jobs:
         run: |
           . /firedrake-env/bin/activate
           echo PATH=$PATH >> $GITHUB_ENV
+          echo PETSC_ARCH=$PETSC_ARCH >> $GITHUB_ENV
+          echo PETSC_DIR=$PETSC_DIR >> $GITHUB_ENV
 
-      - name: Install matplotib
+      - name: Install matplotlib
         run: |
           python3 -m pip install matplotlib
 
