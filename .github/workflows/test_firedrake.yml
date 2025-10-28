@@ -26,8 +26,8 @@ jobs:
         run: |
           . /firedrake-env/bin/activate
           echo PATH=$PATH >> $GITHUB_ENV
-          echo PETSC_ARCH=$PETSC_ARCH >> $GITHUB_ENV
-          echo PETSC_DIR=$PETSC_DIR >> $GITHUB_ENV
+          echo PETSC_ARCH='arch-firedrake-default' >> $GITHUB_ENV
+          echo PETSC_DIR='/firedrake-env/petsc' >> $GITHUB_ENV
 
       - name: Install matplotlib
         run: |
