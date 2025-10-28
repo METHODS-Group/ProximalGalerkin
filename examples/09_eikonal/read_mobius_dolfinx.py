@@ -53,7 +53,9 @@ def read_mobius_strip(filename: Path):
         # unique_points = (rot_matrix @ unique_points.T).T
 
         order = int(np.sqrt(cells.shape[1])) - 1
-        perm_order = dolfinx.cpp.io.perm_vtk(dolfinx.mesh.CellType.quadrilateral, cells.shape[1])
+        perm_order = dolfinx.cpp.io.perm_vtk(
+            dolfinx.mesh.CellType.quadrilateral, cells.shape[1]
+        )
         cells = point_map[cells]
         dx_cells = cells[:, perm_order]
         assert len(np.unique(dx_cells.flatten())) == unique_points.shape[0], (
@@ -67,10 +69,18 @@ def read_mobius_strip(filename: Path):
     if MPI.COMM_WORLD.rank != 0:
         dx_cells = np.empty((0, (order + 1) ** 2), dtype=np.int32)
         unique_points = np.empty((0, 3), dtype=np.float64)
-    partitioner = dolfinx.cpp.mesh.create_cell_partitioner(dolfinx.mesh.GhostMode.shared_facet)
-    ufl_domain = ufl.Mesh(basix.ufl.element("Lagrange", "quadrilateral", order, shape=(3,)))
+    partitioner = dolfinx.cpp.mesh.create_cell_partitioner(
+        dolfinx.mesh.GhostMode.shared_facet
+    )
+    ufl_domain = ufl.Mesh(
+        basix.ufl.element("Lagrange", "quadrilateral", order, shape=(3,))
+    )
     mesh = dolfinx.mesh.create_mesh(
-        MPI.COMM_WORLD, cells=dx_cells, x=unique_points, e=ufl_domain, partitioner=partitioner
+        MPI.COMM_WORLD,
+        cells=dx_cells,
+        x=unique_points,
+        e=ufl_domain,
+        partitioner=partitioner,
     )
     return mesh
 
@@ -81,7 +91,9 @@ if __name__ == "__main__":
     exterior_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
     V = dolfinx.fem.functionspace(mesh, ("Lagrange", 4))
     u = dolfinx.fem.Function(V)
-    dofs = dolfinx.fem.locate_dofs_topological(V, mesh.topology.dim - 1, exterior_facets)
+    dofs = dolfinx.fem.locate_dofs_topological(
+        V, mesh.topology.dim - 1, exterior_facets
+    )
     u.x.array[dofs] = 1
 
     with dolfinx.io.VTXWriter(mesh.comm, "mobius.bp", [u]) as bp:

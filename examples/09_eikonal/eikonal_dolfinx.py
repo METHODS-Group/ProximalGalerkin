@@ -2,7 +2,6 @@ import argparse
 from pathlib import Path
 
 from mpi4py import MPI
-from petsc4py import PETSc
 
 import basix.ufl
 import dolfinx
@@ -11,7 +10,6 @@ import numpy as np
 import scifem
 import ufl
 from dolfinx.fem.petsc import NonlinearProblem
-from dolfinx.nls.petsc import NewtonSolver
 from read_mobius_dolfinx import read_mobius_strip
 
 parser = argparse.ArgumentParser()
@@ -66,7 +64,7 @@ tol = 1e-5
 
 sp = {
     "snes_monitor": None,
-    "snes_line_search_type": "none",
+    "snes_linesearch_type": "l2",
     "snes_rtol": tol,
     "snes_atol": tol,
     "snes_stol": tol,
@@ -76,9 +74,10 @@ sp = {
     "snes_error_if_not_converged": True,
     "ksp_type": "preonly",
     "pc_type": "lu",
-    "pc_factor_mat_solver_type": "mumps",
 }
-problem = NonlinearProblem(F, u=w, bcs=[], J=J, petsc_options=sp, petsc_options_prefix="snes_")
+problem = NonlinearProblem(
+    F, u=w, bcs=[], J=J, petsc_options=sp, petsc_options_prefix="snes_"
+)
 
 
 dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
@@ -99,12 +98,24 @@ submesh, entity_map, _, _ = dolfinx.mesh.create_submesh(
 )
 q_el = basix.ufl.quadrature_element(submesh.basix_cell(), nh.ufl_shape, "default", 1)
 Q = dolfinx.fem.functionspace(submesh, q_el)
-expr = dolfinx.fem.Expression(nh, Q.element.interpolation_points, dtype=dolfinx.default_scalar_type)
+expr = dolfinx.fem.Expression(
+    nh, Q.element.interpolation_points, dtype=dolfinx.default_scalar_type
+)
+mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 f_to_c = mesh.topology.connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 mesh.topology.create_connectivity(mesh.topology.dim, mesh.topology.dim - 1)
 c_to_f = mesh.topology.connectivity(mesh.topology.dim, mesh.topology.dim - 1)
 ie = []
-for facet in entity_map:
+parent_facets = entity_map.sub_topology_to_topology(
+    np.arange(
+        submesh.topology.index_map(submesh.topology.dim).size_local
+        + submesh.topology.index_map(submesh.topology.dim).num_ghosts,
+        dtype=np.int32,
+    ),
+    inverse=False,
+)
+ie = np.full((len(parent_facets), 2), -1, dtype=np.int32)
+for i, facet in enumerate(parent_facets):
     cells = f_to_c.links(facet)
     if len(cells) > 1:
         cell = f_to_c.links(facet)[1]
@@ -112,14 +123,17 @@ for facet in entity_map:
         cell = f_to_c.links(facet)[0]
     facets = c_to_f.links(cell)
     local_index = np.flatnonzero(facets == facet)[0]
-    ie.append(cell)
-    ie.append(local_index)
+    ie[i, 0] = cell
+    ie[i, 1] = local_index
+
 values = expr.eval(mesh, np.asarray(ie, dtype=np.int32))
 qq = dolfinx.fem.Function(Q)
 qq.x.array[:] = values.flatten()
 
 scifem.xdmf.create_pointcloud("data.xdmf", [qq])
-Q_out = dolfinx.fem.functionspace(mesh, ("DG", mesh.geometry.cmap.degree, (mesh.geometry.dim,)))
+Q_out = dolfinx.fem.functionspace(
+    mesh, ("DG", mesh.geometry.cmap.degree, (mesh.geometry.dim,))
+)
 q_out = dolfinx.fem.Function(Q_out)
 q_out.name = "grad(u)"
 q_expr = dolfinx.fem.Expression(ufl.grad(w.sub(0)), Q_out.element.interpolation_points)
@@ -162,5 +176,7 @@ finally:
     bp_u.close()
     vtx_psi.close()
 
-print(f"Num LVPP iterations {i}, Total number of newton iterations {sum(newton_iterations)}")
+print(
+    f"Num LVPP iterations {i}, Total number of newton iterations {sum(newton_iterations)}"
+)
 print(f"{min(newton_iterations)=} and {max(newton_iterations)=}")
