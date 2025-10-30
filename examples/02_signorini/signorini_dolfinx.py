@@ -352,8 +352,8 @@ def solve_contact_problem(
 
         if not converged:
             print(
-                f"Solver did not convert at {
-                  it=}, exiting with {converged=}"
+                f"Solver did not convert at {it=}",
+                f", exiting with {converged=}"
             )
             break
     if it == max_iterations - 1:
