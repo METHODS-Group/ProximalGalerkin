@@ -126,16 +126,17 @@ def expm3(A):
 
     # Case 2: Delta zero, either triple root or two roots equal one different
     # case_zero = eq(Delta, 0)
-    case_zero = lt(Delta, 1e-14)
+    tol = 1e-100
+    case_zero = lt(real(Delta), tol)
     x1_zero = (
         conditional(
-            eq(a, 0), 0, conditional(lt(b, 0), +2 * (-b / 2) ** (1 / 3), -2 * (b / 2) ** (1 / 3))
+            lt(abs(a), tol), 0, conditional(lt(b, 0), +2 * (-b / 2) ** (1 / 3), -2 * (b / 2) ** (1 / 3))
         )
         - p / 3
     )
     x2_zero = (
         conditional(
-            eq(a, 0), 0, conditional(lt(b, 0), -1 * (-b / 2) ** (1 / 3), +1 * (b / 2) ** (1 / 3))
+            lt(abs(a), tol), 0, conditional(lt(b, 0), -1 * (-b / 2) ** (1 / 3), +1 * (b / 2) ** (1 / 3))
         )
         - p / 3
     )
