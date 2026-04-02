@@ -101,12 +101,21 @@ function update_γ(zh, γ, k)
     infeasibility = sum(penalty(uh, Th))
     functional = sum(energy(uh))
     print("         infeasibility: $infeasibility, functional: $functional.\n")
+    if functional ≈ 0
+        @warn "Energy functional is (near) zero; cannot update γ reliably. Keeping γ = $γ."
+        return γ
+    end
     Eₖ = γ * infeasibility / functional
     θₖ = functional + infeasibility
     C₂ₖ = Eₖ * (Eₖ + γ) * θₖ / γ
     C₁ₖ = C₂ₖ / Eₖ
     τₖ = 1/k
-    return C₂ₖ /(τₖ  * abs(C₁ₖ - θₖ)) - Eₖ
+    γ_new = C₂ₖ /(τₖ  * abs(C₁ₖ - θₖ)) - Eₖ
+    if !isfinite(γ_new) || γ_new ≤ 0
+        @warn "γ update produced invalid value ($γ_new); keeping γ = $γ."
+        return γ
+    end
+    return γ_new
 end
 
 # Initial guess
