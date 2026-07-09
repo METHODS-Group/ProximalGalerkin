@@ -149,8 +149,8 @@ tic = @elapsed for j in 1:100
     # γ-update rule
     global γ = update_γ(zh, γ, j+1)
 
-    # break if tolerance reached
-    if cauchy[end] < 1e-5
+    # break if tolerance reached or γ is too large (Newton becomes ill-conditioned)
+    if cauchy[end] < 1e-5 || γ > 1e11
         break
     end
 end
